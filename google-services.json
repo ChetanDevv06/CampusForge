@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "337685387427",
+    "project_id": "campusloop-54d64",
+    "storage_bucket": "campusloop-54d64.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:337685387427:android:4aaa765db50ebd7b764716",
+        "android_client_info": {
+          "package_name": "com.campusloop.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDM_Pky6LvzE2ijxxV1jls9dV6Q1i7HINc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
