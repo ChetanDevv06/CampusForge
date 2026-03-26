@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import {
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
 import { Link } from 'expo-router';
+import { Colors, Gradients } from '../../constants/theme';
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
@@ -14,38 +20,15 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!name || !college || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields.');
-      return;
-    }
-
-    if (!email.toLowerCase().endsWith('.edu')) {
-      Alert.alert('Invalid Email', 'Please use a valid college .edu email address.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('Password Mismatch', 'Passwords do not match.');
-      return;
-    }
-
+    if (!name || !college || !email || !password || !confirmPassword) { Alert.alert('Error', 'Please fill in all fields.'); return; }
+    if (password !== confirmPassword) { Alert.alert('Error', 'Passwords do not match.'); return; }
     setLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // Save user profile to Firestore
-      await setDoc(doc(db, 'users', user.uid), {
-        uid: user.uid,
-        name,
-        college,
-        email: email.toLowerCase(),
-        createdAt: new Date().toISOString(),
-        skillsOffered: [],
-        skillsRequested: []
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      await setDoc(doc(db, 'users', cred.user.uid), {
+        uid: cred.user.uid, name, college, email: email.toLowerCase(),
+        createdAt: new Date().toISOString(), skillsOffered: [], skillsRequested: []
       });
-
-      // Auto-redirects via root layout logic
     } catch (error: any) {
       Alert.alert('Registration Error', error.message);
     } finally {
@@ -53,163 +36,72 @@ export default function RegisterScreen() {
     }
   };
 
+  const Field = ({ icon, placeholder, value, onChangeText, secure = false, keyboard = 'default' }: any) => (
+    <View style={styles.inputWrapper}>
+      <Ionicons name={icon} size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+      <TextInput
+        style={styles.input} placeholder={placeholder} placeholderTextColor={Colors.textMuted}
+        value={value} onChangeText={onChangeText} secureTextEntry={secure}
+        autoCapitalize="none" keyboardType={keyboard}
+      />
+    </View>
+  );
+
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        <View style={styles.formContainer}>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      <LinearGradient colors={['#1C1C3A', '#0A0A12']} style={StyleSheet.absoluteFill} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
+            <LinearGradient colors={Gradients.primary} style={styles.logoBox}>
+              <Ionicons name="person-add" size={28} color="#FFF" />
+            </LinearGradient>
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Join your campus community</Text>
           </View>
-          
-          <View style={styles.inputGroup}>
-            <TextInput
-              style={styles.input}
-              placeholder="Full Name"
-              value={name}
-              onChangeText={setName}
-              placeholderTextColor="#999"
-            />
-            
-            <TextInput
-              style={styles.input}
-              placeholder="College / University Name"
-              value={college}
-              onChangeText={setCollege}
-              placeholderTextColor="#999"
-            />
 
-            <TextInput
-              style={styles.input}
-              placeholder="College Email (.edu)"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              placeholderTextColor="#999"
-            />
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              placeholderTextColor="#999"
-            />
+          <Field icon="person-outline" placeholder="Full Name" value={name} onChangeText={setName} />
+          <Field icon="school-outline" placeholder="College / University" value={college} onChangeText={setCollege} />
+          <Field icon="mail-outline" placeholder="College Email" value={email} onChangeText={setEmail} keyboard="email-address" />
+          <Field icon="lock-closed-outline" placeholder="Password" value={password} onChangeText={setPassword} secure />
+          <Field icon="shield-checkmark-outline" placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secure />
 
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              placeholderTextColor="#999"
-            />
-          </View>
-          
-          <TouchableOpacity style={styles.button} onPress={handleRegister} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Register</Text>}
+          <TouchableOpacity onPress={handleRegister} disabled={loading} style={{ marginTop: 8 }}>
+            <LinearGradient colors={Gradients.primary} style={styles.btn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Register</Text>}
+            </LinearGradient>
           </TouchableOpacity>
-          
+
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account? </Text>
             <Link href="/(auth)/login" asChild>
-              <TouchableOpacity>
-                <Text style={styles.linkText}>Log In</Text>
-              </TouchableOpacity>
+              <TouchableOpacity><Text style={styles.linkText}>Sign In</Text></TouchableOpacity>
             </Link>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
+  container: { flex: 1, backgroundColor: Colors.bg },
+  scroll: { padding: 24, paddingTop: 60 },
+  header: { alignItems: 'center', marginBottom: 36 },
+  logoBox: { width: 64, height: 64, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  title: { fontSize: 26, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4 },
+  subtitle: { fontSize: 14, color: Colors.textSecondary },
+  inputWrapper: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.bgCard, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.border, marginBottom: 14, paddingHorizontal: 14,
   },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  formContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    marginTop: 20,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#2B3A42',
-    letterSpacing: -0.5,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#6C7A89',
-    fontWeight: '500',
-    letterSpacing: 0.5,
-  },
-  inputGroup: {
-    marginBottom: 24,
-  },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 2,
-    color: '#333',
-  },
-  button: {
-    backgroundColor: '#007AFF',
-    padding: 18,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 24,
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  footerText: {
-    color: '#6C7A89',
-    fontSize: 15,
-  },
-  linkText: {
-    color: '#007AFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, color: Colors.textPrimary, fontSize: 15, paddingVertical: 16 },
+  btn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  btnText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 28, marginBottom: 32 },
+  footerText: { color: Colors.textSecondary, fontSize: 14 },
+  linkText: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
 });

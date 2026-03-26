@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, StatusBar } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
+import { Colors, Gradients } from '../constants/theme';
 
 export default function PostMarketScreen() {
   const [title, setTitle] = useState('');
@@ -11,93 +14,93 @@ export default function PostMarketScreen() {
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
-  
   const { user } = useAuth();
   const router = useRouter();
 
   const handleList = async () => {
-    if (!title || !price || !category) {
-      Alert.alert('Error', 'Please fill in all required fields.');
-      return;
-    }
-
+    if (!title || !price || !category) { Alert.alert('Error', 'Please fill in all required fields.'); return; }
     setLoading(true);
     try {
       await addDoc(collection(db, 'marketplace'), {
-        title,
-        price: parseFloat(price),
-        category,
-        description,
-        userId: user?.uid,
-        userEmail: user?.email,
-        createdAt: new Date().toISOString(),
-        imageUrl: null, // Image uploading to be implemented later
+        title, price: parseFloat(price), category, description,
+        userId: user?.uid, userEmail: user?.email,
+        createdAt: new Date().toISOString(), imageUrl: null,
       });
-      
-      Alert.alert('Success', 'Item listed for sale!');
+      Alert.alert('Listed!', 'Your item is now for sale.');
       router.back();
-    } catch (error: any) {
-      Alert.alert('Error listing item', error.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: any) { Alert.alert('Error', e.message); }
+    finally { setLoading(false); }
   };
 
+  const fields = [
+    { icon: 'bag-outline', label: 'Item Name *', value: title, set: setTitle, placeholder: 'e.g., Physics Textbook 9th Ed' },
+    { icon: 'cash-outline', label: 'Price (₹) *', value: price, set: setPrice, placeholder: 'e.g., 450', keyboard: 'numeric' },
+    { icon: 'grid-outline', label: 'Category *', value: category, set: setCategory, placeholder: 'e.g., Books, Electronics, Furniture' },
+  ];
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.headerTitle}>Sell an Item</Text>
-      
-      <View style={styles.form}>
-        <Text style={styles.label}>Item Name *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g., Physics Textbook 9th Ed"
-          value={title}
-          onChangeText={setTitle}
-        />
+    <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <StatusBar barStyle="light-content" />
 
-        <Text style={styles.label}>Price ($) *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g., 45.00"
-          value={price}
-          onChangeText={setPrice}
-          keyboardType="numeric"
-        />
-
-        <Text style={styles.label}>Category *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g., Books, Electronics, Furniture"
-          value={category}
-          onChangeText={setCategory}
-        />
-
-        <Text style={styles.label}>Description</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Condition, edition, accessories included..."
-          multiline
-          numberOfLines={4}
-          value={description}
-          onChangeText={setDescription}
-        />
-
-        <TouchableOpacity style={styles.submitButton} onPress={handleList} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>List Item</Text>}
-        </TouchableOpacity>
+      <View style={styles.heroRow}>
+        <LinearGradient colors={Gradients.primary} style={styles.heroIcon}>
+          <Ionicons name="storefront" size={24} color="#FFF" />
+        </LinearGradient>
+        <View>
+          <Text style={styles.title}>Sell an Item</Text>
+          <Text style={styles.subtitle}>List it on the campus market</Text>
+        </View>
       </View>
+
+      {fields.map(f => (
+        <View key={f.label} style={styles.fieldGroup}>
+          <Text style={styles.label}>{f.label}</Text>
+          <View style={styles.inputWrapper}>
+            <Ionicons name={f.icon as any} size={18} color={Colors.textSecondary} />
+            <TextInput
+              style={styles.input} placeholder={f.placeholder} placeholderTextColor={Colors.textMuted}
+              value={f.value} onChangeText={f.set} keyboardType={(f.keyboard as any) || 'default'}
+            />
+          </View>
+        </View>
+      ))}
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.label}>Description</Text>
+        <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
+          <TextInput
+            style={styles.textArea} placeholder="Condition, edition, accessories included..."
+            placeholderTextColor={Colors.textMuted} value={description} onChangeText={setDescription}
+            multiline numberOfLines={4}
+          />
+        </View>
+      </View>
+
+      <TouchableOpacity onPress={handleList} disabled={loading}>
+        <LinearGradient colors={Gradients.primary} style={styles.btn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+          {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>List Item for Sale</Text>}
+        </LinearGradient>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, backgroundColor: '#fff', flexGrow: 1 },
-  headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#111', marginBottom: 24 },
-  form: { flex: 1 },
-  label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
-  input: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 16, fontSize: 16, marginBottom: 20 },
-  textArea: { height: 100, textAlignVertical: 'top' },
-  submitButton: { backgroundColor: '#007AFF', padding: 18, borderRadius: 12, alignItems: 'center', marginTop: 12 },
-  submitText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  container: { flex: 1, backgroundColor: Colors.bg },
+  scroll: { padding: 24, paddingTop: 16 },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 28 },
+  heroIcon: { width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  title: { fontSize: 26, fontWeight: '800', color: Colors.textPrimary },
+  subtitle: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
+  fieldGroup: { marginBottom: 18 },
+  label: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600', marginBottom: 8, marginLeft: 4 },
+  inputWrapper: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 14,
+  },
+  input: { flex: 1, color: Colors.textPrimary, fontSize: 15, paddingVertical: 14, marginLeft: 10 },
+  textAreaWrapper: { alignItems: 'flex-start', paddingVertical: 14 },
+  textArea: { flex: 1, color: Colors.textPrimary, fontSize: 15, minHeight: 100, textAlignVertical: 'top' },
+  btn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
+  btnText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
 });

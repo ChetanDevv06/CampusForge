@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, StatusBar, ScrollView } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
+import { Colors, Gradients } from '../../constants/theme';
 
 export default function ProfileScreen() {
   const { signOutUser } = useAuth();
@@ -13,125 +15,114 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchProfile = async () => {
+    const fetch = async () => {
       if (auth.currentUser) {
         try {
-          const docSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
-          if (docSnap.exists()) {
-            setProfile(docSnap.data());
-          }
-        } catch (e) {
-          console.log('Could not fetch profile (offline or Firestore not set up):', e);
-        }
+          const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+          if (snap.exists()) setProfile(snap.data());
+        } catch (e) {}
       }
       setLoading(false);
     };
-    fetchProfile();
+    fetch();
   }, []);
 
   const handleSignOut = async () => {
-    try {
-      await signOutUser();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.log('Signout error:', error);
-      router.replace('/(auth)/login');
-    }
+    try { await signOutUser(); router.replace('/(auth)/login'); }
+    catch { router.replace('/(auth)/login'); }
   };
 
-  if (loading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color="#007AFF" /></View>;
-  }
+  const menuItems = [
+    { icon: 'chatbubbles-outline', label: 'Messages' },
+    { icon: 'bookmark-outline', label: 'Saved Items' },
+    { icon: 'star-outline', label: 'My Reviews' },
+    { icon: 'settings-outline', label: 'Settings' },
+  ];
+
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
+
+  const initials = profile?.name?.split(' ').map((w: string) => w[0]).join('').toUpperCase() || 'S';
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{profile?.name?.charAt(0) || 'S'}</Text>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+      <StatusBar barStyle="light-content" />
+
+      {/* Header */}
+      <LinearGradient colors={['#1C1C3A', Colors.bg]} style={styles.header}>
+        <View style={styles.avatarWrapper}>
+          <LinearGradient colors={Gradients.primary} style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </LinearGradient>
+          <View style={styles.onlineDot} />
         </View>
-        <Text style={styles.name}>{profile?.name || 'Student Name'}</Text>
+        <Text style={styles.name}>{profile?.name || 'Campus Student'}</Text>
         <Text style={styles.college}>🎓 {profile?.college || 'University'}</Text>
         <Text style={styles.email}>{auth.currentUser?.email}</Text>
+      </LinearGradient>
+
+      {/* Stats */}
+      <View style={styles.statsRow}>
+        {[{ val: '0', label: 'Posts' }, { val: '0', label: 'Skills' }, { val: '5.0', label: 'Rating' }].map((s, i) => (
+          <View key={i} style={styles.statBox}>
+            <Text style={styles.statVal}>{s.val}</Text>
+            <Text style={styles.statLabel}>{s.label}</Text>
+          </View>
+        ))}
       </View>
 
-      <View style={styles.statsContainer}>
-        <View style={styles.statBox}>
-          <Text style={styles.statNumber}>12</Text>
-          <Text style={styles.statLabel}>Connections</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statBox}>
-          <Text style={styles.statNumber}>3</Text>
-          <Text style={styles.statLabel}>Skills</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statBox}>
-          <Text style={styles.statNumber}>5.0</Text>
-          <Text style={styles.statLabel}>Rating</Text>
-        </View>
-      </View>
-
+      {/* Menu */}
       <View style={styles.section}>
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="settings-outline" size={24} color="#333" />
-          <Text style={styles.menuText}>Account Settings</Text>
-          <Ionicons name="chevron-forward" size={20} color="#CCC" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="chatbubbles-outline" size={24} color="#333" />
-          <Text style={styles.menuText}>Messages</Text>
-          <Ionicons name="chevron-forward" size={20} color="#CCC" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="bookmark-outline" size={24} color="#333" />
-          <Text style={styles.menuText}>Saved Items</Text>
-          <Ionicons name="chevron-forward" size={20} color="#CCC" />
-        </TouchableOpacity>
+        {menuItems.map((item, i) => (
+          <TouchableOpacity key={i} style={styles.menuItem}>
+            <View style={styles.menuIconBox}>
+              <Ionicons name={item.icon as any} size={20} color={Colors.primary} />
+            </View>
+            <Text style={styles.menuLabel}>{item.label}</Text>
+            <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+          </TouchableOpacity>
+        ))}
       </View>
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
-        <Ionicons name="log-out-outline" size={20} color="#FF3B30" />
+      {/* Logout */}
+      <TouchableOpacity style={styles.logoutBtn} onPress={handleSignOut}>
+        <Ionicons name="log-out-outline" size={20} color={Colors.danger} />
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  header: { 
-    backgroundColor: '#007AFF', 
-    paddingVertical: 40, 
-    alignItems: 'center',
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    marginBottom: 20
-  },
-  avatar: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFF',
-    justifyContent: 'center', alignItems: 'center', marginBottom: 12
-  },
-  avatarText: { fontSize: 32, fontWeight: 'bold', color: '#007AFF' },
-  name: { fontSize: 24, fontWeight: 'bold', color: '#FFF', marginBottom: 4 },
-  college: { fontSize: 16, color: '#EBF5FF', marginBottom: 2 },
-  email: { fontSize: 14, color: '#BFDBFE' },
-  statsContainer: {
-    flexDirection: 'row', backgroundColor: '#FFF', marginHorizontal: 20,
-    borderRadius: 16, padding: 16, marginTop: -40,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 5
+  container: { flex: 1, backgroundColor: Colors.bg },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.bg },
+  header: { alignItems: 'center', paddingTop: 40, paddingBottom: 32, paddingHorizontal: 24 },
+  avatarWrapper: { position: 'relative', marginBottom: 16 },
+  avatar: { width: 88, height: 88, borderRadius: 44, justifyContent: 'center', alignItems: 'center' },
+  avatarText: { fontSize: 34, fontWeight: '800', color: '#FFF' },
+  onlineDot: { position: 'absolute', bottom: 4, right: 4, width: 16, height: 16, borderRadius: 8, backgroundColor: Colors.success, borderWidth: 2, borderColor: Colors.bg },
+  name: { fontSize: 24, fontWeight: '800', color: Colors.textPrimary, marginBottom: 4 },
+  college: { fontSize: 14, color: Colors.textSecondary, marginBottom: 6 },
+  email: { fontSize: 13, color: Colors.textMuted },
+  statsRow: {
+    flexDirection: 'row', marginHorizontal: 16, marginTop: -16, marginBottom: 24,
+    backgroundColor: Colors.bgCard, borderRadius: 20,
+    borderWidth: 1, borderColor: Colors.border, padding: 20,
+    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 5,
   },
   statBox: { flex: 1, alignItems: 'center' },
-  statNumber: { fontSize: 20, fontWeight: 'bold', color: '#111' },
-  statLabel: { fontSize: 13, color: '#666', marginTop: 4 },
-  statDivider: { width: 1, backgroundColor: '#E5E7EB', marginVertical: 8 },
-  section: { backgroundColor: '#FFF', marginTop: 32, paddingVertical: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E5E7EB' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#FFF' },
-  menuText: { flex: 1, fontSize: 16, marginLeft: 16, color: '#333' },
-  logoutButton: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    marginTop: 40, backgroundColor: '#FFF', padding: 16, marginHorizontal: 20,
-    borderRadius: 12, borderWidth: 1, borderColor: '#FF3B30'
+  statVal: { fontSize: 22, fontWeight: '800', color: Colors.textPrimary },
+  statLabel: { fontSize: 12, color: Colors.textSecondary, marginTop: 4 },
+  section: {
+    marginHorizontal: 16, backgroundColor: Colors.bgCard,
+    borderRadius: 20, borderWidth: 1, borderColor: Colors.border, marginBottom: 16,
   },
-  logoutText: { color: '#FF3B30', fontSize: 16, fontWeight: 'bold', marginLeft: 8 }
+  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  menuIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.bgSurface, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  menuLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
+  logoutBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    marginHorizontal: 16, borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: Colors.danger, gap: 8,
+  },
+  logoutText: { color: Colors.danger, fontSize: 16, fontWeight: '700' },
 });

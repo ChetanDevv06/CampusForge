@@ -1,216 +1,138 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, StatusBar
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { Colors, Gradients } from '../../constants/theme';
 
 export default function SkillsScreen() {
   const [skills, setSkills] = useState<any[]>([]);
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('offer'); // 'offer' or 'request'
+  const [filter, setFilter] = useState('offer');
+  const router = useRouter();
 
   useEffect(() => {
-    // Single 'skills' collection where documents have a type: 'offer' or 'request'
     const q = query(collection(db, 'skills'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setSkills(data);
+    const unsub = onSnapshot(q, (snap) => {
+      setSkills(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
-    });
-    return unsubscribe;
+    }, () => setLoading(false));
+    return unsub;
   }, []);
 
-  const filteredSkills = skills.filter(s => s.type === filter);
+  const filtered = skills.filter(s => s.type === filter);
 
   const renderItem = ({ item }: { item: any }) => (
     <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.categoryBadge}>{item.category || 'General'}</Text>
-      </View>
-      <Text style={styles.description}>{item.description}</Text>
-      <View style={styles.footer}>
-        <View style={styles.userInfo}>
-          <Ionicons name="person-circle-outline" size={20} color="#666" />
-          <Text style={styles.userName}>{item.userName || 'Student'}</Text>
+      <View style={styles.cardTop}>
+        <LinearGradient
+          colors={filter === 'offer' ? Gradients.skillOffer : Gradients.skillRequest}
+          style={styles.catIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        >
+          <Ionicons name={filter === 'offer' ? 'bulb' : 'book'} size={18} color="#FFF" />
+        </LinearGradient>
+        <View style={styles.cardTopText}>
+          <Text style={styles.cardTitle}>{item.title}</Text>
+          <Text style={styles.cardCategory}>{item.category}</Text>
         </View>
-        <TouchableOpacity style={styles.connectButton}>
+        <TouchableOpacity style={styles.connectBtn}>
           <Text style={styles.connectText}>Connect</Text>
         </TouchableOpacity>
+      </View>
+      <Text style={styles.cardDesc}>{item.description}</Text>
+      <View style={styles.cardMeta}>
+        <Ionicons name="person-circle-outline" size={16} color={Colors.textMuted} />
+        <Text style={styles.metaText}>{item.userName || 'Student'}</Text>
       </View>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, filter === 'offer' && styles.activeTab]} 
-          onPress={() => setFilter('offer')}
-        >
-          <Text style={[styles.tabText, filter === 'offer' && styles.activeTabText]}>Offering</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, filter === 'request' && styles.activeTab]} 
-          onPress={() => setFilter('request')}
-        >
-          <Text style={[styles.tabText, filter === 'request' && styles.activeTabText]}>Requesting</Text>
-        </TouchableOpacity>
+      <StatusBar barStyle="light-content" />
+
+      {/* Hero */}
+      <LinearGradient colors={['#1C1C3A', Colors.bg]} style={styles.hero}>
+        <Text style={styles.heroTitle}>Skill Exchange</Text>
+        <Text style={styles.heroSub}>Teach what you know, learn what you don't</Text>
+      </LinearGradient>
+
+      {/* Toggle */}
+      <View style={styles.toggle}>
+        {[{ key: 'offer', label: '💡 Offering', grad: Gradients.skillOffer },
+          { key: 'request', label: '📚 Requesting', grad: Gradients.skillRequest }].map(t => (
+          <TouchableOpacity key={t.key} style={[styles.toggleBtn, filter === t.key && styles.toggleActive]} onPress={() => setFilter(t.key)}>
+            {filter === t.key
+              ? <LinearGradient colors={t.grad} style={styles.toggleGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                  <Text style={styles.toggleTextActive}>{t.label}</Text>
+                </LinearGradient>
+              : <Text style={styles.toggleText}>{t.label}</Text>
+            }
+          </TouchableOpacity>
+        ))}
       </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#007AFF" style={styles.loader} />
-      ) : (
-        <FlatList
-          data={filteredSkills}
-          renderItem={renderItem}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContainer}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>No skills posted yet.</Text>
-          }
-        />
-      )}
+      {loading
+        ? <ActivityIndicator size="large" color={Colors.primary} style={{ flex: 1 }} />
+        : <FlatList
+            data={filtered}
+            renderItem={renderItem}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Ionicons name="flash-outline" size={48} color={Colors.textMuted} />
+                <Text style={styles.emptyText}>No skills posted yet</Text>
+              </View>
+            }
+          />
+      }
 
-      <TouchableOpacity 
-        style={styles.fab}
-        onPress={() => { router.push('/post-skill'); }}
-      >
-        <Ionicons name="add" size={32} color="#FFF" />
+      <TouchableOpacity style={styles.fabWrapper} onPress={() => router.push('/post-skill')}>
+        <LinearGradient colors={Gradients.skillOffer} style={styles.fab} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <Ionicons name="add" size={28} color="#FFF" />
+        </LinearGradient>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-  },
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFF',
-    padding: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  activeTab: {
-    backgroundColor: '#EBF5FF',
-  },
-  tabText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  activeTabText: {
-    color: '#007AFF',
-  },
-  listContainer: {
-    padding: 16,
-    paddingBottom: 100,
-  },
+  container: { flex: 1, backgroundColor: Colors.bg },
+  hero: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
+  heroTitle: { fontSize: 26, fontWeight: '800', color: Colors.textPrimary, marginBottom: 4 },
+  heroSub: { fontSize: 14, color: Colors.textSecondary },
+  toggle: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 8, gap: 10 },
+  toggleBtn: { flex: 1, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
+  toggleActive: { borderColor: 'transparent' },
+  toggleGrad: { paddingVertical: 12, alignItems: 'center' },
+  toggleText: { color: Colors.textSecondary, fontSize: 14, fontWeight: '600', paddingVertical: 12, textAlign: 'center' },
+  toggleTextActive: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  list: { padding: 16, paddingBottom: 100 },
   card: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    backgroundColor: Colors.bgCard, borderRadius: 18, padding: 16,
+    marginBottom: 14, borderWidth: 1, borderColor: Colors.border,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
+  cardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  catIcon: { width: 42, height: 42, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  cardTopText: { flex: 1, marginLeft: 12 },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
+  cardCategory: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+  connectBtn: {
+    backgroundColor: Colors.bgSurface, borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: Colors.borderActive,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111',
-    flex: 1,
-    marginRight: 8,
-  },
-  categoryBadge: {
-    backgroundColor: '#E5E7EB',
-    color: '#374151',
-    fontSize: 12,
-    fontWeight: '600',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  description: {
-    fontSize: 15,
-    color: '#4B5563',
-    marginBottom: 16,
-    lineHeight: 22,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    paddingTop: 12,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  userName: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  connectButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  connectText: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 50,
-    color: '#9CA3AF',
-    fontSize: 16,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    backgroundColor: '#007AFF',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
+  connectText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
+  cardDesc: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20, marginBottom: 12 },
+  cardMeta: { flexDirection: 'row', alignItems: 'center' },
+  metaText: { color: Colors.textMuted, fontSize: 13, marginLeft: 6 },
+  empty: { alignItems: 'center', marginTop: 80 },
+  emptyText: { color: Colors.textMuted, fontSize: 16, marginTop: 12 },
+  fabWrapper: { position: 'absolute', bottom: 24, right: 24 },
+  fab: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
 });

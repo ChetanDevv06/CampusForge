@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import {
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  Image, ActivityIndicator, StatusBar
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { Colors, Gradients } from '../../constants/theme';
 
 export default function MarketScreen() {
   const [products, setProducts] = useState<any[]>([]);
@@ -12,25 +17,32 @@ export default function MarketScreen() {
 
   useEffect(() => {
     const q = query(collection(db, 'marketplace'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setProducts(data);
+    const unsub = onSnapshot(q, (snap) => {
+      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
-    });
-    return unsubscribe;
+    }, () => setLoading(false));
+    return unsub;
   }, []);
 
   const renderItem = ({ item }: { item: any }) => (
     <View style={styles.card}>
-      <Image source={{ uri: item.imageUrl || 'https://via.placeholder.com/150' }} style={styles.image} />
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-          <Text style={styles.price}>${item.price}</Text>
-        </View>
-        <Text style={styles.category}>{item.category || 'Books & Supplies'}</Text>
-        <TouchableOpacity style={styles.buyButton}>
-          <Text style={styles.buyText}>Message Seller</Text>
+      <View style={styles.imageBox}>
+        {item.imageUrl
+          ? <Image source={{ uri: item.imageUrl }} style={styles.image} />
+          : <LinearGradient colors={Gradients.card} style={styles.imagePlaceholder}>
+              <Ionicons name="image-outline" size={32} color={Colors.textMuted} />
+            </LinearGradient>
+        }
+        <LinearGradient colors={Gradients.primary} style={styles.priceBadge} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+          <Text style={styles.priceText}>₹{item.price}</Text>
+        </LinearGradient>
+      </View>
+      <View style={styles.cardContent}>
+        <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
+        <Text style={styles.cardCategory}>{item.category}</Text>
+        <TouchableOpacity style={styles.msgBtn}>
+          <Ionicons name="chatbubble-outline" size={14} color={Colors.primary} />
+          <Text style={styles.msgText}>Message Seller</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -38,62 +50,71 @@ export default function MarketScreen() {
 
   return (
     <View style={styles.container}>
-      {loading ? (
-        <ActivityIndicator size="large" color="#007AFF" style={styles.loader} />
-      ) : (
-        <FlatList
-          data={products}
-          renderItem={renderItem}
-          keyExtractor={item => item.id}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
-          contentContainerStyle={styles.listContainer}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>No items for sale yet.</Text>
-          }
-        />
-      )}
-      <TouchableOpacity 
-        style={styles.fab}
-        onPress={() => router.push('/post-market')}
-      >
-        <Ionicons name="add" size={32} color="#FFF" />
+      <StatusBar barStyle="light-content" />
+
+      <LinearGradient colors={['#1C1C3A', Colors.bg]} style={styles.hero}>
+        <Text style={styles.heroTitle}>Student Market</Text>
+        <Text style={styles.heroSub}>Buy and sell within your campus</Text>
+      </LinearGradient>
+
+      {loading
+        ? <ActivityIndicator size="large" color={Colors.primary} style={{ flex: 1 }} />
+        : <FlatList
+            data={products}
+            renderItem={renderItem}
+            keyExtractor={item => item.id}
+            numColumns={2}
+            columnWrapperStyle={styles.row}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Ionicons name="storefront-outline" size={48} color={Colors.textMuted} />
+                <Text style={styles.emptyText}>No items listed yet</Text>
+              </View>
+            }
+          />
+      }
+
+      <TouchableOpacity style={styles.fabWrapper} onPress={() => router.push('/post-market')}>
+        <LinearGradient colors={Gradients.primary} style={styles.fab} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <Ionicons name="add" size={28} color="#FFF" />
+        </LinearGradient>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  listContainer: { padding: 12, paddingBottom: 100 },
+  container: { flex: 1, backgroundColor: Colors.bg },
+  hero: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
+  heroTitle: { fontSize: 26, fontWeight: '800', color: Colors.textPrimary, marginBottom: 4 },
+  heroSub: { fontSize: 14, color: Colors.textSecondary },
+  list: { padding: 12, paddingBottom: 100 },
   row: { justifyContent: 'space-between' },
   card: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    width: '48%',
-    marginBottom: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    backgroundColor: Colors.bgCard, borderRadius: 18, width: '48%',
+    marginBottom: 14, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border,
   },
-  image: { width: '100%', height: 140, backgroundColor: '#EEE' },
-  content: { padding: 12 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  title: { fontSize: 16, fontWeight: '700', color: '#111', flex: 1, marginRight: 8 },
-  price: { fontSize: 16, fontWeight: '800', color: '#007AFF' },
-  category: { fontSize: 12, color: '#6B7280', marginBottom: 12 },
-  buyButton: { backgroundColor: '#F3F4F6', paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
-  buyText: { color: '#007AFF', fontSize: 13, fontWeight: '600' },
-  emptyText: { textAlign: 'center', marginTop: 50, color: '#9CA3AF', fontSize: 16 },
-  fab: {
-    position: 'absolute', bottom: 24, right: 24,
-    backgroundColor: '#007AFF', width: 60, height: 60, borderRadius: 30,
-    justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#007AFF', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  imageBox: { position: 'relative' },
+  image: { width: '100%', height: 130, resizeMode: 'cover' },
+  imagePlaceholder: { width: '100%', height: 130, justifyContent: 'center', alignItems: 'center' },
+  priceBadge: {
+    position: 'absolute', bottom: 8, right: 8,
+    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4,
   },
+  priceText: { color: '#FFF', fontSize: 13, fontWeight: '800' },
+  cardContent: { padding: 12 },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4 },
+  cardCategory: { fontSize: 12, color: Colors.textSecondary, marginBottom: 10 },
+  msgBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.bgSurface, borderRadius: 10,
+    paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: Colors.borderActive,
+  },
+  msgText: { color: Colors.primary, fontSize: 12, fontWeight: '600' },
+  empty: { alignItems: 'center', marginTop: 80 },
+  emptyText: { color: Colors.textMuted, fontSize: 16, marginTop: 12 },
+  fabWrapper: { position: 'absolute', bottom: 24, right: 24 },
+  fab: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
 });

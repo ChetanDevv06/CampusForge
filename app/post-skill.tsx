@@ -1,112 +1,110 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, StatusBar } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
+import { Colors, Gradients } from '../constants/theme';
 
 export default function PostSkillScreen() {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
-  const [type, setType] = useState('offer'); // 'offer' or 'request'
+  const [type, setType] = useState<'offer' | 'request'>('offer');
   const [loading, setLoading] = useState(false);
-  
   const { user } = useAuth();
   const router = useRouter();
 
   const handlePost = async () => {
-    if (!title || !category || !description) {
-      Alert.alert('Error', 'Please fill in all fields.');
-      return;
-    }
-
+    if (!title || !category || !description) { Alert.alert('Error', 'Please fill in all fields.'); return; }
     setLoading(true);
     try {
       await addDoc(collection(db, 'skills'), {
-        title,
-        category,
-        description,
-        type,
-        userId: user?.uid,
-        userEmail: user?.email,
-        userName: user?.email?.split('@')[0] || 'Student', // Temporary username
+        title, category, description, type,
+        userId: user?.uid, userEmail: user?.email,
+        userName: user?.email?.split('@')[0] || 'Student',
         createdAt: new Date().toISOString(),
       });
-      
-      Alert.alert('Success', `Skill ${type} posted!`);
+      Alert.alert('Posted!', `Skill ${type} published.`);
       router.back();
-    } catch (error: any) {
-      Alert.alert('Error posting skill', error.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: any) { Alert.alert('Error', e.message); }
+    finally { setLoading(false); }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.segmentedControl}>
-        <TouchableOpacity 
-          style={[styles.segmentButton, type === 'offer' && styles.segmentActiveOffer]}
-          onPress={() => setType('offer')}
-        >
-          <Text style={[styles.segmentText, type === 'offer' && styles.segmentTextActive]}>I Can Teach</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.segmentButton, type === 'request' && styles.segmentActiveRequest]}
-          onPress={() => setType('request')}
-        >
-          <Text style={[styles.segmentText, type === 'request' && styles.segmentTextActive]}>I Want to Learn</Text>
-        </TouchableOpacity>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <StatusBar barStyle="light-content" />
+      <Text style={styles.title}>Post a Skill</Text>
+
+      <View style={styles.typeRow}>
+        {([
+          { key: 'offer', label: '💡 I Can Teach', colors: Gradients.skillOffer },
+          { key: 'request', label: '📚 I Want to Learn', colors: Gradients.skillRequest },
+        ] as const).map(t => (
+          <TouchableOpacity key={t.key} style={[styles.typeBtn, type === t.key && styles.typeBtnActive]} onPress={() => setType(t.key)}>
+            {type === t.key
+              ? <LinearGradient colors={t.colors} style={styles.typeBtnInner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                  <Text style={styles.typeLabelActive}>{t.label}</Text>
+                </LinearGradient>
+              : <Text style={styles.typeLabel}>{t.label}</Text>
+            }
+          </TouchableOpacity>
+        ))}
       </View>
 
-      <View style={styles.form}>
-        <Text style={styles.label}>Skill Title</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g., Python Programming"
-          value={title}
-          onChangeText={setTitle}
-        />
+      {[
+        { icon: 'bulb-outline', label: 'Skill Title', value: title, set: setTitle, placeholder: 'e.g., Python Programming' },
+        { icon: 'folder-outline', label: 'Category', value: category, set: setCategory, placeholder: 'e.g., Computer Science, Music' },
+      ].map(f => (
+        <View key={f.label} style={styles.fieldGroup}>
+          <Text style={styles.label}>{f.label}</Text>
+          <View style={styles.inputWrapper}>
+            <Ionicons name={f.icon as any} size={18} color={Colors.textSecondary} />
+            <TextInput style={styles.input} placeholder={f.placeholder} placeholderTextColor={Colors.textMuted} value={f.value} onChangeText={f.set} />
+          </View>
+        </View>
+      ))}
 
-        <Text style={styles.label}>Category</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g., Computer Science, Music, Languages"
-          value={category}
-          onChangeText={setCategory}
-        />
-
+      <View style={styles.fieldGroup}>
         <Text style={styles.label}>Details & Expectations</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Describe what you'll teach, or what you're looking for..."
-          multiline
-          numberOfLines={4}
-          value={description}
-          onChangeText={setDescription}
-        />
-
-        <TouchableOpacity style={styles.submitButton} onPress={handlePost} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Post Skill {type === 'offer' ? 'Offer' : 'Request'}</Text>}
-        </TouchableOpacity>
+        <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
+          <TextInput
+            style={styles.textArea} placeholder="What will you teach or what are you looking to learn?" placeholderTextColor={Colors.textMuted}
+            value={description} onChangeText={setDescription} multiline numberOfLines={4}
+          />
+        </View>
       </View>
+
+      <TouchableOpacity onPress={handlePost} disabled={loading}>
+        <LinearGradient colors={type === 'offer' ? Gradients.skillOffer : Gradients.skillRequest} style={styles.btn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+          {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>Post {type === 'offer' ? 'Skill Offer' : 'Skill Request'}</Text>}
+        </LinearGradient>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, backgroundColor: '#fff', flexGrow: 1 },
-  segmentedControl: { flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 12, padding: 4, marginBottom: 24 },
-  segmentButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 8 },
-  segmentActiveOffer: { backgroundColor: '#34C759' },
-  segmentActiveRequest: { backgroundColor: '#FF9500' },
-  segmentText: { fontSize: 14, fontWeight: '600', color: '#666' },
-  segmentTextActive: { color: '#fff' },
-  form: { flex: 1 },
-  label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
-  input: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 16, fontSize: 16, marginBottom: 20 },
-  textArea: { height: 100, textAlignVertical: 'top' },
-  submitButton: { backgroundColor: '#007AFF', padding: 18, borderRadius: 12, alignItems: 'center', marginTop: 12 },
-  submitText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  container: { flex: 1, backgroundColor: Colors.bg },
+  scroll: { padding: 24, paddingTop: 16 },
+  title: { fontSize: 26, fontWeight: '800', color: Colors.textPrimary, marginBottom: 24 },
+  typeRow: { gap: 10, marginBottom: 24 },
+  typeBtn: { borderRadius: 14, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
+  typeBtnActive: { borderColor: 'transparent' },
+  typeBtnInner: { paddingVertical: 14, alignItems: 'center' },
+  typeLabel: { color: Colors.textSecondary, fontWeight: '600', fontSize: 14, paddingVertical: 14, textAlign: 'center' },
+  typeLabelActive: { color: '#FFF', fontWeight: '700', fontSize: 14 },
+  fieldGroup: { marginBottom: 18 },
+  label: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600', marginBottom: 8, marginLeft: 4 },
+  inputWrapper: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 14,
+  },
+  input: { flex: 1, color: Colors.textPrimary, fontSize: 15, paddingVertical: 14, marginLeft: 10 },
+  textAreaWrapper: { alignItems: 'flex-start', paddingVertical: 14 },
+  textArea: { flex: 1, color: Colors.textPrimary, fontSize: 15, minHeight: 100, textAlignVertical: 'top' },
+  btn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
+  btnText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
 });
