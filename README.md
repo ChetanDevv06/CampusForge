@@ -1,51 +1,101 @@
-# Welcome to your Expo app 👋
+# CampusLoop 🔄
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**CampusLoop** is a smart campus exchange platform designed to bridge the gap between students. Whether you've lost an item, want to sell a textbook, or need to learn a new skill, CampusLoop is the go-to app for your university community.
 
-## Get started
+---
 
-1. Install dependencies
+## 🚀 Features
 
-   ```bash
-   npm install
-   ```
+- 🔍 **Lost & Found:** Report lost items or help others find theirs.
+- 🛍️ **Marketplace:** Buy and sell items directly within your campus.
+- 💡 **Skill Exchange:** Teach what you know, learn what you don't.
+- 💬 **Real-time Chat:** Communicate safely with other students.
+- ⭐ **Ratings & Reviews:** Build trust within the community.
+- 👤 **Profile Management:** Customize your avatar and display your campus credentials.
 
-2. Start the app
+---
 
-   ```bash
-   npx expo start
-   ```
+## 🛠 Prerequisites
 
-In the output, you'll find options to open the app in a
+Before you begin, ensure you have the following installed:
+- [Node.js](https://nodejs.org/) (LTS version recommended)
+- [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
+- [Expo Go](https://expo.dev/go) app on your mobile device (to test on physical hardware)
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+---
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 🏁 Getting Started
 
-## Get a fresh project
-
-When you're ready, run:
-
+### 1. Clone the Repository
 ```bash
-npm run reset-project
+git clone https://github.com/ChetanDev06/CampusLoop.git
+cd CampusLoop
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Install Dependencies
+```bash
+npm install
+```
 
-## Learn more
+### 3. Environment Setup
+Create a `.env` file in the root directory and add your Firebase configuration. You can use the template below:
 
-To learn more about developing your project with Expo, look at the following resources:
+```env
+EXPO_PUBLIC_FIREBASE_API_KEY="YOUR_API_KEY"
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN="YOUR_AUTH_DOMAIN"
+EXPO_PUBLIC_FIREBASE_PROJECT_ID="YOUR_PROJECT_ID"
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET="YOUR_STORAGE_BUCKET"
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="YOUR_SENDER_ID"
+EXPO_PUBLIC_FIREBASE_APP_ID="YOUR_APP_ID"
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+> [!IMPORTANT]
+> To get these values, create a new project on the [Firebase Console](https://console.firebase.google.com/), enable **Authentication**, **Cloud Firestore**, and **Storage**, and then add a "Web App" to your project settings.
 
-## Join the community
+### 4. Run the Application
+```bash
+npx expo start
+```
 
-Join our community of developers creating universal apps.
+---
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
-# CampusLoop
+## 📱 Running on Different Systems
+
+- **Android Emulator / iOS Simulator:** Press `a` (for Android) or `i` (for iOS) in the terminal after starting Expo.
+- **Physical Device:** Scan the QR code displayed in the terminal using the **Expo Go** app (Android) or the **Camera app** (iOS).
+- **Web:** Press `w` to open the project in your browser.
+
+---
+
+## 🏗 Project Structure
+
+- `app/` - Contains all screens and routing logic (Expo Router).
+- `contexts/` - Global state management (Auth, Profile).
+- `constants/` - Theme, colors, and layout configurations.
+- `utils/` - Helper functions for Firebase, storage, and chat.
+- `firebaseConfig.ts` - Main Firebase initialization.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+---
+
+## 📧 Contact
+**Chetan** - [GitHub](https://github.com/ChetanDev06)
+
+Project Link: [https://github.com/ChetanDev06/CampusLoop](https://github.com/ChetanDev06/CampusLoop)
