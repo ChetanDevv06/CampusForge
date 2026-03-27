@@ -3,17 +3,19 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, StatusBar
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebaseConfig';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { db, auth } from '../../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors, Gradients } from '../../constants/theme';
+import { startChat } from '../../utils/chat';
 
 export default function SkillsScreen() {
   const [skills, setSkills] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('offer');
   const router = useRouter();
+  const uid = auth.currentUser?.uid;
 
   useEffect(() => {
     const q = query(collection(db, 'skills'), orderBy('createdAt', 'desc'));
@@ -24,10 +26,20 @@ export default function SkillsScreen() {
     return unsub;
   }, []);
 
+  const handleToggleStatus = async (id: string, currentStatus: string) => {
+    try {
+      await updateDoc(doc(db, 'skills', id), {
+        status: currentStatus === 'completed' ? 'open' : 'completed'
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const filtered = skills.filter(s => s.type === filter);
 
   const renderItem = ({ item }: { item: any }) => (
-    <View style={styles.card}>
+    <View style={[styles.card, item.status === 'completed' && styles.cardCompleted]}>
       <View style={styles.cardTop}>
         <LinearGradient
           colors={filter === 'offer' ? Gradients.skillOffer : Gradients.skillRequest}
@@ -39,14 +51,40 @@ export default function SkillsScreen() {
           <Text style={styles.cardTitle}>{item.title}</Text>
           <Text style={styles.cardCategory}>{item.category}</Text>
         </View>
-        <TouchableOpacity style={styles.connectBtn}>
-          <Text style={styles.connectText}>Connect</Text>
-        </TouchableOpacity>
+        
+        {uid === item.userId ? (
+          <TouchableOpacity 
+            style={[styles.actionBtn, item.status === 'completed' && styles.actionBtnActive]}
+            onPress={() => handleToggleStatus(item.id, item.status)}
+          >
+            <Ionicons name={item.status === 'completed' ? "refresh-outline" : "checkmark-circle-outline"} size={14} color={item.status === 'completed' ? Colors.textPrimary : Colors.success} />
+            <Text style={[styles.actionText, item.status === 'completed' && { color: Colors.textPrimary }]}>
+              {item.status === 'completed' ? 'Reopen' : 'Complete'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          uid !== item.userId && item.status !== 'completed' && (
+            <TouchableOpacity 
+              style={styles.connectBtn}
+              onPress={() => startChat(item.userId, item.userName || 'Student', router)}
+            >
+              <Text style={styles.connectText}>Connect</Text>
+            </TouchableOpacity>
+          )
+        )}
       </View>
       <Text style={styles.cardDesc}>{item.description}</Text>
       <View style={styles.cardMeta}>
-        <Ionicons name="person-circle-outline" size={16} color={Colors.textMuted} />
-        <Text style={styles.metaText}>{item.userName || 'Student'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          <Ionicons name="person-circle-outline" size={16} color={Colors.textMuted} />
+          <Text style={styles.metaText}>{item.userName || 'Student'}</Text>
+        </View>
+        {item.status === 'completed' && (
+          <View style={styles.completedBadge}>
+            <Ionicons name="checkmark-done" size={14} color={Colors.success} />
+            <Text style={styles.completedBadgeText}>COMPLETED</Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -118,6 +156,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bgCard, borderRadius: 18, padding: 16,
     marginBottom: 14, borderWidth: 1, borderColor: Colors.border,
   },
+  cardCompleted: { opacity: 0.7, borderColor: Colors.success },
   cardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   catIcon: { width: 42, height: 42, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   cardTopText: { flex: 1, marginLeft: 12 },
@@ -128,9 +167,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: Colors.borderActive,
   },
   connectText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
+  actionBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(52,238,154,0.1)', borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: Colors.success,
+  },
+  actionBtnActive: { backgroundColor: Colors.bgSurface, borderColor: Colors.border },
+  actionText: { color: Colors.success, fontSize: 12, fontWeight: '700' },
   cardDesc: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20, marginBottom: 12 },
   cardMeta: { flexDirection: 'row', alignItems: 'center' },
   metaText: { color: Colors.textMuted, fontSize: 13, marginLeft: 6 },
+  completedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(52,238,154,0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  completedBadgeText: { color: Colors.success, fontSize: 10, fontWeight: '800' },
   empty: { alignItems: 'center', marginTop: 80 },
   emptyText: { color: Colors.textMuted, fontSize: 16, marginTop: 12 },
   fabWrapper: { position: 'absolute', bottom: 24, right: 24 },

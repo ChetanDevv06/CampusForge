@@ -11,6 +11,17 @@ import { auth, db } from '../../firebaseConfig';
 import { Link } from 'expo-router';
 import { Colors, Gradients } from '../../constants/theme';
 
+const Field = ({ icon, placeholder, value, onChangeText, secure = false, keyboard = 'default' }: any) => (
+  <View style={styles.inputWrapper}>
+    <Ionicons name={icon} size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+    <TextInput
+      style={styles.input} placeholder={placeholder} placeholderTextColor={Colors.textMuted}
+      value={value} onChangeText={onChangeText} secureTextEntry={secure}
+      autoCapitalize="none" keyboardType={keyboard}
+    />
+  </View>
+);
+
 export default function RegisterScreen() {
   const [name, setName] = useState('');
   const [college, setCollege] = useState('');
@@ -26,26 +37,25 @@ export default function RegisterScreen() {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await setDoc(doc(db, 'users', cred.user.uid), {
-        uid: cred.user.uid, name, college, email: email.toLowerCase(),
-        createdAt: new Date().toISOString(), skillsOffered: [], skillsRequested: []
+        uid: cred.user.uid, 
+        name, 
+        college, 
+        email: email.toLowerCase(),
+        avatarUrl: null,
+        rating: 5,
+        reviewCount: 0,
+        hasSeenOnboarding: false,
+        createdAt: new Date().toISOString(), 
+        skillsOffered: [], 
+        skillsRequested: []
       });
+
     } catch (error: any) {
       Alert.alert('Registration Error', error.message);
     } finally {
       setLoading(false);
     }
   };
-
-  const Field = ({ icon, placeholder, value, onChangeText, secure = false, keyboard = 'default' }: any) => (
-    <View style={styles.inputWrapper}>
-      <Ionicons name={icon} size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-      <TextInput
-        style={styles.input} placeholder={placeholder} placeholderTextColor={Colors.textMuted}
-        value={value} onChangeText={onChangeText} secureTextEntry={secure}
-        autoCapitalize="none" keyboardType={keyboard}
-      />
-    </View>
-  );
 
   return (
     <View style={styles.container}>
@@ -84,6 +94,7 @@ export default function RegisterScreen() {
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },

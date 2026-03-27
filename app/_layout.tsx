@@ -12,16 +12,27 @@ export const unstable_settings = {
 };
 
 function RootLayoutNav() {
-  const { user, isLoading } = useAuth();
+  const { user, profile, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
     if (isLoading) return;
+    
     const inAuthGroup = segments[0] === '(auth)';
-    if (!user && !inAuthGroup) router.replace('/(auth)/login');
-    else if (user && inAuthGroup) router.replace('/(tabs)');
-  }, [user, isLoading, segments]);
+    const onOnboarding = segments[0] === 'onboarding';
+
+    if (!user && !inAuthGroup) {
+      router.replace('/(auth)/login');
+    } else if (user) {
+      if (inAuthGroup) {
+        router.replace('/(tabs)');
+      } else if (profile && profile.hasSeenOnboarding === false && !onOnboarding) {
+        router.replace('/onboarding');
+      }
+    }
+  }, [user, profile, isLoading, segments]);
+
 
   const darkHeader = {
     headerStyle: { backgroundColor: '#13131F' },
@@ -40,6 +51,14 @@ function RootLayoutNav() {
         <Stack.Screen name="post-item" options={{ presentation: 'modal', title: 'Report Item', ...darkHeader }} />
         <Stack.Screen name="post-skill" options={{ presentation: 'modal', title: 'Post Skill', ...darkHeader }} />
         <Stack.Screen name="post-market" options={{ presentation: 'modal', title: 'List Item', ...darkHeader }} />
+        <Stack.Screen name="messages" options={{ title: 'Messages', ...darkHeader }} />
+        <Stack.Screen name="chat/[id]" options={{ title: 'Chat', ...darkHeader }} />
+        <Stack.Screen name="saved-items" options={{ title: 'Saved Items', ...darkHeader }} />
+        <Stack.Screen name="my-reviews" options={{ title: 'My Reviews', ...darkHeader }} />
+        <Stack.Screen name="settings" options={{ title: 'Settings', ...darkHeader }} />
+        <Stack.Screen name="edit-profile" options={{ title: 'Edit Profile', ...darkHeader }} />
+        <Stack.Screen name="search" options={{ title: 'Global Search', ...darkHeader }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal', ...darkHeader }} />
       </Stack>
     </>

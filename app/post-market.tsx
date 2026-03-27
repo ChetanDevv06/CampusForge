@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, StatusBar } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, StatusBar, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, addDoc } from 'firebase/firestore';
@@ -7,24 +7,45 @@ import { db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { Colors, Gradients } from '../constants/theme';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadImage } from '../utils/storage';
 
 export default function PostMarketScreen() {
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
+  const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
   const router = useRouter();
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  };
 
   const handleList = async () => {
     if (!title || !price || !category) { Alert.alert('Error', 'Please fill in all required fields.'); return; }
     setLoading(true);
     try {
+      let imageUrl = null;
+      if (image) {
+        imageUrl = await uploadImage(image, 'marketplace');
+      }
+
       await addDoc(collection(db, 'marketplace'), {
         title, price: parseFloat(price), category, description,
         userId: user?.uid, userEmail: user?.email,
-        createdAt: new Date().toISOString(), imageUrl: null,
+        createdAt: new Date().toISOString(), imageUrl,
       });
       Alert.alert('Listed!', 'Your item is now for sale.');
       router.back();
@@ -50,6 +71,26 @@ export default function PostMarketScreen() {
           <Text style={styles.title}>Sell an Item</Text>
           <Text style={styles.subtitle}>List it on the campus market</Text>
         </View>
+      </View>
+
+      {/* Image Picker */}
+      <View style={styles.fieldGroup}>
+        <Text style={styles.label}>Item Image</Text>
+        <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
+          {image ? (
+            <Image source={{ uri: image }} style={styles.previewImage} />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons name="camera-outline" size={32} color={Colors.textMuted} />
+              <Text style={styles.imagePlaceholderText}>Connect an image of the item</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        {image && (
+          <TouchableOpacity style={styles.removeImage} onPress={() => setImage(null)}>
+            <Text style={styles.removeImageText}>Remove Image</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {fields.map(f => (
@@ -87,11 +128,21 @@ export default function PostMarketScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
-  scroll: { padding: 24, paddingTop: 16 },
+  scroll: { padding: 24, paddingTop: 16, paddingBottom: 40 },
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 28 },
   heroIcon: { width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   title: { fontSize: 26, fontWeight: '800', color: Colors.textPrimary },
   subtitle: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
+  imagePicker: {
+    width: '100%', height: 200, borderRadius: 14, borderStyle: 'dashed',
+    borderWidth: 2, borderColor: Colors.border, backgroundColor: Colors.bgCard,
+    justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
+  },
+  previewImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  imagePlaceholder: { alignItems: 'center' },
+  imagePlaceholderText: { color: Colors.textMuted, marginTop: 8, fontSize: 14 },
+  removeImage: { marginTop: 8, alignSelf: 'flex-end' },
+  removeImageText: { color: Colors.danger, fontSize: 13, fontWeight: '600' },
   fieldGroup: { marginBottom: 18 },
   label: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600', marginBottom: 8, marginLeft: 4 },
   inputWrapper: {

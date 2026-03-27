@@ -4,16 +4,18 @@ import {
   Image, ActivityIndicator, StatusBar
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebaseConfig';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { db, auth } from '../../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors, Gradients } from '../../constants/theme';
+import { startChat } from '../../utils/chat';
 
 export default function MarketScreen() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const uid = auth.currentUser?.uid;
 
   useEffect(() => {
     const q = query(collection(db, 'marketplace'), orderBy('createdAt', 'desc'));
@@ -24,15 +26,30 @@ export default function MarketScreen() {
     return unsub;
   }, []);
 
+  const handleToggleStatus = async (id: string, currentStatus: string) => {
+    try {
+      await updateDoc(doc(db, 'marketplace', id), {
+        status: currentStatus === 'sold' ? 'available' : 'sold'
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const renderItem = ({ item }: { item: any }) => (
-    <View style={styles.card}>
+    <View style={[styles.card, item.status === 'sold' && styles.cardSold]}>
       <View style={styles.imageBox}>
         {item.imageUrl
-          ? <Image source={{ uri: item.imageUrl }} style={styles.image} />
+          ? <Image source={{ uri: item.imageUrl }} style={[styles.image, item.status === 'sold' && { opacity: 0.5 }]} />
           : <LinearGradient colors={Gradients.card} style={styles.imagePlaceholder}>
               <Ionicons name="image-outline" size={32} color={Colors.textMuted} />
             </LinearGradient>
         }
+        {item.status === 'sold' && (
+          <View style={styles.soldBadge}>
+            <Text style={styles.soldText}>SOLD</Text>
+          </View>
+        )}
         <LinearGradient colors={Gradients.primary} style={styles.priceBadge} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
           <Text style={styles.priceText}>₹{item.price}</Text>
         </LinearGradient>
@@ -40,10 +57,28 @@ export default function MarketScreen() {
       <View style={styles.cardContent}>
         <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
         <Text style={styles.cardCategory}>{item.category}</Text>
-        <TouchableOpacity style={styles.msgBtn}>
-          <Ionicons name="chatbubble-outline" size={14} color={Colors.primary} />
-          <Text style={styles.msgText}>Message Seller</Text>
-        </TouchableOpacity>
+        
+        {uid === item.userId ? (
+          <TouchableOpacity 
+            style={[styles.actionBtn, item.status === 'sold' && styles.actionBtnActive]}
+            onPress={() => handleToggleStatus(item.id, item.status)}
+          >
+            <Ionicons name={item.status === 'sold' ? "refresh-outline" : "checkmark-circle-outline"} size={14} color={item.status === 'sold' ? Colors.textPrimary : Colors.success} />
+            <Text style={[styles.actionText, item.status === 'sold' && { color: Colors.textPrimary }]}>
+              {item.status === 'sold' ? 'Available' : 'Mark Sold'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          uid !== item.userId && item.status !== 'sold' && (
+            <TouchableOpacity 
+              style={styles.msgBtn}
+              onPress={() => startChat(item.userId, item.userEmail?.split('@')[0] || 'Seller', router)}
+            >
+              <Ionicons name="chatbubble-outline" size={14} color={Colors.primary} />
+              <Text style={styles.msgText}>Message Seller</Text>
+            </TouchableOpacity>
+          )
+        )}
       </View>
     </View>
   );
@@ -96,12 +131,19 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bgCard, borderRadius: 18, width: '48%',
     marginBottom: 14, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border,
   },
+  cardSold: { opacity: 0.8, borderColor: Colors.success },
   imageBox: { position: 'relative' },
   image: { width: '100%', height: 130, resizeMode: 'cover' },
   imagePlaceholder: { width: '100%', height: 130, justifyContent: 'center', alignItems: 'center' },
+  soldBadge: {
+    position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center',
+    zIndex: 1,
+  },
+  soldText: { color: '#FFF', fontSize: 18, fontWeight: '900', letterSpacing: 1 },
   priceBadge: {
     position: 'absolute', bottom: 8, right: 8,
-    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, zIndex: 2,
   },
   priceText: { color: '#FFF', fontSize: 13, fontWeight: '800' },
   cardContent: { padding: 12 },
@@ -110,9 +152,16 @@ const styles = StyleSheet.create({
   msgBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: Colors.bgSurface, borderRadius: 10,
-    paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: Colors.borderActive,
+    paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: Colors.border,
   },
   msgText: { color: Colors.primary, fontSize: 12, fontWeight: '600' },
+  actionBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(52,238,154,0.1)', borderRadius: 10,
+    paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: Colors.success,
+  },
+  actionBtnActive: { backgroundColor: Colors.bgSurface, borderColor: Colors.border },
+  actionText: { color: Colors.success, fontSize: 12, fontWeight: '700' },
   empty: { alignItems: 'center', marginTop: 80 },
   emptyText: { color: Colors.textMuted, fontSize: 16, marginTop: 12 },
   fabWrapper: { position: 'absolute', bottom: 24, right: 24 },
