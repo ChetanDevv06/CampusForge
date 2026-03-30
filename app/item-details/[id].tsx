@@ -181,7 +181,19 @@ export default function ItemDetails() {
             <BlurView intensity={80} tint="dark" style={styles.actionBlur}>
               <TouchableOpacity 
                 style={styles.mainAction}
-                onPress={() => startChat(item.userId, item.userName || item.userEmail?.split('@')[0] || 'Student', router)}
+                onPress={() => 
+                  startChat(
+                    item.userId,
+                    item.userName || 'Campus Student',
+                    router,
+                    {
+                      type: item.type === 'lost' ? 'lost' : 'found',
+                      title: item.title,
+                      image: item.imageUrl,
+                      itemId: item.id
+                    }
+                  )
+                }
               >
                 <LinearGradient colors={Gradients.primary} style={styles.actionGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                   <Ionicons name="chatbubble-ellipses" size={20} color="#FFF" />
