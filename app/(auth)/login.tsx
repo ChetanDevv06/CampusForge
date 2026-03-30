@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StatusBar
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StatusBar, ScrollView
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { auth } from '../../firebaseConfig';
 import { Link } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { Colors, Gradients } from '../../constants/theme';
+import FeedbackModal, { FeedbackType } from '../../components/FeedbackModal';
 
 export default function LoginScreen() {
   const { signInAsGuest } = useAuth();
@@ -17,14 +18,28 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  
+  // Modal State
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{title: string, message: string, type: FeedbackType}>({
+    title: '', message: '', type: 'info'
+  });
+
+  const showAlert = (title: string, message: string, type: FeedbackType = 'error') => {
+    setModalConfig({ title, message, type });
+    setModalVisible(true);
+  };
 
   const handleLogin = async () => {
-    if (!email || !password) { Alert.alert('Error', 'Please fill in all fields.'); return; }
+    if (!email || !password) { 
+      showAlert('Empty Fields', 'Please enter your email and password to sign in.'); 
+      return; 
+    }
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message);
+      showAlert('Login Failed', error.message);
     } finally {
       setLoading(false);
     }
@@ -44,7 +59,12 @@ export default function LoginScreen() {
         <Text style={styles.tagline}>Lost it • Post it • Find it</Text>
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.form}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        style={styles.form}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Welcome back</Text>
         <Text style={styles.subtitle}>Sign in to your campus account</Text>
 
@@ -70,6 +90,10 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPass}
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            textContentType="password"
           />
           <TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.inputIcon}>
             <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={Colors.textSecondary} />
@@ -92,7 +116,16 @@ export default function LoginScreen() {
             <TouchableOpacity><Text style={styles.linkText}>Register</Text></TouchableOpacity>
           </Link>
         </View>
-      </KeyboardAvoidingView>
+      </ScrollView>
+    </KeyboardAvoidingView>
+
+      <FeedbackModal 
+        isVisible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        type={modalConfig.type}
+      />
     </View>
   );
 }

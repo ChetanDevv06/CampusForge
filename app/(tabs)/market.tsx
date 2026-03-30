@@ -37,7 +37,11 @@ export default function MarketScreen() {
   };
 
   const renderItem = ({ item }: { item: any }) => (
-    <View style={[styles.card, item.status === 'sold' && styles.cardSold]}>
+    <TouchableOpacity 
+      activeOpacity={0.9}
+      onPress={() => router.push({ pathname: '/market-details/[id]', params: { id: item.id } } as any)}
+      style={[styles.card, item.status === 'sold' && styles.cardSold]}
+    >
       <View style={styles.imageBox}>
         {item.imageUrl
           ? <Image source={{ uri: item.imageUrl }} style={[styles.image, item.status === 'sold' && { opacity: 0.5 }]} />
@@ -80,7 +84,7 @@ export default function MarketScreen() {
           )
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (

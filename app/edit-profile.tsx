@@ -5,13 +5,15 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { Colors, Gradients } from '../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImage } from '../utils/storage';
+import ImageSourceModal from '../components/ImageSourceModal';
+import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
 
 export default function EditProfileScreen() {
   const { user, profile } = useAuth();
@@ -21,6 +23,18 @@ export default function EditProfileScreen() {
   const [college, setCollege] = useState(profile?.college || '');
   const [image, setImage] = useState<string | null>(profile?.avatarUrl || null);
   const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+
+  // Feedback Modal State
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
+  const [feedbackConfig, setFeedbackConfig] = useState<{title: string, message: string, type: FeedbackType}>({
+    title: '', message: '', type: 'info'
+  });
+
+  const showFeedback = (title: string, message: string, type: FeedbackType = 'error') => {
+    setFeedbackConfig({ title, message, type });
+    setFeedbackVisible(true);
+  };
 
   useEffect(() => {
     if (profile) {
@@ -30,22 +44,51 @@ export default function EditProfileScreen() {
     }
   }, [profile]);
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
+  const pickImage = async (useCamera: boolean) => {
+    const { status } = useCamera 
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (status !== 'granted') {
+      showFeedback('Permission Denied', `Sorry, we need ${useCamera ? 'camera' : 'gallery'} permissions to make this work!`);
+      return;
+    }
+
+    const options: ImagePicker.ImagePickerOptions = {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.7,
-    });
+    };
+
+    const result = useCamera 
+      ? await ImagePicker.launchCameraAsync(options)
+      : await ImagePicker.launchImageLibraryAsync(options);
 
     if (!result.canceled) {
       setImage(result.assets[0].uri);
     }
   };
 
+  const showImageSourceOptions = () => {
+    setShowModal(true);
+  };
+
+
   const handleUpdate = async () => {
     if (!name || !college) {
-      Alert.alert('Error', 'Name and College cannot be empty.');
+      showFeedback('Missing Info', 'Please enter your name and college to continue.');
+      return;
+    }
+
+    if (!user) {
+      showFeedback('Not Authenticated', 'You must be signed in to update your profile.');
+      return;
+    }
+
+    // Handle Guest Users
+    if (user.uid === 'guest-user-123') {
+      showFeedback('Guest Mode', 'Guest accounts are temporary. Please sign up to customize and save your profile!', 'info');
       return;
     }
 
@@ -53,23 +96,28 @@ export default function EditProfileScreen() {
     try {
       let avatarUrl = profile?.avatarUrl || null;
       
-      // Only upload if the image URI is a local path (not a remote URL)
-      if (image && !image.startsWith('http')) {
+      // Only process if the image URI is a local path (not a remote URL or Base64)
+      if (image && !image.startsWith('http') && !image.startsWith('data:image')) {
+        console.log("EditProfile: Attempting image processing...");
         avatarUrl = await uploadImage(image, 'avatars');
       } else if (image === null) {
         avatarUrl = null;
       }
 
-      await updateDoc(doc(db, 'users', user.uid), {
+      console.log("EditProfile: Updating Firestore document...");
+      await setDoc(doc(db, 'users', user.uid), {
         name,
         college,
         avatarUrl,
-      });
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
 
-      Alert.alert('Success', 'Profile updated successfully!');
-      router.back();
+      showFeedback('Success', 'Profile updated successfully!', 'success');
+      // Delay navigation to let the success modal be seen
+      setTimeout(() => router.back(), 2000);
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      console.error("EditProfile Update Error:", error);
+      showFeedback('Update Failed', error.message || "An unexpected error occurred while saving your profile.");
     } finally {
       setLoading(false);
     }
@@ -78,13 +126,14 @@ export default function EditProfileScreen() {
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-      style={styles.container}
+      style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         
         {/* Avatar Selection */}
         <View style={styles.avatarContainer}>
-          <TouchableOpacity style={styles.avatarWrapper} onPress={pickImage}>
+          <TouchableOpacity style={styles.avatarWrapper} onPress={showImageSourceOptions}>
             {image ? (
               <Image source={{ uri: image }} style={styles.avatar} />
             ) : (
@@ -166,6 +215,20 @@ export default function EditProfileScreen() {
         </TouchableOpacity>
 
       </ScrollView>
+
+      <ImageSourceModal 
+        isVisible={showModal} 
+        onClose={() => setShowModal(false)}
+        onSelect={pickImage}
+      />
+
+      <FeedbackModal 
+        isVisible={feedbackVisible}
+        onClose={() => setFeedbackVisible(false)}
+        title={feedbackConfig.title}
+        message={feedbackConfig.message}
+        type={feedbackConfig.type}
+      />
     </KeyboardAvoidingView>
   );
 }

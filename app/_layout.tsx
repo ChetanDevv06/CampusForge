@@ -1,8 +1,9 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'react-native';
 import 'react-native-reanimated';
 import { useEffect } from 'react';
+import { useNotifications } from '../utils/useNotifications';
 
 import { useColorScheme } from 'react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -11,13 +12,18 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+// Root configuration for Expo Router
 function RootLayoutNav() {
   const { user, profile, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
+  
+  // Use our centralized notifications hook
+  useNotifications();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || !rootNavigationState?.key) return;
     
     const inAuthGroup = segments[0] === '(auth)';
     const onOnboarding = segments[0] === 'onboarding';

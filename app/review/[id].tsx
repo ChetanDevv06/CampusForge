@@ -9,6 +9,7 @@ import { doc, getDoc, addDoc, collection, updateDoc, increment } from 'firebase/
 import { db, auth } from '../../firebaseConfig';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors, Gradients } from '../../constants/theme';
+import FeedbackModal, { FeedbackType } from '../../components/FeedbackModal';
 
 export default function ReviewScreen() {
   const { id } = useLocalSearchParams(); // Target User ID
@@ -18,6 +19,17 @@ export default function ReviewScreen() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const router = useRouter();
+
+  // Feedback Modal State
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
+  const [feedbackConfig, setFeedbackConfig] = useState<{title: string, message: string, type: FeedbackType}>({
+    title: '', message: '', type: 'info'
+  });
+
+  const showFeedback = (title: string, message: string, type: FeedbackType = 'error') => {
+    setFeedbackConfig({ title, message, type });
+    setFeedbackVisible(true);
+  };
 
   React.useEffect(() => {
     const fetchUser = async () => {
@@ -35,7 +47,7 @@ export default function ReviewScreen() {
 
   const handleSubmit = async () => {
     if (!comment.trim()) {
-      Alert.alert('Error', 'Please share some feedback about your experience.');
+      showFeedback('Missing Feedback', 'Please share some details about your experience before submitting.');
       return;
     }
 
@@ -67,11 +79,10 @@ export default function ReviewScreen() {
         reviewCount: increment(1)
       });
 
-      Alert.alert('Thank You!', 'Your review has been submitted.', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
+      showFeedback('Thank You!', 'Your review has been submitted successfully.', 'success');
+      setTimeout(() => router.back(), 2000);
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      showFeedback('Error', e.message);
     } finally {
       setLoading(false);
     }
@@ -80,8 +91,12 @@ export default function ReviewScreen() {
   if (fetching) return <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary} /></View>;
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+      style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         
         <View style={styles.header}>
           <Text style={styles.title}>Rate Experience</Text>
@@ -100,7 +115,7 @@ export default function ReviewScreen() {
             </TouchableOpacity>
           ))}
           <Text style={styles.ratingText}>
-            {rating === 5 ? 'Excellent! 💎' : rating === 4 ? 'Great! 👍' : rating === 3 ? 'Good 🙂' : 'Needs Work 😕'}
+            {rating === 5 ? 'Excellent!' : rating === 4 ? 'Great!' : rating === 3 ? 'Good' : 'Needs Work'}
           </Text>
         </View>
 
@@ -134,6 +149,14 @@ export default function ReviewScreen() {
         </TouchableOpacity>
 
       </ScrollView>
+
+      <FeedbackModal 
+        isVisible={feedbackVisible}
+        onClose={() => setFeedbackVisible(false)}
+        title={feedbackConfig.title}
+        message={feedbackConfig.message}
+        type={feedbackConfig.type}
+      />
     </KeyboardAvoidingView>
   );
 }

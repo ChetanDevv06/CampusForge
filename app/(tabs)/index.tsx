@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, orderBy, limit, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, getDocs, where } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
 import { Colors, Gradients } from '../../constants/theme';
@@ -27,6 +27,7 @@ export default function HomeScreen() {
   const [recentSkills, setRecentSkills] = useState<any[]>([]);
   const [stats, setStats] = useState({ lost: 0, skills: 0, market: 0 });
   const [search, setSearch] = useState('');
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const username = profile?.name || (user?.email as string)?.split('@')[0] || 'Student';
   const initials = username.charAt(0).toUpperCase();
@@ -47,8 +48,25 @@ export default function HomeScreen() {
       getDocs(collection(db, 'marketplace')),
     ]).then(([l, s, m]) => setStats({ lost: l.size, skills: s.size, market: m.size })).catch(() => {});
 
-    return () => { unsub1(); unsub2(); };
-  }, []);
+    // Real-time unread messages check
+    let unsub3 = () => {};
+    if (user?.uid) {
+      const q = query(
+        collection(db, 'conversations'),
+        where('participants', 'array-contains', user.uid)
+      );
+      unsub3 = onSnapshot(q, (snap) => {
+        let total = 0;
+        snap.forEach(d => {
+          const data = d.data();
+          total += data.unreadCount?.[user.uid] || 0;
+        });
+        setUnreadCount(total);
+      });
+    }
+
+    return () => { unsub1(); unsub2(); unsub3(); };
+  }, [user]);
 
   const quickActions = [
     { icon: 'search-outline', label: 'Report\nLost', colors: Gradients.lostBadge, route: '/post-item', param: 'lost' },
@@ -66,13 +84,13 @@ export default function HomeScreen() {
         <LinearGradient colors={['#1A1535', '#0A0A12']} style={styles.header}>
           <View style={styles.headerTop}>
             <View>
-              <Text style={styles.greeting}>{getGreeting()} 👋</Text>
+              <Text style={styles.greeting}>{getGreeting()}</Text>
               <Text style={styles.username}>{username}</Text>
             </View>
             <View style={styles.headerRight}>
               <TouchableOpacity style={styles.notifBtn} onPress={() => router.push('/messages')}>
                 <Ionicons name="chatbubble-outline" size={22} color={Colors.textPrimary} />
-                <View style={styles.notifDot} />
+                {unreadCount > 0 && <View style={styles.notifDot} />}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
                 {profile?.avatarUrl ? (
@@ -146,7 +164,11 @@ export default function HomeScreen() {
           </View>
         ) : (
           recentItems.map(item => (
-            <View key={item.id} style={styles.itemCard}>
+            <TouchableOpacity 
+              key={item.id} 
+              style={styles.itemCard}
+              onPress={() => router.push({ pathname: '/item-details/[id]', params: { id: item.id } } as any)}
+            >
               <LinearGradient
                 colors={item.type === 'lost' ? Gradients.lostBadge : Gradients.foundBadge}
                 style={styles.itemBadgeIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
@@ -164,7 +186,7 @@ export default function HomeScreen() {
                   {item.type.toUpperCase()}
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
 
@@ -183,7 +205,10 @@ export default function HomeScreen() {
             </View>
           ) : (
             recentSkills.map(skill => (
-              <TouchableOpacity key={skill.id} onPress={() => router.push('/(tabs)/skills' as any)}>
+              <TouchableOpacity 
+                key={skill.id} 
+                onPress={() => router.push({ pathname: '/skill-details/[id]', params: { id: skill.id } } as any)}
+              >
                 <LinearGradient
                   colors={skill.type === 'offer' ? ['#1C1C3A', '#13131F'] : ['#1C1A10', '#13131F']}
                   style={styles.skillCard}
@@ -219,8 +244,8 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   notifBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: Colors.bgCard, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
   notifDot: { position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.danger },
-  avatarSmall: { width: 42, height: 42, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  avatarSmallImage: { width: 42, height: 42, borderRadius: 12, borderWidth: 1, borderColor: Colors.border },
+  avatarSmall: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
+  avatarSmallImage: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: Colors.border },
   avatarSmallText: { fontSize: 18, fontWeight: '800', color: '#FFF' },
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 10,

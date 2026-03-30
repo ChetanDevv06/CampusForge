@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, StatusBar } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, addDoc } from 'firebase/firestore';
@@ -7,6 +7,7 @@ import { db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { Colors, Gradients } from '../constants/theme';
+import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
 
 export default function PostSkillScreen() {
   const [title, setTitle] = useState('');
@@ -14,11 +15,26 @@ export default function PostSkillScreen() {
   const [description, setDescription] = useState('');
   const [type, setType] = useState<'offer' | 'request'>('offer');
   const [loading, setLoading] = useState(false);
+  
+  // Feedback Modal State
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
+  const [feedbackConfig, setFeedbackConfig] = useState<{title: string, message: string, type: FeedbackType}>({
+    title: '', message: '', type: 'info'
+  });
+
+  const showFeedback = (title: string, message: string, type: FeedbackType = 'error') => {
+    setFeedbackConfig({ title, message, type });
+    setFeedbackVisible(true);
+  };
+  
   const { user } = useAuth();
   const router = useRouter();
 
   const handlePost = async () => {
-    if (!title || !category || !description) { Alert.alert('Error', 'Please fill in all fields.'); return; }
+    if (!title || !category || !description) { 
+      showFeedback('Missing Details', 'Please provide a title, category, and description for your skill.'); 
+      return; 
+    }
     setLoading(true);
     try {
       await addDoc(collection(db, 'skills'), {
@@ -27,62 +43,77 @@ export default function PostSkillScreen() {
         userName: user?.email?.split('@')[0] || 'Student',
         createdAt: new Date().toISOString(),
       });
-      Alert.alert('Posted!', `Skill ${type} published.`);
-      router.back();
-    } catch (e: any) { Alert.alert('Error', e.message); }
+      showFeedback('Posted!', `Your skill ${type} has been published successfully.`, 'success');
+      setTimeout(() => router.back(), 2000);
+    } catch (e: any) { 
+      showFeedback('Error', e.message); 
+    }
     finally { setLoading(false); }
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-      <StatusBar barStyle="light-content" />
-      <Text style={styles.title}>Post a Skill</Text>
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <StatusBar barStyle="light-content" />
+        <Text style={styles.title}>Post a Skill</Text>
 
-      <View style={styles.typeRow}>
-        {([
-          { key: 'offer', label: '💡 I Can Teach', colors: Gradients.skillOffer },
-          { key: 'request', label: '📚 I Want to Learn', colors: Gradients.skillRequest },
-        ] as const).map(t => (
-          <TouchableOpacity key={t.key} style={[styles.typeBtn, type === t.key && styles.typeBtnActive]} onPress={() => setType(t.key)}>
-            {type === t.key
-              ? <LinearGradient colors={t.colors} style={styles.typeBtnInner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                  <Text style={styles.typeLabelActive}>{t.label}</Text>
-                </LinearGradient>
-              : <Text style={styles.typeLabel}>{t.label}</Text>
-            }
-          </TouchableOpacity>
+        <View style={styles.typeRow}>
+          {([
+            { key: 'offer', label: 'I Can Teach', colors: Gradients.skillOffer },
+            { key: 'request', label: 'I Want to Learn', colors: Gradients.skillRequest },
+          ] as const).map(t => (
+            <TouchableOpacity key={t.key} style={[styles.typeBtn, type === t.key && styles.typeBtnActive]} onPress={() => setType(t.key)}>
+              {type === t.key
+                ? <LinearGradient colors={t.colors} style={styles.typeBtnInner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                    <Text style={styles.typeLabelActive}>{t.label}</Text>
+                  </LinearGradient>
+                : <Text style={styles.typeLabel}>{t.label}</Text>
+              }
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {[
+          { icon: 'bulb-outline', label: 'Skill Title', value: title, set: setTitle, placeholder: 'e.g., Python Programming' },
+          { icon: 'folder-outline', label: 'Category', value: category, set: setCategory, placeholder: 'e.g., Computer Science, Music' },
+        ].map(f => (
+          <View key={f.label} style={styles.fieldGroup}>
+            <Text style={styles.label}>{f.label}</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name={f.icon as any} size={18} color={Colors.textSecondary} />
+              <TextInput style={styles.input} placeholder={f.placeholder} placeholderTextColor={Colors.textMuted} value={f.value} onChangeText={f.set} />
+            </View>
+          </View>
         ))}
-      </View>
 
-      {[
-        { icon: 'bulb-outline', label: 'Skill Title', value: title, set: setTitle, placeholder: 'e.g., Python Programming' },
-        { icon: 'folder-outline', label: 'Category', value: category, set: setCategory, placeholder: 'e.g., Computer Science, Music' },
-      ].map(f => (
-        <View key={f.label} style={styles.fieldGroup}>
-          <Text style={styles.label}>{f.label}</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name={f.icon as any} size={18} color={Colors.textSecondary} />
-            <TextInput style={styles.input} placeholder={f.placeholder} placeholderTextColor={Colors.textMuted} value={f.value} onChangeText={f.set} />
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>Details & Expectations</Text>
+          <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
+            <TextInput
+              style={styles.textArea} placeholder="What will you teach or what are you looking to learn?" placeholderTextColor={Colors.textMuted}
+              value={description} onChangeText={setDescription} multiline numberOfLines={4}
+            />
           </View>
         </View>
-      ))}
 
-      <View style={styles.fieldGroup}>
-        <Text style={styles.label}>Details & Expectations</Text>
-        <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
-          <TextInput
-            style={styles.textArea} placeholder="What will you teach or what are you looking to learn?" placeholderTextColor={Colors.textMuted}
-            value={description} onChangeText={setDescription} multiline numberOfLines={4}
-          />
-        </View>
-      </View>
-
-      <TouchableOpacity onPress={handlePost} disabled={loading}>
-        <LinearGradient colors={type === 'offer' ? Gradients.skillOffer : Gradients.skillRequest} style={styles.btn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-          {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>Post {type === 'offer' ? 'Skill Offer' : 'Skill Request'}</Text>}
-        </LinearGradient>
-      </TouchableOpacity>
-    </ScrollView>
+        <TouchableOpacity onPress={handlePost} disabled={loading}>
+          <LinearGradient colors={type === 'offer' ? Gradients.skillOffer : Gradients.skillRequest} style={styles.btn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+            {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>Post {type === 'offer' ? 'Skill Offer' : 'Skill Request'}</Text>}
+          </LinearGradient>
+        </TouchableOpacity>
+        <FeedbackModal 
+          isVisible={feedbackVisible}
+          onClose={() => setFeedbackVisible(false)}
+          title={feedbackConfig.title}
+          message={feedbackConfig.message}
+          type={feedbackConfig.type}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

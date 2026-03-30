@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, StatusBar, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, StatusBar, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, addDoc } from 'firebase/firestore';
@@ -9,6 +9,8 @@ import { useRouter } from 'expo-router';
 import { Colors, Gradients } from '../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImage } from '../utils/storage';
+import ImageSourceModal from '../components/ImageSourceModal';
+import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
 
 export default function PostMarketScreen() {
   const [title, setTitle] = useState('');
@@ -17,29 +19,69 @@ export default function PostMarketScreen() {
   const [description, setDescription] = useState('');
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+
+  // Feedback Modal State
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
+  const [feedbackConfig, setFeedbackConfig] = useState<{title: string, message: string, type: FeedbackType}>({
+    title: '', message: '', type: 'info'
+  });
+
+  const showFeedback = (title: string, message: string, type: FeedbackType = 'error') => {
+    setFeedbackConfig({ title, message, type });
+    setFeedbackVisible(true);
+  };
+
   const { user } = useAuth();
   const router = useRouter();
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
+  const pickImage = async (useCamera: boolean) => {
+    const { status } = useCamera 
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (status !== 'granted') {
+      showFeedback('Permission Denied', `Sorry, we need ${useCamera ? 'camera' : 'gallery'} permissions to make this work!`);
+      return;
+    }
+
+    const options: ImagePicker.ImagePickerOptions = {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
-    });
+    };
+
+    const result = useCamera 
+      ? await ImagePicker.launchCameraAsync(options)
+      : await ImagePicker.launchImageLibraryAsync(options);
 
     if (!result.canceled) {
       setImage(result.assets[0].uri);
     }
   };
 
+  const showImageSourceOptions = () => {
+    setShowModal(true);
+  };
+
+
   const handleList = async () => {
-    if (!title || !price || !category) { Alert.alert('Error', 'Please fill in all required fields.'); return; }
+    if (!title || !price || !category) { 
+      showFeedback('Missing Info', 'Please fill in the item name, price, and category.'); 
+      return; 
+    }
     setLoading(true);
     try {
       let imageUrl = null;
       if (image) {
-        imageUrl = await uploadImage(image, 'marketplace');
+        // Only process if the image URI is a local path (not a remote URL or Base64)
+        if (!image.startsWith('http') && !image.startsWith('data:image')) {
+          console.log("PostMarket: Processing image...");
+          imageUrl = await uploadImage(image, 'marketplace');
+        } else {
+          imageUrl = image; // Already a URL or Base64
+        }
       }
 
       await addDoc(collection(db, 'marketplace'), {
@@ -47,9 +89,11 @@ export default function PostMarketScreen() {
         userId: user?.uid, userEmail: user?.email,
         createdAt: new Date().toISOString(), imageUrl,
       });
-      Alert.alert('Listed!', 'Your item is now for sale.');
-      router.back();
-    } catch (e: any) { Alert.alert('Error', e.message); }
+      showFeedback('Listed!', 'Your item is now live on the campus market.', 'success');
+      setTimeout(() => router.back(), 2000);
+    } catch (e: any) { 
+      showFeedback('Error', e.message); 
+    }
     finally { setLoading(false); }
   };
 
@@ -60,69 +104,89 @@ export default function PostMarketScreen() {
   ];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-      <StatusBar barStyle="light-content" />
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <StatusBar barStyle="light-content" />
 
-      <View style={styles.heroRow}>
-        <LinearGradient colors={Gradients.primary} style={styles.heroIcon}>
-          <Ionicons name="storefront" size={24} color="#FFF" />
-        </LinearGradient>
-        <View>
-          <Text style={styles.title}>Sell an Item</Text>
-          <Text style={styles.subtitle}>List it on the campus market</Text>
+        <View style={styles.heroRow}>
+          <LinearGradient colors={Gradients.primary} style={styles.heroIcon}>
+            <Ionicons name="storefront" size={24} color="#FFF" />
+          </LinearGradient>
+          <View>
+            <Text style={styles.title}>Sell an Item</Text>
+            <Text style={styles.subtitle}>List it on the campus market</Text>
+          </View>
         </View>
-      </View>
 
-      {/* Image Picker */}
-      <View style={styles.fieldGroup}>
-        <Text style={styles.label}>Item Image</Text>
-        <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-          {image ? (
-            <Image source={{ uri: image }} style={styles.previewImage} />
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <Ionicons name="camera-outline" size={32} color={Colors.textMuted} />
-              <Text style={styles.imagePlaceholderText}>Connect an image of the item</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        {image && (
-          <TouchableOpacity style={styles.removeImage} onPress={() => setImage(null)}>
-            <Text style={styles.removeImageText}>Remove Image</Text>
+        {/* Image Picker */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>Item Image</Text>
+          <TouchableOpacity style={styles.imagePicker} onPress={showImageSourceOptions}>
+            {image ? (
+              <Image source={{ uri: image }} style={styles.previewImage} />
+            ) : (
+              <View style={styles.imagePlaceholder}>
+                <Ionicons name="camera-outline" size={32} color={Colors.textMuted} />
+                <Text style={styles.imagePlaceholderText}>Connect an image of the item</Text>
+              </View>
+            )}
           </TouchableOpacity>
-        )}
-      </View>
+          {image && (
+            <TouchableOpacity style={styles.removeImage} onPress={() => setImage(null)}>
+              <Text style={styles.removeImageText}>Remove Image</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
-      {fields.map(f => (
-        <View key={f.label} style={styles.fieldGroup}>
-          <Text style={styles.label}>{f.label}</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name={f.icon as any} size={18} color={Colors.textSecondary} />
+        {fields.map(f => (
+          <View key={f.label} style={styles.fieldGroup}>
+            <Text style={styles.label}>{f.label}</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name={f.icon as any} size={18} color={Colors.textSecondary} />
+              <TextInput
+                style={styles.input} placeholder={f.placeholder} placeholderTextColor={Colors.textMuted}
+                value={f.value} onChangeText={f.set} keyboardType={(f.keyboard as any) || 'default'}
+              />
+            </View>
+          </View>
+        ))}
+
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>Description</Text>
+          <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
             <TextInput
-              style={styles.input} placeholder={f.placeholder} placeholderTextColor={Colors.textMuted}
-              value={f.value} onChangeText={f.set} keyboardType={(f.keyboard as any) || 'default'}
+              style={styles.textArea} placeholder="Condition, edition, accessories included..."
+              placeholderTextColor={Colors.textMuted} value={description} onChangeText={setDescription}
+              multiline numberOfLines={4}
             />
           </View>
         </View>
-      ))}
 
-      <View style={styles.fieldGroup}>
-        <Text style={styles.label}>Description</Text>
-        <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
-          <TextInput
-            style={styles.textArea} placeholder="Condition, edition, accessories included..."
-            placeholderTextColor={Colors.textMuted} value={description} onChangeText={setDescription}
-            multiline numberOfLines={4}
-          />
-        </View>
-      </View>
+        <TouchableOpacity onPress={handleList} disabled={loading}>
+          <LinearGradient colors={Gradients.primary} style={styles.btn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+            {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>List Item for Sale</Text>}
+          </LinearGradient>
+        </TouchableOpacity>
 
-      <TouchableOpacity onPress={handleList} disabled={loading}>
-        <LinearGradient colors={Gradients.primary} style={styles.btn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-          {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>List Item for Sale</Text>}
-        </LinearGradient>
-      </TouchableOpacity>
-    </ScrollView>
+        <ImageSourceModal 
+          isVisible={showModal} 
+          onClose={() => setShowModal(false)}
+          onSelect={pickImage}
+        />
+
+        <FeedbackModal 
+          isVisible={feedbackVisible}
+          onClose={() => setFeedbackVisible(false)}
+          title={feedbackConfig.title}
+          message={feedbackConfig.message}
+          type={feedbackConfig.type}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

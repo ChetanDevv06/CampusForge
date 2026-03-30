@@ -1,24 +1,39 @@
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "../firebaseConfig";
+import * as ImageManipulator from 'expo-image-manipulator';
 
 /**
- * Uploads an image to Firebase Storage and returns the download URL.
+ * Compresses an image and returns a Base64 string.
+ * This avoids the need for Firebase Storage subscriptions!
  * 
- * @param uri - The local URI of the image to upload.
- * @param path - The path in storage where the image should be saved (e.g., "lost_found").
- * @returns A promise that resolves to the download URL.
+ * @param uri - The local URI of the image to process.
+ * @returns A promise that resolves to a Base64 data URI string.
  */
 export const uploadImage = async (uri: string, path: string): Promise<string> => {
+  console.log(`Starting Base64 processing: URI=${uri}, Path=${path}`);
+  
   try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const filename = uri.split('/').pop() || Date.now().toString();
-    const storageRef = ref(storage, `${path}/${Date.now()}_${filename}`);
+    // 1. Resize and compress the image
+    // We limit max dimension to 400px to keep Base64 strings small (<100KB)
+    const result = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 400 } }], // Auto-scales height
+      { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+    );
+
+    if (!result.base64) {
+      throw new Error("Failed to generate Base64 string from image.");
+    }
+
+    const base64String = `data:image/jpeg;base64,${result.base64}`;
+    console.log(`Image processed successfully. String length: ${base64String.length}`);
     
-    await uploadBytes(storageRef, blob);
-    return await getDownloadURL(storageRef);
-  } catch (error) {
-    console.error("Error uploading image: ", error);
-    throw error;
+    // Safety check for Firestore document limit (1MB)
+    if (base64String.length > 800000) {
+      throw new Error("Image is still too large for the database. Try a smaller photo.");
+    }
+
+    return base64String;
+  } catch (error: any) {
+    console.error("Image Processing Error: ", error);
+    throw new Error(`Failed to process photo: ${error.message}`);
   }
 };

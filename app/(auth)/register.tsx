@@ -10,6 +10,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
 import { Link } from 'expo-router';
 import { Colors, Gradients } from '../../constants/theme';
+import FeedbackModal, { FeedbackType } from '../../components/FeedbackModal';
 
 const Field = ({ icon, placeholder, value, onChangeText, secure = false, keyboard = 'default' }: any) => (
   <View style={styles.inputWrapper}>
@@ -18,6 +19,9 @@ const Field = ({ icon, placeholder, value, onChangeText, secure = false, keyboar
       style={styles.input} placeholder={placeholder} placeholderTextColor={Colors.textMuted}
       value={value} onChangeText={onChangeText} secureTextEntry={secure}
       autoCapitalize="none" keyboardType={keyboard}
+      autoCorrect={false}
+      spellCheck={false}
+      textContentType={secure ? 'password' : 'none'}
     />
   </View>
 );
@@ -30,9 +34,26 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Modal State
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{title: string, message: string, type: FeedbackType}>({
+    title: '', message: '', type: 'info'
+  });
+
+  const showAlert = (title: string, message: string, type: FeedbackType = 'error') => {
+    setModalConfig({ title, message, type });
+    setModalVisible(true);
+  };
+
   const handleRegister = async () => {
-    if (!name || !college || !email || !password || !confirmPassword) { Alert.alert('Error', 'Please fill in all fields.'); return; }
-    if (password !== confirmPassword) { Alert.alert('Error', 'Passwords do not match.'); return; }
+    if (!name || !college || !email || !password || !confirmPassword) { 
+      showAlert('Missing Fields', 'Please fill in all your details to create an account.'); 
+      return; 
+    }
+    if (password !== confirmPassword) { 
+      showAlert('Password Mismatch', 'The password and confirmation do not match.'); 
+      return; 
+    }
     setLoading(true);
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
@@ -51,7 +72,7 @@ export default function RegisterScreen() {
       });
 
     } catch (error: any) {
-      Alert.alert('Registration Error', error.message);
+      showAlert('Registration Error', error.message);
     } finally {
       setLoading(false);
     }
@@ -61,7 +82,11 @@ export default function RegisterScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       <LinearGradient colors={['#1C1C3A', '#0A0A12']} style={StyleSheet.absoluteFill} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <LinearGradient colors={Gradients.primary} style={styles.logoBox}>
@@ -91,6 +116,14 @@ export default function RegisterScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <FeedbackModal 
+        isVisible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        type={modalConfig.type}
+      />
     </View>
   );
 }
