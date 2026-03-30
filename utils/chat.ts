@@ -1,6 +1,6 @@
-import { collection, query, where, getDocs, addDoc, serverTimestamp, getDoc, doc } from "firebase/firestore";
-import { db, auth } from "../firebaseConfig";
 import { Router } from "expo-router";
+import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from "firebase/firestore";
+import { auth, db } from "../firebaseConfig";
 
 /**
  * Initiates or retrieves an existing conversation between the current user and another user.
@@ -9,7 +9,17 @@ import { Router } from "expo-router";
  * @param otherUserName - The name of the other participant.
  * @param router - The expo-router instance for navigation.
  */
-export const startChat = async (otherUserId: string, otherUserName: string, router: Router) => {
+export const startChat = async (
+  otherUserId: string,
+  otherUserName: string,
+  router: Router,
+  reference?: {
+    type: "lost" | "found" | "market" | "skill"
+    title: string
+    image?: string
+    itemId: string
+  }
+) => {
   const currentUserId = auth.currentUser?.uid;
   if (!currentUserId || currentUserId === otherUserId) return;
 
@@ -19,7 +29,7 @@ export const startChat = async (otherUserId: string, otherUserName: string, rout
       collection(db, 'conversations'),
       where('participants', 'array-contains', currentUserId)
     );
-    
+
     const querySnapshot = await getDocs(q);
     let conversationId = null;
 
@@ -34,7 +44,7 @@ export const startChat = async (otherUserId: string, otherUserName: string, rout
       // Fetch current user profile to get full name and avatar
       const currentUserDoc = await getDoc(doc(db, 'users', currentUserId!));
       const currentUserData = currentUserDoc.data();
-      const currentUserName = currentUserData?.name || auth.currentUser?.email?.split('@')[0] || 'Student';
+      const currentUserName = currentUserData?.name || 'Campus Student';
       const currentUserAvatar = currentUserData?.avatarUrl || null;
 
       // Create new conversation with enhanced metadata
@@ -60,9 +70,17 @@ export const startChat = async (otherUserId: string, otherUserName: string, rout
     }
 
     // Navigate to the chat screen
-    router.push({ 
-      pathname: '/chat/[id]', 
-      params: { id: conversationId, name: otherUserName, otherUserId } 
+    router.push({
+      pathname: '/chat/[id]',
+      params: {
+        id: conversationId,
+        name: otherUserName,
+        otherUserId,
+        refType: reference?.type,
+        refTitle: reference?.title,
+        refImage: reference?.image,
+        refId: reference?.itemId
+      }
     } as any);
 
   } catch (error) {

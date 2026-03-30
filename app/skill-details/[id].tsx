@@ -1,16 +1,21 @@
+import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { deleteDoc, doc, getDoc } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, ActivityIndicator, StatusBar, Platform
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, getDoc, deleteDoc } from 'firebase/firestore';
-import { Alert } from 'react-native';
-import { db, auth } from '../../firebaseConfig';
 import { Colors, Gradients } from '../../constants/theme';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { auth, db } from '../../firebaseConfig';
 import { startChat } from '../../utils/chat';
 
 export default function SkillDetails() {
@@ -36,9 +41,9 @@ export default function SkillDetails() {
       "Are you sure you want to delete this skill listing? This action cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
-          style: "destructive", 
+        {
+          text: "Delete",
+          style: "destructive",
           onPress: async () => {
             try {
               setLoading(true);
@@ -49,7 +54,7 @@ export default function SkillDetails() {
               Alert.alert("Error", "Failed to delete the skill. Please try again.");
               setLoading(false);
             }
-          } 
+          }
         }
       ]
     );
@@ -82,7 +87,7 @@ export default function SkillDetails() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-        
+
         {/* Header Hero */}
         <LinearGradient colors={isOffer ? Gradients.skillOffer : Gradients.skillRequest} style={styles.hero}>
           <TouchableOpacity style={styles.absBack} onPress={() => router.back()}>
@@ -125,7 +130,7 @@ export default function SkillDetails() {
               <Text style={styles.authorName}>{skill.userName || 'Campus Student'}</Text>
               <Text style={styles.authorRole}>Skills Exchange Member</Text>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.reviewBtn}
               onPress={() => router.push({ pathname: '/review/[id]', params: { id: skill.userId } } as any)}
             >
@@ -158,7 +163,7 @@ export default function SkillDetails() {
       {isOwner ? (
         <View style={styles.actionBar}>
           <BlurView intensity={80} tint="dark" style={styles.actionBlur}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.mainAction}
               onPress={handleDelete}
             >
@@ -173,12 +178,23 @@ export default function SkillDetails() {
         skill.status !== 'completed' && (
           <View style={styles.actionBar}>
             <BlurView intensity={80} tint="dark" style={styles.actionBlur}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.mainAction}
-                onPress={() => startChat(skill.userId, skill.userName || 'Student', router)}
+                onPress={() =>
+                  startChat(
+                    skill.userId,
+                    skill.userName || 'Campus Student',
+                    router,
+                    {
+                      type: "skill",
+                      title: skill.title,
+                      itemId: skill.id
+                    }
+                  )
+                }
               >
-                <LinearGradient 
-                  colors={isOffer ? Gradients.skillOffer : Gradients.skillRequest} 
+                <LinearGradient
+                  colors={isOffer ? Gradients.skillOffer : Gradients.skillRequest}
                   style={styles.actionGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 >
                   <Ionicons name="sparkles" size={20} color="#FFF" />

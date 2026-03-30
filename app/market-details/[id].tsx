@@ -132,10 +132,10 @@ export default function MarketDetails() {
               <Text style={styles.sellerInitial}>{(product.userEmail || 'S').charAt(0).toUpperCase()}</Text>
             </LinearGradient>
             <View style={styles.sellerInfo}>
-              <Text style={styles.sellerName}>{product.userEmail?.split('@')[0] || 'Campus Seller'}</Text>
+              <Text style={styles.sellerName}>{product.userName || 'Campus Seller'}</Text>
               <Text style={styles.sellerRole}>Student • Campus Loop User</Text>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity  
               style={styles.reviewBtn}
               onPress={() => router.push({ pathname: '/review/[id]', params: { id: product.userId } } as any)}
             >
@@ -178,7 +178,19 @@ export default function MarketDetails() {
             <BlurView intensity={80} tint="dark" style={styles.actionBlur}>
               <TouchableOpacity 
                 style={styles.mainAction}
-                onPress={() => startChat(product.userId, product.userEmail?.split('@')[0] || 'Seller', router)}
+                onPress={() => 
+                  startChat(
+                    product.userId,
+                    'Campus Seller',
+                    router,
+                    {
+                      type: "market",
+                      title: product.title,
+                      image: product.imageUrl,
+                      itemId: product.id
+                    }
+                  )
+                }
               >
                 <LinearGradient 
                   colors={Gradients.primary} 

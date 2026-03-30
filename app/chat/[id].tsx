@@ -1,27 +1,54 @@
-import React, { useEffect, useState, useRef } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, TextInput,
-  TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Alert, Image, Modal, Pressable
-} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import {
-  collection, query, orderBy, onSnapshot, addDoc,
-  doc, setDoc, serverTimestamp, getDoc, updateDoc, increment
-} from 'firebase/firestore';
-import { db, auth } from '../../firebaseConfig';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Colors, Gradients } from '../../constants/theme';
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  increment,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc
+} from 'firebase/firestore';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Colors, Gradients } from '../../constants/theme';
+import { auth, db } from '../../firebaseConfig';
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
-  const { id, name, otherUserId } = useLocalSearchParams<{ id: string; name: string, otherUserId: string }>();
-  const [messages, setMessages] = useState<any[]>([]);
+  const { id, name, otherUserId, refType, refTitle, refImage, refId } =
+    useLocalSearchParams<{
+      id: string
+      name: string
+      otherUserId: string
+      refType?: string
+      refTitle?: string
+      refImage?: string
+      refId?: string
+    }>(); const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [replyingTo, setReplyingTo] = useState<any>(null);
@@ -65,7 +92,7 @@ export default function ChatScreen() {
     if (!text.trim() || !uid || !id) return;
     const msgText = text.trim();
     const replyData = replyingTo ? { id: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId } : null;
-    
+
     setText('');
     setReplyingTo(null);
 
@@ -73,11 +100,17 @@ export default function ChatScreen() {
       text: msgText,
       senderId: uid,
       createdAt: serverTimestamp(),
-      replyTo: replyData
+      replyTo: replyData,
+      reference: refType ? {
+        type: refType,
+        title: refTitle,
+        image: refImage,
+        itemId: refId
+      } : null
     });
 
     // Update conversation metadata
-    const recipientId = otherUserId; 
+    const recipientId = otherUserId;
     await updateDoc(doc(db, 'conversations', id), {
       lastMessage: msgText,
       lastMessageAt: serverTimestamp(),
@@ -92,16 +125,16 @@ export default function ChatScreen() {
       "Are you sure you want to delete this message?",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
-          style: "destructive", 
+        {
+          text: "Delete",
+          style: "destructive",
           onPress: async () => {
             await setDoc(doc(db, 'conversations', id!, 'messages', messageId), {
               text: "This message was deleted",
               isDeleted: true,
               updatedAt: serverTimestamp()
             }, { merge: true });
-          } 
+          }
         }
       ]
     );
@@ -140,8 +173,8 @@ export default function ChatScreen() {
         animationType="fade"
         onRequestClose={() => setMenuVisible(false)}
       >
-        <Pressable 
-          style={styles.menuOverlay} 
+        <Pressable
+          style={styles.menuOverlay}
           onPress={() => setMenuVisible(false)}
         >
           {Platform.OS === 'ios' ? (
@@ -149,13 +182,13 @@ export default function ChatScreen() {
           ) : (
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]} />
           )}
-          
+
           <View style={styles.menuContent}>
             {/* The highlighted message (Visual cue) */}
             <View style={[styles.msgRow, isMe && styles.msgRowMe, { marginBottom: 20 }]}>
-               <View style={[isMe ? styles.bubble : styles.bubbleOther, { opacity: 1, elevation: 10 }]}>
-                  <Text style={isMe ? styles.bubbleTextMe : styles.bubbleTextOther}>{menuMessage.text}</Text>
-               </View>
+              <View style={[isMe ? styles.bubble : styles.bubbleOther, { opacity: 1, elevation: 10 }]}>
+                <Text style={isMe ? styles.bubbleTextMe : styles.bubbleTextOther}>{menuMessage.text}</Text>
+              </View>
             </View>
 
             {/* The Menu Card */}
@@ -188,8 +221,8 @@ export default function ChatScreen() {
 
     return (
       <View style={[styles.msgRow, isMe && styles.msgRowMe]}>
-        <TouchableOpacity 
-          activeOpacity={0.8} 
+        <TouchableOpacity
+          activeOpacity={0.8}
           onLongPress={() => handleLongPress(item)}
           style={[
             isMe ? styles.bubble : styles.bubbleOther,
@@ -204,7 +237,30 @@ export default function ChatScreen() {
               <Text style={styles.replyQuoteText} numberOfLines={1}>{item.replyTo.text}</Text>
             </View>
           )}
-          
+
+          {item.reference && (
+            <View style={{
+              backgroundColor: '#00000020',
+              padding: 8,
+              borderRadius: 8,
+              marginBottom: 6
+            }}>
+              <Text style={{
+                fontSize: 11,
+                fontWeight: '700',
+                opacity: 0.8
+              }}>
+                {item.reference.type?.toUpperCase()}
+              </Text>
+
+              <Text style={{
+                fontSize: 13,
+                fontWeight: '600'
+              }}>
+                {item.reference.title}
+              </Text>
+            </View>
+          )}
           <Text style={[
             isMe ? styles.bubbleTextMe : styles.bubbleTextOther,
             isDeleted && styles.deletedText
@@ -243,8 +299,8 @@ export default function ChatScreen() {
           </View>
         </View>
         {otherUserId && (
-          <TouchableOpacity 
-            style={styles.rateBtn} 
+          <TouchableOpacity
+            style={styles.rateBtn}
             onPress={() => router.push({ pathname: '/review/[id]', params: { id: otherUserId } } as any)}
           >
             <Ionicons name="star" size={14} color="#FFD700" />
@@ -317,12 +373,12 @@ export default function ChatScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
-  topBar: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20, 
-    paddingVertical: 12, 
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     backgroundColor: Colors.bgCard,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
@@ -334,13 +390,13 @@ const styles = StyleSheet.create({
   avatarInitial: { color: '#FFF', fontSize: 18, fontWeight: '800' },
   activeLabel: { fontSize: 10, color: Colors.textMuted, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
   chatName: { fontSize: 16, fontWeight: '800', color: Colors.textPrimary },
-  rateBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 6, 
-    backgroundColor: Colors.bgSurface, 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
+  rateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.bgSurface,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -349,8 +405,8 @@ const styles = StyleSheet.create({
   list: { padding: 16, paddingBottom: 8 },
   msgRow: { marginBottom: 16, alignItems: 'flex-start' },
   msgRowMe: { alignItems: 'flex-end' },
-  bubble: { 
-    maxWidth: '80%', borderRadius: 20, borderBottomRightRadius: 4, 
+  bubble: {
+    maxWidth: '80%', borderRadius: 20, borderBottomRightRadius: 4,
     paddingHorizontal: 14, paddingVertical: 10,
     backgroundColor: Colors.primary // Fallback if gradient wrap fails during refactor
   },
@@ -363,9 +419,9 @@ const styles = StyleSheet.create({
   bubbleTextMe: { color: '#FFF', fontSize: 15, lineHeight: 22 },
   bubbleTextOther: { color: Colors.textPrimary, fontSize: 15, lineHeight: 22 },
   deletedText: { color: Colors.textMuted, fontStyle: 'italic', fontSize: 13 },
-  replyQuote: { 
-    padding: 8, borderRadius: 8, marginBottom: 6, 
-    backgroundColor: 'rgba(0,0,0,0.1)', borderLeftWidth: 3, borderLeftColor: '#FFF' 
+  replyQuote: {
+    padding: 8, borderRadius: 8, marginBottom: 6,
+    backgroundColor: 'rgba(0,0,0,0.1)', borderLeftWidth: 3, borderLeftColor: '#FFF'
   },
   replyQuoteOther: { borderLeftColor: Colors.primary, backgroundColor: 'rgba(124,111,255,0.1)' },
   replyQuoteMe: { borderLeftColor: '#FFF', backgroundColor: 'rgba(255,255,255,0.2)' },
@@ -376,10 +432,10 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', marginTop: 100 },
   emptyText: { color: Colors.textMuted, fontSize: 15, marginTop: 12, textAlign: 'center' },
   inputContainer: { borderTopWidth: 1, borderTopColor: Colors.border, backgroundColor: Colors.bgCard },
-  replyPreview: { 
-    flexDirection: 'row', alignItems: 'center', 
-    paddingHorizontal: 16, paddingVertical: 10, 
-    backgroundColor: Colors.bgSurface, borderBottomWidth: 1, borderBottomColor: Colors.border 
+  replyPreview: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: Colors.bgSurface, borderBottomWidth: 1, borderBottomColor: Colors.border
   },
   replyPreviewInner: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   replyBar: { width: 3, height: '100%', backgroundColor: Colors.primary, borderRadius: 2, marginRight: 10 },
@@ -389,7 +445,7 @@ const styles = StyleSheet.create({
   replyClose: { padding: 4 },
   inputBar: {
     flexDirection: 'row', alignItems: 'flex-end', gap: 10,
-    padding: 12, 
+    padding: 12,
   },
   input: {
     flex: 1, backgroundColor: Colors.bgSurface,
@@ -400,10 +456,10 @@ const styles = StyleSheet.create({
   sendBtn: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
   menuOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
   menuContent: { width: '100%', alignItems: 'center' },
-  menuCard: { 
-    width: 200, 
-    backgroundColor: 'rgba(30, 30, 45, 0.95)', 
-    borderRadius: 20, 
+  menuCard: {
+    width: 200,
+    backgroundColor: 'rgba(30, 30, 45, 0.95)',
+    borderRadius: 20,
     padding: 8,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
@@ -413,12 +469,12 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 20,
   },
-  menuItem: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 12, 
-    paddingVertical: 12, 
-    paddingHorizontal: 16 
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16
   },
   menuItemBorder: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
   menuItemText: { fontSize: 16, fontWeight: '600' },
