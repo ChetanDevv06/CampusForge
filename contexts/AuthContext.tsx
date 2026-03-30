@@ -2,6 +2,9 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
+import { collection, query, where, onSnapshot as onSnapshotColl, limit, orderBy } from 'firebase/firestore';
+import { registerForPushNotificationsAsync, sendLocalNotification } from '../utils/notifications';
+import { useRef } from 'react';
 
 interface UserProfile {
   uid: string;
@@ -37,6 +40,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | any | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const convsRef = useRef<Record<string, number>>({}); // Track lastMessageAt as millis for each chatId
+  const isFirstRun = useRef(true);
 
   useEffect(() => {
     // Listen for authentication state changes
@@ -76,7 +81,53 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     });
 
-    return unsubscribeProfile;
+    // Request Notification Permissions
+    registerForPushNotificationsAsync().catch(e => console.error("Notification permission error:", e));
+
+    // Monitor all conversations for new messages (global listener)
+    const q = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', user.uid)
+    );
+
+    const unsubscribeMessages = onSnapshotColl(q, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        // We only care about MODIFIED or ADDED conversations with a new message
+        if (change.type === 'modified' || change.type === 'added') {
+          const data = change.doc.data();
+          const chatId = change.doc.id;
+          const lastMsgAt = data.lastMessageAt?.toMillis?.() || 0;
+          const prevLastMsgAt = convsRef.current[chatId] || 0;
+
+          // Trigger notification if:
+          // 1. lastMessageAt is newer than what we last saw
+          // 2. The sender is NOT the current user
+          // 3. The lastMessage is not empty
+          // 4. This isn't the first time the app is loading existing data
+          if (lastMsgAt > prevLastMsgAt && data.lastSenderId !== user.uid && data.lastMessage && !isFirstRun.current) {
+            const senderName = data.participantNames?.[data.lastSenderId] || 'CampusLoop Student';
+            sendLocalNotification(
+              `New message from ${senderName}`,
+              data.lastMessage,
+              { chatId, senderName } // Pass data for navigation
+            );
+          }
+
+          // Update ref with latest timestamp
+          if (lastMsgAt > 0) {
+            convsRef.current[chatId] = lastMsgAt;
+          }
+        }
+      });
+
+      // Mark first run as complete after processing the first snapshot
+      isFirstRun.current = false;
+    });
+
+    return () => {
+      unsubscribeProfile();
+      unsubscribeMessages();
+    };
   }, [user]);
 
   const signInAsGuest = () => {

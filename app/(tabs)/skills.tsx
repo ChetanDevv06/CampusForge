@@ -39,7 +39,11 @@ export default function SkillsScreen() {
   const filtered = skills.filter(s => s.type === filter);
 
   const renderItem = ({ item }: { item: any }) => (
-    <View style={[styles.card, item.status === 'completed' && styles.cardCompleted]}>
+    <TouchableOpacity 
+      activeOpacity={0.9}
+      onPress={() => router.push({ pathname: '/skill-details/[id]', params: { id: item.id } } as any)}
+      style={[styles.card, item.status === 'completed' && styles.cardCompleted]}
+    >
       <View style={styles.cardTop}>
         <LinearGradient
           colors={filter === 'offer' ? Gradients.skillOffer : Gradients.skillRequest}
@@ -86,7 +90,7 @@ export default function SkillsScreen() {
           </View>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -101,8 +105,8 @@ export default function SkillsScreen() {
 
       {/* Toggle */}
       <View style={styles.toggle}>
-        {[{ key: 'offer', label: '💡 Offering', grad: Gradients.skillOffer },
-          { key: 'request', label: '📚 Requesting', grad: Gradients.skillRequest }].map(t => (
+        {[{ key: 'offer', label: 'Offering', grad: Gradients.skillOffer },
+          { key: 'request', label: 'Requesting', grad: Gradients.skillRequest }].map(t => (
           <TouchableOpacity key={t.key} style={[styles.toggleBtn, filter === t.key && styles.toggleActive]} onPress={() => setFilter(t.key)}>
             {filter === t.key
               ? <LinearGradient colors={t.grad} style={styles.toggleGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>

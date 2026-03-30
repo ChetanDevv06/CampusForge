@@ -1,4 +1,4 @@
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, serverTimestamp, getDoc, doc } from "firebase/firestore";
 import { db, auth } from "../firebaseConfig";
 import { Router } from "expo-router";
 
@@ -31,18 +31,28 @@ export const startChat = async (otherUserId: string, otherUserName: string, rout
     });
 
     if (!conversationId) {
-      // Create new conversation
-      const currentUserName = auth.currentUser?.email?.split('@')[0] || 'Student';
+      // Fetch current user profile to get full name and avatar
+      const currentUserDoc = await getDoc(doc(db, 'users', currentUserId!));
+      const currentUserData = currentUserDoc.data();
+      const currentUserName = currentUserData?.name || auth.currentUser?.email?.split('@')[0] || 'Student';
+      const currentUserAvatar = currentUserData?.avatarUrl || null;
+
+      // Create new conversation with enhanced metadata
       const newConv = await addDoc(collection(db, 'conversations'), {
         participants: [currentUserId, otherUserId],
         participantNames: {
-          [currentUserId]: currentUserName,
+          [currentUserId!]: currentUserName,
           [otherUserId]: otherUserName || 'Campus Student'
+        },
+        participantAvatars: {
+          [currentUserId!]: currentUserAvatar,
+          [otherUserId]: null // Will be updated on first message if not provided
         },
         lastMessage: '',
         lastMessageAt: serverTimestamp(),
+        lastSenderId: '',
         unreadCount: {
-          [currentUserId]: 0,
+          [currentUserId!]: 0,
           [otherUserId]: 0
         }
       });
@@ -54,7 +64,6 @@ export const startChat = async (otherUserId: string, otherUserName: string, rout
       pathname: '/chat/[id]', 
       params: { id: conversationId, name: otherUserName, otherUserId } 
     } as any);
-
 
   } catch (error) {
     console.error("Error starting chat:", error);

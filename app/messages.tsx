@@ -20,11 +20,17 @@ export default function MessagesScreen() {
     if (!uid) { setLoading(false); return; }
     const q = query(
       collection(db, 'conversations'),
-      where('participants', 'array-contains', uid),
-      orderBy('lastMessageAt', 'desc')
+      where('participants', 'array-contains', uid)
     );
     const unsub = onSnapshot(q, (snap) => {
-      setConversations(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const convs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Sort on client side to avoid manual index requirement
+      convs.sort((a: any, b: any) => {
+        const tA = a.lastMessageAt?.toMillis?.() || a.lastMessageAt || 0;
+        const tB = b.lastMessageAt?.toMillis?.() || b.lastMessageAt || 0;
+        return tB - tA;
+      });
+      setConversations(convs);
       setLoading(false);
     }, () => setLoading(false));
     return unsub;

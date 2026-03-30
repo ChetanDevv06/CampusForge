@@ -10,6 +10,7 @@ import { auth } from '../firebaseConfig';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
+import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
 
 type SectionProps = { title: string; children: React.ReactNode };
 const Section = ({ title, children }: SectionProps) => (
@@ -46,6 +47,23 @@ export default function SettingsScreen() {
   const { signOutUser } = useAuth();
   const router = useRouter();
 
+  // Modal State
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
+  const [feedbackConfig, setFeedbackConfig] = useState<{
+    title: string, 
+    message: string, 
+    type: FeedbackType,
+    buttonText?: string,
+    onAction?: () => void
+  }>({
+    title: '', message: '', type: 'info'
+  });
+
+  const showFeedback = (title: string, message: string, type: FeedbackType = 'error', buttonText?: string, onAction?: () => void) => {
+    setFeedbackConfig({ title, message, type, buttonText, onAction });
+    setFeedbackVisible(true);
+  };
+
   // Notification prefs (local state - can be persisted to Firestore later)
   const [pushEnabled, setPushEnabled] = useState(true);
   const [chatEnabled, setChatEnabled] = useState(true);
@@ -59,14 +77,14 @@ export default function SettingsScreen() {
       'Enter your new password (min 6 chars)',
       async (newPassword) => {
         if (!newPassword || newPassword.length < 6) {
-          Alert.alert('Error', 'Password must be at least 6 characters.');
+          showFeedback('Invalid Password', 'Password must be at least 6 characters long.');
           return;
         }
         try {
           await updatePassword(auth.currentUser!, newPassword);
-          Alert.alert('Success', 'Password updated successfully.');
+          showFeedback('Success', 'Your password has been updated.', 'success');
         } catch (e: any) {
-          Alert.alert('Error', e.message);
+          showFeedback('Update Failed', e.message);
         }
       },
       'secure-text'
@@ -74,25 +92,20 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      'Delete Account',
+    showFeedback(
+      'Delete Account?',
       'This action is permanent and cannot be undone. All your data will be deleted.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Account',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteUser(auth.currentUser!);
-              await signOutUser();
-              router.replace('/(auth)/login');
-            } catch (e: any) {
-              Alert.alert('Error', e.message + '\n\nYou may need to log out and log back in before deleting.');
-            }
-          }
+      'error',
+      'Delete Permanently',
+      async () => {
+        try {
+          await deleteUser(auth.currentUser!);
+          await signOutUser();
+          router.replace('/(auth)/login');
+        } catch (e: any) {
+          showFeedback('Error', e.message + '\n\nYou may need to log out and log back in before deleting.');
         }
-      ]
+      }
     );
   };
 
@@ -128,7 +141,7 @@ export default function SettingsScreen() {
 
       {/* Account */}
       <Section title="Account">
-        <Row icon="person-outline" label="Edit Profile" sublabel="Update your name and college" onPress={() => Alert.alert('Coming Soon', 'Profile editing will be available soon.')} />
+        <Row icon="person-outline" label="Edit Profile" sublabel="Update your name and college" onPress={() => router.push('/edit-profile')} />
         <Row icon="lock-closed-outline" label="Change Password" sublabel="Update your login password" onPress={handleChangePassword} />
         <Row icon="mail-outline" label="Email" sublabel={auth.currentUser?.email || ''} showChevron={false} />
       </Section>
@@ -166,7 +179,7 @@ export default function SettingsScreen() {
         <Row icon="information-circle-outline" label="App Version" sublabel="CampusLoop v1.0.0" showChevron={false} />
         <Row icon="document-text-outline" label="Terms of Service" onPress={() => Linking.openURL('https://campusloop.app/terms')} />
         <Row icon="shield-outline" label="Privacy Policy" onPress={() => Linking.openURL('https://campusloop.app/privacy')} />
-        <Row icon="star-outline" label="Rate CampusLoop" iconColor={Colors.warning} onPress={() => Alert.alert('Thank you!', 'Rating will be available on the app stores.')} />
+        <Row icon="star-outline" label="Rate CampusLoop" iconColor={Colors.warning} onPress={() => showFeedback('Thank you!', 'Rating will be available on the app stores.', 'success')} />
       </Section>
 
       {/* Danger Zone */}
@@ -176,6 +189,16 @@ export default function SettingsScreen() {
       </Section>
 
       <View style={{ height: 40 }} />
+
+      <FeedbackModal 
+        isVisible={feedbackVisible}
+        onClose={() => setFeedbackVisible(false)}
+        title={feedbackConfig.title}
+        message={feedbackConfig.message}
+        type={feedbackConfig.type}
+        buttonText={feedbackConfig.buttonText}
+        onAction={feedbackConfig.onAction}
+      />
     </ScrollView>
   );
 }

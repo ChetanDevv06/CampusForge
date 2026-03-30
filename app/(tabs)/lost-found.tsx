@@ -47,7 +47,11 @@ export default function LostFoundScreen() {
   });
 
   const renderItem = ({ item }: { item: any }) => (
-    <View style={[styles.card, item.status === 'resolved' && styles.cardResolved]}>
+    <TouchableOpacity 
+      activeOpacity={0.9}
+      onPress={() => router.push({ pathname: '/item-details/[id]', params: { id: item.id } } as any)}
+      style={[styles.card, item.status === 'resolved' && styles.cardResolved]}
+    >
       {item.imageUrl && (
         <View>
           <Image source={{ uri: item.imageUrl }} style={[styles.image, item.status === 'resolved' && { opacity: 0.6 }]} />
@@ -105,7 +109,7 @@ export default function LostFoundScreen() {
           <Text style={styles.metaText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (

@@ -65,7 +65,7 @@ export default function ProfileScreen() {
           <View style={styles.onlineDot} />
         </View>
         <Text style={styles.name}>{profile?.name || 'Campus Student'}</Text>
-        <Text style={styles.college}>🎓 {profile?.college || 'University'}</Text>
+        <Text style={styles.college}>{profile?.college || 'University'}</Text>
         <Text style={styles.email}>{profile?.email || 'student@college.edu'}</Text>
       </LinearGradient>
 
