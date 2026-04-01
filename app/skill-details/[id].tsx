@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { deleteDoc, doc, getDoc } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -17,47 +18,53 @@ import {
 import { Colors, Gradients } from '../../constants/theme';
 import { auth, db } from '../../firebaseConfig';
 import { startChat } from '../../utils/chat';
+import ModernAlert from '../../components/ModernAlert';
 
 export default function SkillDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [skill, setSkill] = useState<any>(null);
+  const [authorProfile, setAuthorProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const router = useRouter();
   const uid = auth.currentUser?.uid;
 
   useEffect(() => {
     if (!id) return;
-    getDoc(doc(db, 'skills', id)).then(snap => {
-      if (snap.exists()) {
-        setSkill({ id: snap.id, ...snap.data() });
-      }
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [id]);
+    const fetchSkill = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'skills', id));
+        if (snap.exists()) {
+          const data = { id: snap.id, ...snap.data() } as any;
+          setSkill(data);
 
-  const handleDelete = async () => {
-    Alert.alert(
-      "Delete Skill",
-      "Are you sure you want to delete this skill listing? This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setLoading(true);
-              await deleteDoc(doc(db, 'skills', id!));
-              router.back();
-            } catch (e) {
-              console.error(e);
-              Alert.alert("Error", "Failed to delete the skill. Please try again.");
-              setLoading(false);
+          if (data.userId) {
+            const authorSnap = await getDoc(doc(db, 'users', data.userId));
+            if (authorSnap.exists()) {
+              setAuthorProfile(authorSnap.data());
             }
           }
         }
-      ]
-    );
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSkill();
+  }, [id]);
+
+  const handleDelete = async () => {
+    try {
+      setLoading(true);
+      const skillId = (skill as any).id;
+      await deleteDoc(doc(db, 'skills', skillId));
+      router.back();
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Error", "Failed to delete the skill. Please try again.");
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -85,6 +92,7 @@ export default function SkillDetails() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="light-content" />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
 
@@ -123,11 +131,15 @@ export default function SkillDetails() {
 
           <Text style={styles.sectionTitle}>Instructor / Learner</Text>
           <View style={styles.authorCard}>
-            <LinearGradient colors={Gradients.primary} style={styles.authorAvatar}>
-              <Text style={styles.authorInitial}>{(skill.userName || 'S').charAt(0).toUpperCase()}</Text>
-            </LinearGradient>
+            {authorProfile?.avatarUrl ? (
+              <Image source={{ uri: authorProfile.avatarUrl }} style={styles.authorAvatar} />
+            ) : (
+              <LinearGradient colors={Gradients.primary} style={styles.authorAvatar}>
+                <Text style={styles.authorInitial}>{(authorProfile?.name || skill.userName || 'S').charAt(0).toUpperCase()}</Text>
+              </LinearGradient>
+            )}
             <View style={styles.authorInfo}>
-              <Text style={styles.authorName}>{skill.userName || 'Campus Student'}</Text>
+              <Text style={styles.authorName}>{authorProfile?.name || skill.userName || 'Campus Student'}</Text>
               <Text style={styles.authorRole}>Skills Exchange Member</Text>
             </View>
             <TouchableOpacity
@@ -163,15 +175,22 @@ export default function SkillDetails() {
       {isOwner ? (
         <View style={styles.actionBar}>
           <BlurView intensity={80} tint="dark" style={styles.actionBlur}>
-            <TouchableOpacity
-              style={styles.mainAction}
-              onPress={handleDelete}
-            >
-              <LinearGradient colors={['#FF5E5E', '#D13838']} style={styles.actionGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+            <View style={styles.dualActions}>
+              <TouchableOpacity 
+                style={[styles.actionBtn, styles.editBtn]}
+                onPress={() => router.push({ pathname: '/post-skill', params: { editId: skill.id } } as any)}
+              >
+                <Ionicons name="create-outline" size={20} color="#FFF" />
+                <Text style={styles.actionText}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.actionBtn, styles.deleteBtn]}
+                onPress={() => setShowDeleteAlert(true)}
+              >
                 <Ionicons name="trash-outline" size={20} color="#FFF" />
-                <Text style={styles.actionText}>Delete My Skill</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <Text style={styles.actionText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
           </BlurView>
         </View>
       ) : (
@@ -183,7 +202,7 @@ export default function SkillDetails() {
                 onPress={() =>
                   startChat(
                     skill.userId,
-                    skill.userName || 'Campus Student',
+                    authorProfile?.name || skill.userName || 'Campus Student',
                     router,
                     {
                       type: "skill",
@@ -205,6 +224,16 @@ export default function SkillDetails() {
           </View>
         )
       )}
+
+      <ModernAlert 
+        visible={showDeleteAlert}
+        title="Remove Skill?"
+        message="Are you sure you want to delete this skill offer/request? This cannot be undone."
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteAlert(false)}
+        confirmText="Delete"
+        isDestructive
+      />
     </View>
   );
 }
@@ -245,5 +274,30 @@ const styles = StyleSheet.create({
   actionBlur: { borderRadius: 24, overflow: 'hidden' },
   mainAction: { height: 60, borderRadius: 24 },
   actionGrad: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  actionText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
+  actionText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  dualActions: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  editBtn: {
+    backgroundColor: Colors.primary,
+  },
+  deleteBtn: {
+    backgroundColor: Colors.danger,
+  },
 });

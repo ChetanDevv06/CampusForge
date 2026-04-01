@@ -121,17 +121,17 @@ export default function HomeScreen() {
         {/* Stats Row */}
         <View style={styles.statsContainer}>
           {[
-            { label: 'Items Reported', value: stats.lost, icon: 'flag-outline', colors: Gradients.lostBadge },
-            { label: 'Skills Listed', value: stats.skills, icon: 'flash-outline', colors: Gradients.skillOffer },
-            { label: 'On Market', value: stats.market, icon: 'storefront-outline', colors: Gradients.primary },
+            { label: 'Items Reported', value: stats.lost, icon: 'flag-outline', colors: Gradients.lostBadge, route: '/(tabs)/lost-found' },
+            { label: 'Skills Listed', value: stats.skills, icon: 'flash-outline', colors: Gradients.skillOffer, route: '/(tabs)/skills' },
+            { label: 'On Market', value: stats.market, icon: 'storefront-outline', colors: Gradients.primary, route: '/(tabs)/market' },
           ].map((s, i) => (
-            <View key={i} style={styles.statCard}>
+            <TouchableOpacity key={i} style={styles.statCard} onPress={() => router.push(s.route as any)}>
               <LinearGradient colors={s.colors} style={styles.statIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                 <Ionicons name={s.icon as any} size={18} color="#FFF" />
               </LinearGradient>
               <Text style={styles.statValue}>{s.value}</Text>
               <Text style={styles.statLabel}>{s.label}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
 
@@ -266,14 +266,38 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginTop: 24, marginBottom: 12 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
   seeAll: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
-  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 12 },
-  quickCard: {
-    width: (width - 56) / 2, backgroundColor: Colors.bgCard,
-    borderRadius: 18, padding: 18, borderWidth: 1, borderColor: Colors.border,
-    alignItems: 'flex-start',
+  quickGrid: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    paddingHorizontal: 16, 
+    gap: 12, 
+    justifyContent: 'center' 
   },
-  quickIcon: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  quickLabel: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary, lineHeight: 22 },
+  quickCard: {
+    width: (width - 44) / 2 - 12, 
+    backgroundColor: Colors.bgCard,
+    borderRadius: 18, 
+    padding: 18, 
+    borderWidth: 1, 
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickIcon: { 
+    width: 52, 
+    height: 52, 
+    borderRadius: 16, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginBottom: 12 
+  },
+  quickLabel: { 
+    fontSize: 15, 
+    fontWeight: '700', 
+    color: Colors.textPrimary, 
+    lineHeight: 20, 
+    textAlign: 'center' 
+  },
   itemCard: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     marginHorizontal: 16, marginBottom: 10,

@@ -92,7 +92,12 @@ export default function LostFoundScreen() {
             uid !== item.userId && item.status !== 'resolved' && (
               <TouchableOpacity 
                 style={styles.msgBtn} 
-                onPress={() => startChat(item.userId, item.userEmail?.split('@')[0] || 'Student', router)}
+                onPress={() => startChat(item.userId, item.userName || 'Student', router, {
+                  type: item.type as any,
+                  title: item.title,
+                  image: item.imageUrl,
+                  itemId: item.id
+                })}
               >
                 <Ionicons name="chatbubble-outline" size={16} color={Colors.primary} />
                 <Text style={styles.msgBtnText}>Message</Text>

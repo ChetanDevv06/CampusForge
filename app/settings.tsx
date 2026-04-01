@@ -6,8 +6,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Gradients } from '../constants/theme';
-import { auth } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
+import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
@@ -94,16 +95,34 @@ export default function SettingsScreen() {
   const handleDeleteAccount = () => {
     showFeedback(
       'Delete Account?',
-      'This action is permanent and cannot be undone. All your data will be deleted.',
+      'This action is permanent and cannot be undone. All your data, posts, and listings will be deleted.',
       'error',
       'Delete Permanently',
       async () => {
         try {
-          await deleteUser(auth.currentUser!);
+          const user = auth.currentUser;
+          if (!user) return;
+          const uid = user.uid;
+
+          // 1. Scrub user posts from all collections
+          const collections = ['lost_found', 'skills', 'marketplace'];
+          for (const collName of collections) {
+            const q = query(collection(db, collName), where('userId', '==', uid));
+            const snap = await getDocs(q);
+            for (const d of snap.docs) {
+              await deleteDoc(doc(db, collName, d.id));
+            }
+          }
+
+          // 2. Delete user document
+          await deleteDoc(doc(db, 'users', uid));
+
+          // 3. Delete Auth User
+          await deleteUser(user);
           await signOutUser();
           router.replace('/(auth)/login');
         } catch (e: any) {
-          showFeedback('Error', e.message + '\n\nYou may need to log out and log back in before deleting.');
+          showFeedback('Error', e.message + '\n\nYou may need to log out and log back in before deleting for security re-authentication.');
         }
       }
     );

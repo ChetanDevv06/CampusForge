@@ -99,7 +99,7 @@ export default function EditProfileScreen() {
       // Only process if the image URI is a local path (not a remote URL or Base64)
       if (image && !image.startsWith('http') && !image.startsWith('data:image')) {
         console.log("EditProfile: Attempting image processing...");
-        avatarUrl = await uploadImage(image, 'avatars');
+        avatarUrl = await uploadImage(image, `avatars/${user.uid}`);
       } else if (image === null) {
         avatarUrl = null;
       }

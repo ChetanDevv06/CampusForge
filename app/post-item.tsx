@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, StatusBar, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, Gradients } from '../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImage } from '../utils/storage';
@@ -13,6 +13,7 @@ import ImageSourceModal from '../components/ImageSourceModal';
 import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
 
 export default function PostItemScreen() {
+  const { editId } = useLocalSearchParams<{ editId?: string }>();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
@@ -32,9 +33,32 @@ export default function PostItemScreen() {
     setFeedbackVisible(true);
   };
   
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const router = useRouter();
 
+  React.useEffect(() => {
+    if (editId) {
+      const fetchItem = async () => {
+        setLoading(true);
+        try {
+          const docSnap = await getDoc(doc(db, 'lost_found', editId));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setTitle(data.title);
+            setDescription(data.description);
+            setLocation(data.location);
+            setType(data.type);
+            setImage(data.imageUrl);
+          }
+        } catch (e: any) {
+          showFeedback('Error', 'Failed to fetch item details.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchItem();
+    }
+  }, [editId]);
 
   const pickImage = async (useCamera: boolean) => {
     const { status } = useCamera 
@@ -49,7 +73,6 @@ export default function PostItemScreen() {
     const options: ImagePicker.ImagePickerOptions = {
       mediaTypes: ['images'],
       allowsEditing: true,
-      aspect: [4, 3],
       quality: 0.8,
     };
 
@@ -85,13 +108,24 @@ export default function PostItemScreen() {
         }
       }
 
-      await addDoc(collection(db, 'lost_found'), {
-        title, description, location, type,
-        userId: user?.uid, userEmail: user?.email,
-        createdAt: new Date().toISOString(), imageUrl,
-      });
-      showFeedback('Posted!', `Your item has been reported as ${type}.`, 'success');
-      setTimeout(() => router.back(), 2000);
+      if (editId) {
+        await updateDoc(doc(db, 'lost_found', editId), {
+          title, description, location, type,
+          updatedAt: new Date().toISOString(),
+          imageUrl,
+        });
+        showFeedback('Updated!', 'Your report has been updated successfully.', 'success');
+        setTimeout(() => router.replace({ pathname: '/item-details/[id]', params: { id: editId } } as any), 1500);
+      } else {
+        const docRef = await addDoc(collection(db, 'lost_found'), {
+          title, description, location, type,
+          userId: user?.uid, userEmail: user?.email,
+          userName: (profile as any)?.name || user?.displayName || user?.email?.split('@')[0] || 'Campus Student',
+          createdAt: new Date().toISOString(), imageUrl,
+        });
+        showFeedback('Posted!', `Your item has been reported as ${type}.`, 'success');
+        setTimeout(() => router.replace({ pathname: '/item-details/[id]', params: { id: docRef.id } } as any), 1500);
+      }
     } catch (e: any) { 
       showFeedback('Error', e.message); 
     }
@@ -104,7 +138,7 @@ export default function PostItemScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <StatusBar barStyle="light-content" />
         <Text style={styles.title}>Report an Item</Text>
 

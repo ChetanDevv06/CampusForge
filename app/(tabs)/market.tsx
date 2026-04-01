@@ -76,7 +76,12 @@ export default function MarketScreen() {
           uid !== item.userId && item.status !== 'sold' && (
             <TouchableOpacity 
               style={styles.msgBtn}
-              onPress={() => startChat(item.userId, item.userEmail?.split('@')[0] || 'Seller', router)}
+              onPress={() => startChat(item.userId, item.userName || 'Student', router, {
+                type: 'market',
+                title: item.title,
+                image: item.imageUrl,
+                itemId: item.id
+              })}
             >
               <Ionicons name="chatbubble-outline" size={14} color={Colors.primary} />
               <Text style={styles.msgText}>Message Seller</Text>

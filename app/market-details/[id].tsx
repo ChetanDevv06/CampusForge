@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, Image,
   TouchableOpacity, ActivityIndicator, StatusBar, Platform
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { Alert } from 'react-native';
 import { db, auth } from '../../firebaseConfig';
@@ -12,47 +12,53 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { startChat } from '../../utils/chat';
+import ModernAlert from '../../components/ModernAlert';
 
 export default function MarketDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [product, setProduct] = useState<any>(null);
+  const [authorProfile, setAuthorProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const router = useRouter();
   const uid = auth.currentUser?.uid;
 
   useEffect(() => {
     if (!id) return;
-    getDoc(doc(db, 'marketplace', id)).then(snap => {
-      if (snap.exists()) {
-        setProduct({ id: snap.id, ...snap.data() });
+    const fetchProduct = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'marketplace', id));
+        if (snap.exists()) {
+          const data = snap.id ? { id: snap.id, ...snap.data() } : snap.data();
+          setProduct(data);
+          
+          if (data.userId) {
+            const authorSnap = await getDoc(doc(db, 'users', data.userId));
+            if (authorSnap.exists()) {
+              setAuthorProfile(authorSnap.data());
+            }
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    };
+    fetchProduct();
   }, [id]);
 
   const handleDelete = async () => {
-    Alert.alert(
-      "Delete Product",
-      "Are you sure you want to delete this listing? This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
-          style: "destructive", 
-          onPress: async () => {
-            try {
-              setLoading(true);
-              await deleteDoc(doc(db, 'marketplace', id!));
-              router.back();
-            } catch (e) {
-              console.error(e);
-              Alert.alert("Error", "Failed to delete the product. Please try again.");
-              setLoading(false);
-            }
-          } 
-        }
-      ]
-    );
+    try {
+      setLoading(true);
+      const productId = (product as any).id;
+      await deleteDoc(doc(db, 'marketplace', productId));
+      router.back();
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Error", "Failed to delete the product. Please try again.");
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -79,6 +85,7 @@ export default function MarketDetails() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="light-content" />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
         
@@ -128,12 +135,16 @@ export default function MarketDetails() {
 
           <Text style={styles.sectionTitle}>Seller Information</Text>
           <View style={styles.sellerCard}>
-            <LinearGradient colors={Gradients.primary} style={styles.sellerAvatar}>
-              <Text style={styles.sellerInitial}>{(product.userEmail || 'S').charAt(0).toUpperCase()}</Text>
-            </LinearGradient>
+            {authorProfile?.avatarUrl ? (
+              <Image source={{ uri: authorProfile.avatarUrl }} style={styles.sellerAvatar} />
+            ) : (
+              <LinearGradient colors={Gradients.primary} style={styles.sellerAvatar}>
+                <Text style={styles.sellerInitial}>{(authorProfile?.name || product.userName || 'S').charAt(0).toUpperCase()}</Text>
+              </LinearGradient>
+            )}
             <View style={styles.sellerInfo}>
-              <Text style={styles.sellerName}>{product.userName || 'Campus Seller'}</Text>
-              <Text style={styles.sellerRole}>Student • Campus Loop User</Text>
+              <Text style={styles.sellerName}>{authorProfile?.name || product.userName || product.userEmail?.split('@')[0] || 'Campus Seller'}</Text>
+              <Text style={styles.sellerRole}>Student • Verified</Text>
             </View>
             <TouchableOpacity  
               style={styles.reviewBtn}
@@ -147,11 +158,11 @@ export default function MarketDetails() {
           <View style={styles.trustRow}>
             <View style={styles.trustItem}>
               <Ionicons name="shield-checkmark-outline" size={20} color={Colors.success} />
-              <Text style={styles.trustText}>Safe Campus Deal</Text>
+              <Text style={styles.trustText}>Verified Seller</Text>
             </View>
             <View style={styles.trustItem}>
-              <Ionicons name="cash-outline" size={20} color={Colors.primary} />
-              <Text style={styles.trustText}>Pay on Meetup</Text>
+              <Ionicons name="wallet-outline" size={20} color={Colors.primary} />
+              <Text style={styles.trustText}>Safe Payment</Text>
             </View>
           </View>
         </View>
@@ -161,15 +172,22 @@ export default function MarketDetails() {
       {isOwner ? (
         <View style={styles.actionBar}>
           <BlurView intensity={80} tint="dark" style={styles.actionBlur}>
-            <TouchableOpacity 
-              style={styles.mainAction}
-              onPress={handleDelete}
-            >
-              <LinearGradient colors={['#FF5E5E', '#D13838']} style={styles.actionGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+            <View style={styles.dualActions}>
+              <TouchableOpacity 
+                style={[styles.actionBtn, styles.editBtn]}
+                onPress={() => router.push({ pathname: '/post-market', params: { editId: product.id } } as any)}
+              >
+                <Ionicons name="create-outline" size={20} color="#FFF" />
+                <Text style={styles.actionText}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.actionBtn, styles.deleteBtn]}
+                onPress={() => setShowDeleteAlert(true)}
+              >
                 <Ionicons name="trash-outline" size={20} color="#FFF" />
-                <Text style={styles.actionText}>Delete My Listing</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <Text style={styles.actionText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
           </BlurView>
         </View>
       ) : (
@@ -181,7 +199,7 @@ export default function MarketDetails() {
                 onPress={() => 
                   startChat(
                     product.userId,
-                    'Campus Seller',
+                    authorProfile?.name || product.userName || 'Campus Seller',
                     router,
                     {
                       type: "market",
@@ -204,6 +222,16 @@ export default function MarketDetails() {
           </View>
         )
       )}
+
+      <ModernAlert 
+        visible={showDeleteAlert}
+        title="Delete Listing?"
+        message="This action cannot be undone. Your item will be removed from the marketplace permanently."
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteAlert(false)}
+        confirmText="Internal Delete"
+        isDestructive
+      />
     </View>
   );
 }
@@ -238,6 +266,12 @@ const styles = StyleSheet.create({
   sellerInfo: { flex: 1 },
   sellerName: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
   sellerRole: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  authorCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.bgSurface, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: Colors.border },
+  authorAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  authorInitial: { color: '#FFF', fontSize: 20, fontWeight: '800' },
+  authorInfo: { flex: 1 },
+  authorName: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
+  authorRole: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   reviewBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.1)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   reviewBtnText: { color: Colors.textPrimary, fontSize: 12, fontWeight: '700' },
   trustRow: { flexDirection: 'row', gap: 15, marginTop: 20 },
@@ -247,5 +281,30 @@ const styles = StyleSheet.create({
   actionBlur: { borderRadius: 24, overflow: 'hidden' },
   mainAction: { height: 60, borderRadius: 24 },
   actionGrad: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  actionText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
+  actionText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  dualActions: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  editBtn: {
+    backgroundColor: Colors.primary,
+  },
+  deleteBtn: {
+    backgroundColor: Colors.danger,
+  },
 });
