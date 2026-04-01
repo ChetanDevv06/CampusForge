@@ -1,9 +1,11 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
-import { StatusBar } from 'react-native';
+import { StatusBar, AppState } from 'react-native';
 import 'react-native-reanimated';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNotifications } from '../utils/useNotifications';
+import { db } from '../firebaseConfig';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 import { useColorScheme } from 'react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -39,6 +41,40 @@ function RootLayoutNav() {
     }
   }, [user, profile, isLoading, segments]);
 
+  // Online Status Heartbeat
+  const appState = useRef(AppState.currentState);
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const updateStatus = async (online: boolean) => {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          online,
+          lastSeen: serverTimestamp()
+        });
+      } catch (e) {
+        console.error("Error updating status:", e);
+      }
+    };
+
+    // Initial online status
+    updateStatus(true);
+
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        updateStatus(true);
+      } else if (appState.current === 'active' && nextAppState.match(/inactive|background/)) {
+        updateStatus(false);
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+      updateStatus(false);
+    };
+  }, [user]);
+
 
   const darkHeader = {
     headerStyle: { backgroundColor: '#13131F' },
@@ -57,8 +93,8 @@ function RootLayoutNav() {
         <Stack.Screen name="post-item" options={{ presentation: 'modal', title: 'Report Item', ...darkHeader }} />
         <Stack.Screen name="post-skill" options={{ presentation: 'modal', title: 'Post Skill', ...darkHeader }} />
         <Stack.Screen name="post-market" options={{ presentation: 'modal', title: 'List Item', ...darkHeader }} />
-        <Stack.Screen name="messages" options={{ title: 'Messages', ...darkHeader }} />
-        <Stack.Screen name="chat/[id]" options={{ title: 'Chat', ...darkHeader }} />
+        <Stack.Screen name="messages" options={{ headerShown: false, ...darkHeader }} />
+        <Stack.Screen name="chat/[id]" options={{ headerShown: false, ...darkHeader }} />
         <Stack.Screen name="saved-items" options={{ title: 'Saved Items', ...darkHeader }} />
         <Stack.Screen name="my-reviews" options={{ title: 'My Reviews', ...darkHeader }} />
         <Stack.Screen name="settings" options={{ title: 'Settings', ...darkHeader }} />

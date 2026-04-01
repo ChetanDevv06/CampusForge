@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, StatusBar, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, Gradients } from '../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImage } from '../utils/storage';
@@ -13,6 +13,7 @@ import ImageSourceModal from '../components/ImageSourceModal';
 import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
 
 export default function PostMarketScreen() {
+  const { editId } = useLocalSearchParams<{ editId?: string }>();
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
@@ -32,8 +33,32 @@ export default function PostMarketScreen() {
     setFeedbackVisible(true);
   };
 
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const router = useRouter();
+
+  React.useEffect(() => {
+    if (editId) {
+      const fetchItem = async () => {
+        setLoading(true);
+        try {
+          const docSnap = await getDoc(doc(db, 'marketplace', editId));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setTitle(data.title);
+            setPrice(data.price.toString());
+            setCategory(data.category);
+            setDescription(data.description || '');
+            setImage(data.imageUrl);
+          }
+        } catch (e: any) {
+          showFeedback('Error', 'Failed to fetch listing details.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchItem();
+    }
+  }, [editId]);
 
   const pickImage = async (useCamera: boolean) => {
     const { status } = useCamera 
@@ -48,7 +73,6 @@ export default function PostMarketScreen() {
     const options: ImagePicker.ImagePickerOptions = {
       mediaTypes: ['images'],
       allowsEditing: true,
-      aspect: [1, 1],
       quality: 0.8,
     };
 
@@ -68,29 +92,41 @@ export default function PostMarketScreen() {
 
   const handleList = async () => {
     if (!title || !price || !category) { 
-      showFeedback('Missing Info', 'Please fill in the item name, price, and category.'); 
+      showFeedback('Missing Info', 'Please provide a title, price, and category.'); 
       return; 
     }
     setLoading(true);
     try {
       let imageUrl = null;
       if (image) {
+        if (!user?.uid) throw new Error("Please log in first.");
         // Only process if the image URI is a local path (not a remote URL or Base64)
         if (!image.startsWith('http') && !image.startsWith('data:image')) {
           console.log("PostMarket: Processing image...");
-          imageUrl = await uploadImage(image, 'marketplace');
+          imageUrl = await uploadImage(image, `marketplace/${user.uid}/${Date.now()}`);
         } else {
           imageUrl = image; // Already a URL or Base64
         }
       }
 
-      await addDoc(collection(db, 'marketplace'), {
-        title, price: parseFloat(price), category, description,
-        userId: user?.uid, userEmail: user?.email,
-        createdAt: new Date().toISOString(), imageUrl,
-      });
-      showFeedback('Listed!', 'Your item is now live on the campus market.', 'success');
-      setTimeout(() => router.back(), 2000);
+      if (editId) {
+        await updateDoc(doc(db, 'marketplace', editId), {
+          title, price: parseFloat(price), category, description,
+          updatedAt: new Date().toISOString(),
+          imageUrl,
+        });
+        showFeedback('Updated!', 'Your listing has been updated successfully.', 'success');
+        setTimeout(() => router.replace({ pathname: '/market-details/[id]', params: { id: editId } } as any), 1500);
+      } else {
+        const docRef = await addDoc(collection(db, 'marketplace'), {
+          title, price: parseFloat(price), category, description,
+          userId: user?.uid, userEmail: user?.email,
+          userName: (profile as any)?.name || user?.displayName || user?.email?.split('@')[0] || 'Seller',
+          createdAt: new Date().toISOString(), imageUrl,
+        });
+        showFeedback('Listed!', 'Your item is now live on the campus market.', 'success');
+        setTimeout(() => router.replace({ pathname: '/market-details/[id]', params: { id: docRef.id } } as any), 1500);
+      }
     } catch (e: any) { 
       showFeedback('Error', e.message); 
     }
@@ -109,7 +145,7 @@ export default function PostMarketScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <StatusBar barStyle="light-content" />
 
         <View style={styles.heroRow}>

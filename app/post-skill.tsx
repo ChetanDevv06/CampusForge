@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, Gradients } from '../constants/theme';
 import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
 
 export default function PostSkillScreen() {
+  const { editId } = useLocalSearchParams<{ editId?: string }>();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
@@ -27,8 +28,31 @@ export default function PostSkillScreen() {
     setFeedbackVisible(true);
   };
   
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const router = useRouter();
+
+  React.useEffect(() => {
+    if (editId) {
+      const fetchSkill = async () => {
+        setLoading(true);
+        try {
+          const docSnap = await getDoc(doc(db, 'skills', editId));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setTitle(data.title);
+            setCategory(data.category);
+            setDescription(data.description);
+            setType(data.type);
+          }
+        } catch (e: any) {
+          showFeedback('Error', 'Failed to fetch skill details.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchSkill();
+    }
+  }, [editId]);
 
   const handlePost = async () => {
     if (!title || !category || !description) { 
@@ -37,14 +61,21 @@ export default function PostSkillScreen() {
     }
     setLoading(true);
     try {
-      await addDoc(collection(db, 'skills'), {
-        title, category, description, type,
-        userId: user?.uid, userEmail: user?.email,
-        userName: user?.email?.split('@')[0] || 'Student',
-        createdAt: new Date().toISOString(),
-      });
-      showFeedback('Posted!', `Your skill ${type} has been published successfully.`, 'success');
-      setTimeout(() => router.back(), 2000);
+      if (editId) {
+        await updateDoc(doc(db, 'skills', editId), {
+          title, category, description, type,
+          updatedAt: new Date().toISOString(),
+        });
+        showFeedback('Updated!', 'Your skill update has been published successfully.', 'success');
+        const docRef = await addDoc(collection(db, 'skills'), {
+          title, category, description, type,
+          userId: user?.uid, userEmail: user?.email,
+          userName: (profile as any)?.name || user?.displayName || user?.email?.split('@')[0] || 'Student',
+          createdAt: new Date().toISOString(),
+        });
+        showFeedback('Posted!', `Your skill ${type} has been published successfully.`, 'success');
+        setTimeout(() => router.replace({ pathname: '/skill-details/[id]', params: { id: docRef.id } } as any), 1500);
+      }
     } catch (e: any) { 
       showFeedback('Error', e.message); 
     }
@@ -57,7 +88,7 @@ export default function PostSkillScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <StatusBar barStyle="light-content" />
         <Text style={styles.title}>Post a Skill</Text>
 

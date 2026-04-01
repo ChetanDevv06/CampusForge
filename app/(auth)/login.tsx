@@ -100,6 +100,25 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
+        <TouchableOpacity 
+          style={{ alignSelf: 'flex-end', marginBottom: 20 }}
+          onPress={async () => {
+            if (!email) {
+              showAlert('Reset Password', 'Please enter your email address first.');
+              return;
+            }
+            try {
+              const { sendPasswordResetEmail } = await import('firebase/auth');
+              await sendPasswordResetEmail(auth, email);
+              showAlert('Email Sent', 'Check your inbox for password reset instructions.', 'success');
+            } catch (error: any) {
+              showAlert('Reset Failed', error.message);
+            }
+          }}
+        >
+          <Text style={styles.linkText}>Forgot Password?</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity onPress={handleLogin} disabled={loading} style={styles.btnWrapper}>
           <LinearGradient colors={Gradients.primary} style={styles.btn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Sign In</Text>}

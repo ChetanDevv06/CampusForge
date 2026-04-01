@@ -3,7 +3,8 @@ import { BlurView } from 'expo-blur';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   addDoc,
   collection,
@@ -24,9 +25,12 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
+  ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -35,7 +39,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Gradients } from '../../constants/theme';
-import { auth, db } from '../../firebaseConfig';
+import { auth, db, storage } from '../../firebaseConfig';
+import * as ImagePicker from 'expo-image-picker';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
@@ -48,21 +54,72 @@ export default function ChatScreen() {
       refTitle?: string
       refImage?: string
       refId?: string
-    }>(); const [messages, setMessages] = useState<any[]>([]);
+    }>();
+  const [activeConvId, setActiveConvId] = useState(id);
+  const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [convMetadata, setConvMetadata] = useState<any>(null);
+  const [reference, setReference] = useState<any>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuMessage, setMenuMessage] = useState<any>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [otherUserProfile, setOtherUserProfile] = useState<any>(null);
+  const commonEmojis = ["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😋", "😛", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😮", "😯", "😲", "😳", "🥺", "😦", "😧", "📁", "📍", "🤝", "💵", "👋", "🔥", "💯", "👍", "🙌", "❤️", "✨"];
+  
+  const [isTyping, setIsTyping] = useState(false);
+  const [otherUserTyping, setOtherUserTyping] = useState(false);
+  const [quickReplies, setQuickReplies] = useState<string[]>([]);
   const flatRef = useRef<FlatList>(null);
+  const { user, profile } = useAuth();
   const router = useRouter();
   const uid = auth.currentUser?.uid;
 
   useEffect(() => {
-    if (!id) return;
+    if (refType) {
+      const suggestions = 
+        refType === 'market' ? ["Is this available?", "Price negotiable?", "Where can we meet?"] :
+        refType === 'skill' ? ["I'm interested in learning!", "What's your availability?", "Do you teach beginners?"] :
+        ["Can you share more details?", "Is this still open?", "I can help with this!"];
+      setQuickReplies(suggestions);
+    }
+  }, [refType]);
+  useEffect(() => {
+    if (refType) {
+      setReference({
+        type: refType,
+        title: refTitle,
+        image: refImage,
+        itemId: refId
+      });
+    } else if (convMetadata?.itemMetadata) {
+      setReference({
+        ...convMetadata.itemMetadata,
+        itemId: convMetadata.itemId
+      });
+    }
+  }, [refType, convMetadata]);
+
+  const formatLastSeen = (timestamp: any) => {
+    if (!timestamp) return 'long ago';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const now = new Date();
+    const diff = (now.getTime() - date.getTime()) / 1000;
+    
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
+  useEffect(() => {
+    if (!activeConvId || activeConvId === 'new') {
+      setLoading(false);
+      return;
+    }
     const q = query(
-      collection(db, 'conversations', id, 'messages'),
+      collection(db, 'conversations', activeConvId, 'messages'),
       orderBy('createdAt', 'asc')
     );
     const unsub = onSnapshot(q, (snap) => {
@@ -71,52 +128,236 @@ export default function ChatScreen() {
       setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
     }, () => setLoading(false));
 
-    // Fetch conversation metadata for header
-    getDoc(doc(db, 'conversations', id)).then(docSnap => {
+    let unsubUser = () => {};
+    if (otherUserId) {
+      unsubUser = onSnapshot(doc(db, 'users', otherUserId), (snap) => {
+        if (snap.exists()) setOtherUserProfile(snap.data());
+      });
+    }
+
+    // Fetch conversation metadata and sync names if they look like email parts
+    getDoc(doc(db, 'conversations', activeConvId)).then(async docSnap => {
       if (docSnap.exists()) {
-        setConvMetadata(docSnap.data());
+        const data = docSnap.data();
+        setConvMetadata(data);
+
+        // Name Syncing logic (Fix existing conversations showing email prefixes)
+        if (uid) {
+          try {
+            const participants = data.participants || [];
+            const targetOtherUserId = otherUserId || participants.find((p: string) => p !== uid);
+            
+            if (!targetOtherUserId) return;
+
+            const currentNameInConv = data.participantNames?.[uid];
+            const otherNameInConv = data.participantNames?.[targetOtherUserId];
+            
+            const otherUserSnap = await getDoc(doc(db, 'users', targetOtherUserId));
+            const otherUserData = otherUserSnap.data();
+            const realOtherName = otherUserData?.name;
+            const myRealName = profile?.name;
+
+            const updates: any = {};
+            if (myRealName && currentNameInConv !== myRealName) {
+              updates[`participantNames.${uid}`] = myRealName;
+            }
+            if (realOtherName && otherNameInConv !== realOtherName) {
+              updates[`participantNames.${targetOtherUserId}`] = realOtherName;
+            }
+
+            if (Object.keys(updates).length > 0) {
+              await updateDoc(doc(db, 'conversations', activeConvId), updates);
+            }
+          } catch (e) {
+            console.error("Name sync error:", e);
+          }
+        }
       }
     });
 
     // Clear unread count for the current user
     if (uid) {
-      updateDoc(doc(db, 'conversations', id), {
+      updateDoc(doc(db, 'conversations', activeConvId), {
         [`unreadCount.${uid}`]: 0
       }).catch(e => console.error("Error clearing notifications:", e));
     }
 
     return unsub;
-  }, [id, uid]);
+  }, [activeConvId, uid]);
 
-  const sendMessage = async () => {
-    if (!text.trim() || !uid || !id) return;
-    const msgText = text.trim();
+  const PROFANITY_LIST = ['abuse', 'spam', 'scam', 'fuck', 'shit', 'asshole', 'bastard']; // Simplified list
+
+  const filterText = (input: string) => {
+    let output = input;
+    PROFANITY_LIST.forEach(word => {
+      const reg = new RegExp(word, 'gi');
+      output = output.replace(reg, '***');
+    });
+    return output;
+  };
+
+  const handleBlockUser = async () => {
+    if (!otherUserId || !uid) return;
+    Alert.alert(
+      "Block User",
+      "Are you sure you want to block this user? You will no longer receive messages from them.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+             // Implementation: Add to a 'blockedUsers' field in the current user document
+             await updateDoc(doc(db, 'users', uid), {
+               blockedUsers: (convMetadata?.blockedUsers || []).concat(otherUserId)
+             });
+             router.back();
+          }
+        }
+      ]
+    );
+  };
+
+  const handleReport = async () => {
+    Alert.alert("Reported", "This conversation has been reported to the moderators for review.", [{ text: "OK" }]);
+    // In production, we would log this to a 'reports' collection in Firestore.
+  };
+
+  const handleStatusUpdate = async (newStatus: string) => {
+    if (!reference?.itemId || !refType) return;
+    try {
+      const collectionName = refType === 'market' ? 'marketplace' : refType === 'skill' ? 'skills' : 'lostfound';
+      await updateDoc(doc(db, collectionName, reference.itemId), {
+        status: newStatus
+      });
+      // Update local state to reflect change immediately if needed, 
+      // but usually the next time the item is fetched it will be updated.
+      Alert.alert("Success", `Item marked as ${newStatus}!`);
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Error", "Failed to update status.");
+    }
+  };
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      handleSendImage(result.assets[0].uri);
+    }
+  };
+
+  const uploadImageAsync = async (uri: string) => {
+    const blob = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.onload = function() { resolve(xhr.response); };
+      xhr.onerror = function(e) { reject(new TypeError('Network request failed')); };
+      xhr.responseType = 'blob';
+      xhr.open('GET', uri, true);
+      xhr.send(null);
+    });
+
+    const fileRef = ref(storage, `chats/${activeConvId}/${Date.now()}`);
+    await uploadBytes(fileRef, blob as Blob);
+    return await getDownloadURL(fileRef);
+  };
+
+  const handleSendImage = async (imageUri: string) => {
+    if (!uid) return;
+    try {
+      const downloadUrl = await uploadImageAsync(imageUri);
+      await sendMessage('', downloadUrl);
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Error", "Failed to upload image.");
+    }
+  };
+
+  const sendMessage = async (overrideText?: string, imageUrl?: string) => {
+    const finalMsg = overrideText !== undefined ? overrideText : text;
+    if (!finalMsg.trim() && !imageUrl || !uid) return;
+    const msgText = filterText(finalMsg.trim());
     const replyData = replyingTo ? { id: replyingTo.id, text: replyingTo.text, senderId: replyingTo.senderId } : null;
 
-    setText('');
+    let targetId = activeConvId;
+    
+    if (imageUrl === undefined) setText('');
     setReplyingTo(null);
 
-    await addDoc(collection(db, 'conversations', id, 'messages'), {
+    // 1. If it's a NEW conversation, create it first
+    if (targetId === 'new') {
+      try {
+        const [currentUserDoc, otherUserDoc] = await Promise.all([
+          getDoc(doc(db, 'users', uid)),
+          getDoc(doc(db, 'users', otherUserId!))
+        ]);
+
+        const currentUserData = currentUserDoc.data();
+        const otherUserData = otherUserDoc.data();
+
+        const currentUserName = currentUserData?.name || auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'Campus Student';
+        const realOtherUserName = otherUserData?.name || name || 'Campus Student';
+        const currentUserAvatar = currentUserData?.avatarUrl || null;
+        const otherUserAvatar = otherUserData?.avatarUrl || null;
+
+        const newConv = await addDoc(collection(db, 'conversations'), {
+          participants: [uid, otherUserId],
+          participantNames: {
+            [uid]: currentUserName,
+            [otherUserId!]: realOtherUserName
+          },
+          participantAvatars: {
+            [uid]: currentUserAvatar,
+            [otherUserId!]: otherUserAvatar
+          },
+          itemId: refId || null,
+          itemMetadata: refType ? {
+            type: refType,
+            title: refTitle,
+            image: refImage || null,
+            ownerId: otherUserId // Presumed owner if buyer initiates
+          } : null,
+          lastMessage: imageUrl ? 'Sent a photo' : msgText,
+          lastMessageAt: serverTimestamp(),
+          lastSenderId: uid,
+          unreadCount: {
+            [uid]: 0,
+            [otherUserId!]: 1
+          }
+        });
+        
+        targetId = newConv.id;
+        setActiveConvId(targetId);
+        router.setParams({ id: targetId });
+      } catch (e) {
+        console.error(e);
+        return;
+      }
+    }
+
+    // 2. Add the message
+    await addDoc(collection(db, 'conversations', targetId, 'messages'), {
       text: msgText,
+      imageUrl: imageUrl || null,
       senderId: uid,
       createdAt: serverTimestamp(),
       replyTo: replyData,
-      reference: refType ? {
-        type: refType,
-        title: refTitle,
-        image: refImage,
-        itemId: refId
-      } : null
     });
 
-    // Update conversation metadata
-    const recipientId = otherUserId;
-    await updateDoc(doc(db, 'conversations', id), {
-      lastMessage: msgText,
-      lastMessageAt: serverTimestamp(),
-      lastSenderId: uid,
-      ...(recipientId && { [`unreadCount.${recipientId}`]: increment(1) })
-    });
+    // 3. Update conversation metadata
+    if (activeConvId !== 'new') {
+      const recipientId = otherUserId;
+      await updateDoc(doc(db, 'conversations', targetId), {
+        lastMessage: imageUrl ? 'Sent a photo' : msgText,
+        lastMessageAt: serverTimestamp(),
+        lastSenderId: uid,
+        ...(recipientId && { [`unreadCount.${recipientId}`]: increment(1) })
+      });
+    }
   };
 
   const deleteMessage = async (messageId: string) => {
@@ -129,7 +370,7 @@ export default function ChatScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            await setDoc(doc(db, 'conversations', id!, 'messages', messageId), {
+            await setDoc(doc(db, 'conversations', activeConvId!, 'messages', messageId), {
               text: "This message was deleted",
               isDeleted: true,
               updatedAt: serverTimestamp()
@@ -215,122 +456,289 @@ export default function ChatScreen() {
     );
   };
 
-  const renderMessage = ({ item }: { item: any }) => {
+  const isSameDay = (d1: any, d2: any) => {
+    if (!d1 || !d2) return false;
+    const date1 = d1.toDate ? d1.toDate() : new Date(d1);
+    const date2 = d2.toDate ? d2.toDate() : new Date(d2);
+    return date1.toDateString() === date2.toDateString();
+  };
+
+  const renderMessage = ({ item, index }: { item: any, index: number }) => {
     const isMe = item.senderId === uid;
     const isDeleted = item.isDeleted;
+    const prevMsg = index > 0 ? messages[index - 1] : null;
+    const showDateSeparator = !prevMsg || !isSameDay(item.createdAt, prevMsg.createdAt);
 
     return (
-      <View style={[styles.msgRow, isMe && styles.msgRowMe]}>
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onLongPress={() => handleLongPress(item)}
-          style={[
-            isMe ? styles.bubble : styles.bubbleOther,
-            isDeleted && styles.bubbleDeleted
-          ]}
-        >
-          {item.replyTo && (
-            <View style={[styles.replyQuote, isMe ? styles.replyQuoteMe : styles.replyQuoteOther]}>
-              <Text style={styles.replyQuoteSender} numberOfLines={1}>
-                {item.replyTo.senderId === uid ? "You" : (name || "Partner")}
-              </Text>
-              <Text style={styles.replyQuoteText} numberOfLines={1}>{item.replyTo.text}</Text>
-            </View>
-          )}
+      <View>
+        {showDateSeparator && (
+          <View style={styles.dateSeparator}>
+            <View style={styles.dateLine} />
+            <Text style={styles.dateText}>
+              {(() => {
+                const date = item.createdAt?.toDate ? item.createdAt.toDate() : new Date();
+                const today = new Date();
+                const yesterday = new Date(today);
+                yesterday.setDate(today.getDate() - 1);
+                
+                if (date.toDateString() === today.toDateString()) return 'Today';
+                if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+                return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+              })()}
+            </Text>
+            <View style={styles.dateLine} />
+          </View>
+        )}
+        <View style={[styles.msgRow, isMe && styles.msgRowMe]}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onLongPress={() => handleLongPress(item)}
+            style={[
+              isMe ? styles.bubble : styles.bubbleOther,
+              isDeleted && styles.bubbleDeleted
+            ]}
+          >
+            {item.replyTo && (
+              <View style={[styles.replyQuote, isMe ? styles.replyQuoteMe : styles.replyQuoteOther]}>
+                <Text style={styles.replyQuoteSender} numberOfLines={1}>
+                  {item.replyTo.senderId === uid ? "You" : (name || "Partner")}
+                </Text>
+                <Text style={styles.replyQuoteText} numberOfLines={1}>{item.replyTo.text}</Text>
+              </View>
+            )}
 
-          {item.reference && (
-            <View style={{
-              backgroundColor: '#00000020',
-              padding: 8,
-              borderRadius: 8,
-              marginBottom: 6
-            }}>
-              <Text style={{
-                fontSize: 11,
-                fontWeight: '700',
-                opacity: 0.8
-              }}>
-                {item.reference.type?.toUpperCase()}
+            {item.imageUrl && (
+              <Image 
+                source={{ uri: item.imageUrl }} 
+                style={styles.msgImage}
+                resizeMode="cover"
+              />
+            )}
+            {item.text ? (
+              <Text style={[
+                isMe ? styles.bubbleTextMe : styles.bubbleTextOther,
+                isDeleted && styles.deletedText
+              ]}>
+                {item.text}
               </Text>
-
-              <Text style={{
-                fontSize: 13,
-                fontWeight: '600'
-              }}>
-                {item.reference.title}
+            ) : null}
+            
+            <View style={styles.msgFooter}>
+              <Text style={[styles.msgTime, isMe && styles.msgTimeMe]}>
+                {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
               </Text>
+              {isMe && !isDeleted && (
+                <Ionicons 
+                  name={item.read ? "checkmark-done" : "checkmark"} 
+                  size={14} 
+                  color={item.read ? Colors.primary : Colors.textMuted} 
+                  style={{ marginLeft: 4 }}
+                />
+              )}
             </View>
-          )}
-          <Text style={[
-            isMe ? styles.bubbleTextMe : styles.bubbleTextOther,
-            isDeleted && styles.deletedText
-          ]}>
-            {item.text}
-          </Text>
-        </TouchableOpacity>
-        <Text style={[styles.msgTime, isMe && styles.msgTimeMe]}>
-          {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-        </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
-    >
+    <View style={{ flex: 1 }}>
+      {showEmojiPicker && (
+        <Pressable 
+          style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 999 }]} 
+          onPress={() => setShowEmojiPicker(false)} 
+        />
+      )}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
       {/* Top Header Bar inside Screen */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
         <View style={styles.headerInfo}>
-          {convMetadata?.participantAvatars?.[otherUserId!] ? (
-            <Image source={{ uri: convMetadata.participantAvatars[otherUserId!] }} style={styles.headerAvatar} />
+          <TouchableOpacity style={styles.headerBackBtn} onPress={() => router.back()}>
+            <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          {(otherUserProfile?.avatarUrl || convMetadata?.participantAvatars?.[otherUserId!]) ? (
+            <Image source={{ uri: otherUserProfile?.avatarUrl || convMetadata.participantAvatars[otherUserId!] }} style={styles.headerAvatar} />
           ) : (
             <LinearGradient colors={Gradients.primary} style={styles.headerAvatarPlaceholder}>
-              <Text style={styles.avatarInitial}>{(convMetadata?.participantNames?.[otherUserId!] || name || 'C').charAt(0).toUpperCase()}</Text>
+              <Text style={styles.avatarInitial}>{(otherUserProfile?.name || convMetadata?.participantNames?.[otherUserId!] || name || 'C').charAt(0).toUpperCase()}</Text>
             </LinearGradient>
           )}
           <View style={styles.topBarContent}>
-            <Text style={styles.activeLabel}>Chatting with</Text>
             <Text style={styles.chatName} numberOfLines={1}>
-              {convMetadata?.participantNames?.[otherUserId!] || name || 'Campus User'}
+              {otherUserProfile?.name || convMetadata?.participantNames?.[otherUserId!] || name || 'Campus User'}
             </Text>
+            <View style={styles.statusRow}>
+              <View style={[styles.statusDot, { backgroundColor: otherUserProfile?.online ? Colors.success : Colors.textMuted }]} />
+              <Text style={styles.activeLabel}>
+                {otherUserProfile?.online ? 'Online' : `Last seen: ${formatLastSeen(otherUserProfile?.lastSeen)}`}
+              </Text>
+            </View>
           </View>
         </View>
         {otherUserId && (
-          <TouchableOpacity
-            style={styles.rateBtn}
-            onPress={() => router.push({ pathname: '/review/[id]', params: { id: otherUserId } } as any)}
-          >
-            <Ionicons name="star" size={14} color="#FFD700" />
-            <Text style={styles.rateBtnText}>Rate</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <TouchableOpacity onPress={handleReport}>
+              <Ionicons name="flag-outline" size={20} color={Colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleBlockUser}>
+              <Ionicons name="shield-outline" size={20} color={Colors.danger} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.rateBtn}
+              onPress={() => router.push({ pathname: '/review/[id]', params: { id: otherUserId } } as any)}
+            >
+              <Ionicons name="star" size={14} color="#FFD700" />
+              <Text style={styles.rateBtnText}>Rate</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
+      {(() => {
+        const isItemOwner = convMetadata?.itemMetadata?.ownerId === uid;
 
+        return (
+          <View style={styles.referenceHeaderContainer}>
+            {reference && (
+              <BlurView intensity={90} tint="dark" style={styles.referenceHeader}>
+                {reference.image ? (
+                  <Image source={{ uri: reference.image }} style={styles.refImage} />
+                ) : (
+                  <LinearGradient colors={Gradients.primary} style={styles.refIconBox}>
+                    <Ionicons name={reference.type === 'skill' ? 'bulb' : reference.type === 'market' ? 'cart' : 'search'} size={18} color="#FFF" />
+                  </LinearGradient>
+                )}
+                <View style={styles.refContent}>
+                  <View style={styles.refBadgeLayout}>
+                    <Text style={styles.refLabel}>{reference.type?.toUpperCase()}</Text>
+                    <View style={[styles.statusPill, (convMetadata?.itemStatus === 'sold' || convMetadata?.itemStatus === 'resolved') && { backgroundColor: 'rgba(255,94,94,0.1)' }]}>
+                      <Text style={[styles.statusPillText, (convMetadata?.itemStatus === 'sold' || convMetadata?.itemStatus === 'resolved') && { color: Colors.danger }]}>
+                        {convMetadata?.itemStatus || 'Available'}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.refTitle} numberOfLines={1}>{reference.title}</Text>
+                </View>
+                
+                {isItemOwner && (
+                  <TouchableOpacity 
+                    style={styles.statusActionBtn}
+                    onPress={() => {
+                      const options = reference.type === 'market' ? ["Mark as Sold", "Mark as Available"] : ["Mark as Resolved", "Mark as Open"];
+                      Alert.alert(
+                        "Update Status",
+                        "Change listing visibility for others?",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          { text: options[0], onPress: () => handleStatusUpdate(reference.type === 'market' ? 'sold' : 'resolved') },
+                          { text: options[1], onPress: () => handleStatusUpdate(reference.type === 'market' ? 'available' : 'open') }
+                        ]
+                      );
+                    }}
+                  >
+                    <Ionicons name="ellipsis-vertical" size={20} color="#FFF" />
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity 
+                  style={styles.refViewBtn}
+                  onPress={() => {
+                    const path = reference.type === 'skill' ? '/skill-details/[id]' : reference.type === 'market' ? '/market-details/[id]' : '/item-details/[id]';
+                    router.push({ pathname: path, params: { id: reference.itemId } } as any);
+                  }}
+                >
+                  <LinearGradient colors={Gradients.primary} style={styles.refViewGrad}>
+                    <Text style={styles.refViewText}>View</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </BlurView>
+            )}
+          </View>
+        );
+      })()}
       {loading ? (
         <ActivityIndicator size="large" color={Colors.primary} style={{ flex: 1 }} />
       ) : (
-        <FlatList
-          ref={flatRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="chatbubble-ellipses-outline" size={48} color={Colors.textMuted} />
-              <Text style={styles.emptyText}>Say hello to start the conversation!</Text>
+        <View style={{ flex: 1 }}>
+          <FlatList
+            ref={flatRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <LinearGradient colors={Gradients.primary} style={styles.emptyIcon}>
+                  <Ionicons name="chatbubbles" size={32} color="#FFF" />
+                </LinearGradient>
+                <Text style={styles.emptyTitle}>New Conversation</Text>
+                <Text style={styles.emptyText}>Send a message to start dealing safely with your campus mate.</Text>
+                
+                <View style={[styles.quickReplies, { marginTop: 40 }]}>
+                  {quickReplies.map((reply, i) => (
+                    <TouchableOpacity key={i} style={styles.quickReply} onPress={() => setText(reply)}>
+                      <Text style={styles.quickReplyText}>{reply}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            }
+          />
+          {otherUserTyping && (
+            <View style={styles.typingIndicator}>
+              <Text style={styles.typingText}>{name || 'Partner'} is typing...</Text>
             </View>
-          }
-        />
+          )}
+        </View>
       )}
 
       {/* Input Containers */}
-      <View style={styles.inputContainer}>
+      <View style={[styles.inputContainer, showEmojiPicker && { paddingBottom: 0 }]}>
         {renderActionMenu()}
+        
+        {/* Emoji Tray */}
+        {showEmojiPicker && (
+          <View style={styles.emojiTray}>
+            <View style={styles.emojiTrayHeader}>
+              <Text style={styles.emojiTrayTitle}>Emojis</Text>
+              <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
+                <Ionicons name="close-circle" size={24} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={commonEmojis}
+              numColumns={8}
+              keyExtractor={(item, index) => index.toString()}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={styles.emojiItem} 
+                  onPress={() => setText(prev => prev + item)}
+                >
+                  <Text style={styles.emojiText}>{item}</Text>
+                </TouchableOpacity>
+              )}
+              contentContainerStyle={styles.emojiList}
+              showsVerticalScrollIndicator={false}
+            />
+          </View>
+        )}
+
+        {/* Quick Replies Row */}
+        {quickReplies.length > 0 && !text.trim() && !showEmojiPicker && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickRepliesRow} contentContainerStyle={{ paddingHorizontal: 16 }}>
+            {quickReplies.map((reply, i) => (
+              <TouchableOpacity key={i} style={styles.quickReplyPill} onPress={() => setText(reply)}>
+                <Text style={styles.quickReplyPillText}>{reply}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
         {replyingTo && (
           <View style={styles.replyPreview}>
             <View style={styles.replyPreviewInner}>
@@ -346,16 +754,44 @@ export default function ChatScreen() {
           </View>
         )}
         <View style={styles.inputBar}>
+          <TouchableOpacity style={styles.attachmentBtn} onPress={pickImage}>
+            <Ionicons name="add" size={24} color={Colors.primary} />
+          </TouchableOpacity>
+          
           <TextInput
             style={styles.input}
             placeholder="Type a message..."
             placeholderTextColor={Colors.textMuted}
             value={text}
-            onChangeText={setText}
+            onChangeText={(t) => {
+              setText(t);
+              if (t.length > 0 && !isTyping) {
+                // handleTyping(true);
+              }
+            }}
             multiline
-            maxLength={500}
+            maxLength={1000}
+            onFocus={() => {
+              setShowEmojiPicker(false);
+              setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 300);
+            }}
           />
-          <TouchableOpacity onPress={sendMessage} disabled={!text.trim()}>
+          
+          <TouchableOpacity 
+            style={[styles.emojiBtn, showEmojiPicker && styles.emojiBtnActive]}
+            onPress={() => {
+              Keyboard.dismiss();
+              setShowEmojiPicker(!showEmojiPicker);
+            }}
+          >
+            <Ionicons 
+              name={showEmojiPicker ? "keypad-outline" : "happy-outline"} 
+              size={24} 
+              color={showEmojiPicker ? Colors.primary : Colors.textMuted} 
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => sendMessage()} disabled={!text.trim() && !showEmojiPicker}>
             <LinearGradient
               colors={text.trim() ? Gradients.primary : [Colors.bgSurface, Colors.bgSurface]}
               style={styles.sendBtn}
@@ -367,7 +803,8 @@ export default function ChatScreen() {
         </View>
       </View>
       {Platform.OS === 'android' && <View style={{ height: insets.bottom > 0 ? insets.bottom : 10, backgroundColor: Colors.bgCard }} />}
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -386,6 +823,7 @@ const styles = StyleSheet.create({
   topBarContent: { flex: 1 },
   headerInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   headerAvatar: { width: 40, height: 40, borderRadius: 20 },
+  headerBackBtn: { paddingRight: 8 },
   headerAvatarPlaceholder: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   avatarInitial: { color: '#FFF', fontSize: 18, fontWeight: '800' },
   activeLabel: { fontSize: 10, color: Colors.textMuted, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
@@ -431,7 +869,12 @@ const styles = StyleSheet.create({
   msgTimeMe: { marginLeft: 0, marginRight: 4 },
   empty: { flex: 1, alignItems: 'center', marginTop: 100 },
   emptyText: { color: Colors.textMuted, fontSize: 15, marginTop: 12, textAlign: 'center' },
-  inputContainer: { borderTopWidth: 1, borderTopColor: Colors.border, backgroundColor: Colors.bgCard },
+  inputContainer: { 
+    borderTopWidth: 1, 
+    borderTopColor: Colors.border, 
+    backgroundColor: Colors.bgCard,
+    zIndex: 1000,
+  },
   replyPreview: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 10,
@@ -478,4 +921,237 @@ const styles = StyleSheet.create({
   },
   menuItemBorder: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
   menuItemText: { fontSize: 16, fontWeight: '600' },
+  referenceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: Colors.bgSurface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    gap: 12,
+  },
+  refImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: Colors.bgCard,
+  },
+  refIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  refContent: {
+    flex: 1,
+  },
+  refLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: Colors.primary,
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  refTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  refViewBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(124, 111, 255, 0.1)',
+  },
+  refViewText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  dateSeparator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 20,
+    gap: 12,
+  },
+  dateLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+    opacity: 0.5,
+  },
+  dateText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  msgFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 4,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  refBadgeLayout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  statusPill: {
+    backgroundColor: 'rgba(52, 238, 154, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  statusPillText: {
+    fontSize: 9,
+    color: Colors.success,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  refViewGrad: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+    marginBottom: 8,
+  },
+  quickReplies: {
+    width: '100%',
+    gap: 10,
+  },
+  quickReply: {
+    backgroundColor: Colors.bgSurface,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+  },
+  quickReplyText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  typingIndicator: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: Colors.bg,
+  },
+  typingText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    fontStyle: 'italic',
+  },
+  quickRepliesRow: {
+    paddingVertical: 12,
+    backgroundColor: Colors.bgCard,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  quickReplyPill: {
+    backgroundColor: Colors.bgSurface,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginRight: 8,
+  },
+  quickReplyPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  attachmentBtn: {
+    padding: 8,
+  },
+  emojiBtn: {
+    padding:  8,
+  },
+  statusActionBtn: {
+    padding: 10,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    marginRight: 4,
+  },
+  referenceHeaderContainer: {
+    paddingHorizontal: 0,
+    backgroundColor: Colors.bg,
+  },
+  msgImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  emojiTray: {
+    height: 250,
+    backgroundColor: Colors.bgCard,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  emojiTrayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  emojiTrayTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+  },
+  emojiList: {
+    padding: 8,
+  },
+  emojiItem: {
+    flex: 1,
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emojiText: {
+    fontSize: 24,
+  },
+  emojiBtnActive: {
+    backgroundColor: 'rgba(124, 111, 255, 0.1)',
+    borderRadius: 8,
+  },
 });

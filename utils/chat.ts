@@ -24,14 +24,15 @@ export const startChat = async (
   if (!currentUserId || currentUserId === otherUserId) return;
 
   try {
-    // Check if conversation already exists
+    // Check if conversation already exists for this specific item (if provided)
     const q = query(
       collection(db, 'conversations'),
-      where('participants', 'array-contains', currentUserId)
+      where('participants', 'array-contains', currentUserId),
+      ...(reference?.itemId ? [where('itemId', '==', reference.itemId)] : [where('itemId', '==', null)])
     );
 
     const querySnapshot = await getDocs(q);
-    let conversationId = null;
+    let conversationId: string | null = null;
 
     querySnapshot.forEach((doc) => {
       const data = doc.data();
@@ -41,40 +42,35 @@ export const startChat = async (
     });
 
     if (!conversationId) {
-      // Fetch current user profile to get full name and avatar
-      const currentUserDoc = await getDoc(doc(db, 'users', currentUserId!));
-      const currentUserData = currentUserDoc.data();
-      const currentUserName = currentUserData?.name || 'Campus Student';
-      const currentUserAvatar = currentUserData?.avatarUrl || null;
-
-      // Create new conversation with enhanced metadata
-      const newConv = await addDoc(collection(db, 'conversations'), {
-        participants: [currentUserId, otherUserId],
-        participantNames: {
-          [currentUserId!]: currentUserName,
-          [otherUserId]: otherUserName || 'Campus Student'
-        },
-        participantAvatars: {
-          [currentUserId!]: currentUserAvatar,
-          [otherUserId]: null // Will be updated on first message if not provided
-        },
-        lastMessage: '',
-        lastMessageAt: serverTimestamp(),
-        lastSenderId: '',
-        unreadCount: {
-          [currentUserId!]: 0,
-          [otherUserId]: 0
+      // Navigate to 'new' chat without creating doc yet
+      router.push({
+        pathname: '/chat/[id]',
+        params: {
+          id: 'new',
+          name: otherUserName,
+          itemMetadata: reference ? JSON.stringify({
+          type: reference.type,
+          title: reference.title,
+          image: reference.image || null,
+          ownerId: otherUserId // Since startChat is called by the prospective buyer
+        }) : null,
+          refId: reference?.itemId
         }
-      });
-      conversationId = newConv.id;
+      } as any);
+      return;
     }
 
-    // Navigate to the chat screen
+    // Existing conversation: Find the name from the existing doc for accurate display
+    const snap = querySnapshot.docs.find(d => d.id === conversationId);
+    const data = snap?.data();
+    const displayOtherName = data?.participantNames?.[otherUserId] || otherUserName;
+
+    // Navigate to the existing chat
     router.push({
       pathname: '/chat/[id]',
       params: {
         id: conversationId,
-        name: otherUserName,
+        name: displayOtherName,
         otherUserId,
         refType: reference?.type,
         refTitle: reference?.title,

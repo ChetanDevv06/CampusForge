@@ -70,7 +70,11 @@ export default function SkillsScreen() {
           uid !== item.userId && item.status !== 'completed' && (
             <TouchableOpacity 
               style={styles.connectBtn}
-              onPress={() => startChat(item.userId, item.userName || 'Student', router)}
+              onPress={() => startChat(item.userId, item.userName || 'Student', router, {
+                type: 'skill',
+                title: item.title,
+                itemId: item.id
+              })}
             >
               <Text style={styles.connectText}>Connect</Text>
             </TouchableOpacity>
@@ -81,7 +85,13 @@ export default function SkillsScreen() {
       <View style={styles.cardMeta}>
         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
           <Ionicons name="person-circle-outline" size={16} color={Colors.textMuted} />
-          <Text style={styles.metaText}>{item.userName || 'Student'}</Text>
+          <Text style={styles.metaText}>
+            {(() => {
+              const rawName = item.authorName || item.userName || 'Student';
+              // If it looks like a roll number (e.g., starts with numbers or has many numbers)
+              return /^\d/.test(rawName) || (rawName.match(/\d/g)?.length || 0) > 4 ? 'Student' : rawName;
+            })()}
+          </Text>
         </View>
         {item.status === 'completed' && (
           <View style={styles.completedBadge}>
@@ -161,6 +171,18 @@ const styles = StyleSheet.create({
     marginBottom: 14, borderWidth: 1, borderColor: Colors.border,
   },
   cardCompleted: { opacity: 0.7, borderColor: Colors.success },
+  sellerCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.bgSurface, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: Colors.border },
+  sellerAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  sellerInitial: { color: '#FFF', fontSize: 20, fontWeight: '800' },
+  sellerInfo: { flex: 1 },
+  sellerName: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
+  sellerRole: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  authorCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.bgSurface, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: Colors.border },
+  authorAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  authorInitial: { color: '#FFF', fontSize: 20, fontWeight: '800' },
+  authorInfo: { flex: 1 },
+  authorName: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
+  authorRole: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   cardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   catIcon: { width: 42, height: 42, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   cardTopText: { flex: 1, marginLeft: 12 },
