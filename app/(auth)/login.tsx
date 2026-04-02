@@ -55,7 +55,7 @@ export default function LoginScreen() {
         <LinearGradient colors={Gradients.primary} style={styles.logoBox}>
           <Ionicons name="infinite" size={32} color="#FFF" />
         </LinearGradient>
-        <Text style={styles.appName}>CampusLoop</Text>
+        <Text style={styles.appName}>CampusForge</Text>
         <Text style={styles.tagline}>Lost it • Post it • Find it</Text>
       </View>
 

@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "CampusLoop",
-    "slug": "CampusLoop",
+    "name": "CampusForge",
+    "slug": "CampusForge",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "campusloop",
+    "scheme": "campusforge",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "package": "com.campusloop.app",
+      "package": "com.campusforge.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

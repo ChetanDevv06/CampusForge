@@ -196,10 +196,10 @@ export default function SettingsScreen() {
 
       {/* About */}
       <Section title="About">
-        <Row icon="information-circle-outline" label="App Version" sublabel="CampusLoop v1.0.0" showChevron={false} />
-        <Row icon="document-text-outline" label="Terms of Service" onPress={() => Linking.openURL('https://campusloop.app/terms')} />
-        <Row icon="shield-outline" label="Privacy Policy" onPress={() => Linking.openURL('https://campusloop.app/privacy')} />
-        <Row icon="star-outline" label="Rate CampusLoop" iconColor={Colors.warning} onPress={() => showFeedback('Thank you!', 'Rating will be available on the app stores.', 'success')} />
+        <Row icon="information-circle-outline" label="App Version" sublabel="CampusForge v1.0.0" showChevron={false} />
+        <Row icon="document-text-outline" label="Terms of Service" onPress={() => Linking.openURL('https://campusforge.app/terms')} />
+        <Row icon="shield-outline" label="Privacy Policy" onPress={() => Linking.openURL('https://campusforge.app/privacy')} />
+        <Row icon="star-outline" label="Rate CampusForge" iconColor={Colors.warning} onPress={() => showFeedback('Thank you!', 'Rating will be available on the app stores.', 'success')} />
       </Section>
 
       {/* Danger Zone */}
