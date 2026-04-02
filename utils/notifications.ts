@@ -20,15 +20,17 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
  */
 
 const getNotifications = (): any => {
-  /*
-  // UNCOMMENT FOR PRODUCTION BUILD
+  // Expo Go (SDK 53+) physically blocks remote notification registration and triggers a crash.
+  // We only load the library if we are NOT in the Expo Go (StoreClient) environment.
+  if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
+    return null;
+  }
+  
   try {
     return require('expo-notifications');
   } catch (e) {
     return null;
   }
-  */
-  return null; 
 };
 
 /**
@@ -39,7 +41,7 @@ export const registerNotificationHandler = () => {
   if (Notifications?.setNotificationHandler) {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        shouldShowAlert: false,
+        shouldShowAlert: true,
         shouldPlaySound: true,
         shouldSetBadge: true,
         shouldShowBanner: true,
@@ -53,10 +55,10 @@ export const registerNotificationHandler = () => {
  * Requests permissions for push notifications and configures Android channels.
  */
 export async function registerForPushNotificationsAsync() {
-  if (!Device.isDevice) return false;
+  if (!Device.isDevice) return null;
 
   const Notifications = getNotifications();
-  if (!Notifications || !Notifications.getPermissionsAsync) return false;
+  if (!Notifications || !Notifications.getPermissionsAsync) return null;
 
   try {
     if (Platform.OS === 'android' && Notifications.setNotificationChannelAsync) {
@@ -65,6 +67,13 @@ export async function registerForPushNotificationsAsync() {
         importance: Notifications.AndroidImportance?.MAX || 4,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#7C6FFF',
+      });
+      await Notifications.setNotificationChannelAsync('messages', {
+        name: 'Messages',
+        importance: Notifications.AndroidImportance?.MAX || 4,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#7C6FFF',
+        sound: 'default'
       });
     }
 
@@ -76,9 +85,17 @@ export async function registerForPushNotificationsAsync() {
       finalStatus = status;
     }
 
-    return finalStatus === 'granted';
+    if (finalStatus !== 'granted') return null;
+
+    // Fetch the token
+    const token = (await Notifications.getExpoPushTokenAsync({
+      projectId: Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId
+    })).data;
+
+    return token;
   } catch (error) {
-    return false;
+    console.error("Error getting push token:", error);
+    return null;
   }
 }
 
@@ -97,3 +114,37 @@ export async function sendLocalNotification(title: string, body: string, data = 
 
 // Export the getter for the hook to use
 export { getNotifications };
+
+/**
+ * Sends a remote push notification via Expo Push API.
+ * This can be used from the client to notify other users.
+ */
+export async function sendRemoteNotification(to: string, title: string, body: string, data = {}) {
+  try {
+    const message = {
+      to,
+      sound: 'default',
+      title,
+      body,
+      data,
+      priority: 'high',
+      channelId: 'messages',
+    };
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    });
+
+    const resData = await response.json();
+    return resData;
+  } catch (error) {
+    console.error("Error sending remote notification:", error);
+    return null;
+  }
+}

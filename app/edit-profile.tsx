@@ -86,12 +86,6 @@ export default function EditProfileScreen() {
       return;
     }
 
-    // Handle Guest Users
-    if (user.uid === 'guest-user-123') {
-      showFeedback('Guest Mode', 'Guest accounts are temporary. Please sign up to customize and save your profile!', 'info');
-      return;
-    }
-
     setLoading(true);
     try {
       let avatarUrl = profile?.avatarUrl || null;

@@ -129,7 +129,7 @@ export default function ChatScreen() {
     }, () => setLoading(false));
 
     let unsubUser = () => {};
-    if (otherUserId) {
+    if (otherUserId && typeof otherUserId === 'string' && otherUserId !== 'undefined') {
       unsubUser = onSnapshot(doc(db, 'users', otherUserId), (snap) => {
         if (snap.exists()) setOtherUserProfile(snap.data());
       });
@@ -182,8 +182,11 @@ export default function ChatScreen() {
       }).catch(e => console.error("Error clearing notifications:", e));
     }
 
-    return unsub;
-  }, [activeConvId, uid]);
+    return () => {
+      unsub();
+      unsubUser();
+    };
+  }, [activeConvId, uid, otherUserId]);
 
   const PROFANITY_LIST = ['abuse', 'spam', 'scam', 'fuck', 'shit', 'asshole', 'bastard']; // Simplified list
 
@@ -348,6 +351,24 @@ export default function ChatScreen() {
       replyTo: replyData,
     });
 
+    // 3. Send Notification to Partner
+    const pushToken = (otherUserProfile as any)?.expoPushToken;
+    if (pushToken) {
+      console.log("Sending remote notification to partner:", pushToken);
+      const { sendRemoteNotification } = require('../../utils/notifications');
+      const senderName = profile?.name || auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'Campus Student';
+      
+      sendRemoteNotification(
+        pushToken,
+        `New message from ${senderName}`,
+        imageUrl ? "📷 Sent a photo" : msgText,
+        { 
+          chatId: targetId, 
+          senderName: senderName 
+        }
+      );
+    }
+
     // 3. Update conversation metadata
     if (activeConvId !== 'new') {
       const recipientId = otherUserId;
@@ -509,7 +530,7 @@ export default function ChatScreen() {
 
             {item.imageUrl && (
               <Image 
-                source={{ uri: item.imageUrl }} 
+                source={item.imageUrl ? { uri: item.imageUrl } : undefined} 
                 style={styles.msgImage}
                 resizeMode="cover"
               />
@@ -562,7 +583,10 @@ export default function ChatScreen() {
             <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
           </TouchableOpacity>
           {(otherUserProfile?.avatarUrl || convMetadata?.participantAvatars?.[otherUserId!]) ? (
-            <Image source={{ uri: otherUserProfile?.avatarUrl || convMetadata.participantAvatars[otherUserId!] }} style={styles.headerAvatar} />
+            <Image 
+              source={(otherUserProfile?.avatarUrl || convMetadata?.participantAvatars?.[otherUserId!]) ? { uri: otherUserProfile?.avatarUrl || convMetadata?.participantAvatars?.[otherUserId!] } : undefined} 
+              style={styles.headerAvatar} 
+            />
           ) : (
             <LinearGradient colors={Gradients.primary} style={styles.headerAvatarPlaceholder}>
               <Text style={styles.avatarInitial}>{(otherUserProfile?.name || convMetadata?.participantNames?.[otherUserId!] || name || 'C').charAt(0).toUpperCase()}</Text>

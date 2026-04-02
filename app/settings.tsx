@@ -12,6 +12,7 @@ import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/fire
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
+import PasswordModal from '../components/PasswordModal';
 
 type SectionProps = { title: string; children: React.ReactNode };
 const Section = ({ title, children }: SectionProps) => (
@@ -71,25 +72,25 @@ export default function SettingsScreen() {
   const [marketEnabled, setMarketEnabled] = useState(false);
   const [profileVisible, setProfileVisible] = useState(true);
   const [showOnline, setShowOnline] = useState(true);
+  const [passModalVisible, setPassModalVisible] = useState(false);
 
-  const handleChangePassword = () => {
-    Alert.prompt(
-      'Change Password',
-      'Enter your new password (min 6 chars)',
-      async (newPassword) => {
-        if (!newPassword || newPassword.length < 6) {
-          showFeedback('Invalid Password', 'Password must be at least 6 characters long.');
-          return;
-        }
-        try {
-          await updatePassword(auth.currentUser!, newPassword);
-          showFeedback('Success', 'Your password has been updated.', 'success');
-        } catch (e: any) {
-          showFeedback('Update Failed', e.message);
-        }
-      },
-      'secure-text'
-    );
+  const handlePasswordUpdate = async (currentPass: string, newPass: string) => {
+    const user = auth.currentUser;
+    if (!user || !user.email) return;
+
+    try {
+      // 1. Re-authenticate
+      const credential = EmailAuthProvider.credential(user.email, currentPass);
+      await reauthenticateWithCredential(user, credential);
+      
+      // 2. Update password
+      await updatePassword(user, newPass);
+      
+      setPassModalVisible(false);
+      showFeedback('Password Updated', 'Your security credentials have been refreshed successfully.', 'success');
+    } catch (e: any) {
+      throw new Error(e.message || 'Verification failed. Please check your current password.');
+    }
   };
 
   const handleDeleteAccount = () => {
@@ -161,7 +162,7 @@ export default function SettingsScreen() {
       {/* Account */}
       <Section title="Account">
         <Row icon="person-outline" label="Edit Profile" sublabel="Update your name and college" onPress={() => router.push('/edit-profile')} />
-        <Row icon="lock-closed-outline" label="Change Password" sublabel="Update your login password" onPress={handleChangePassword} />
+        <Row icon="lock-closed-outline" label="Change Password" sublabel="Update your login password" onPress={() => setPassModalVisible(true)} />
         <Row icon="mail-outline" label="Email" sublabel={auth.currentUser?.email || ''} showChevron={false} />
       </Section>
 
@@ -217,6 +218,11 @@ export default function SettingsScreen() {
         type={feedbackConfig.type}
         buttonText={feedbackConfig.buttonText}
         onAction={feedbackConfig.onAction}
+      />
+      <PasswordModal 
+        visible={passModalVisible}
+        onClose={() => setPassModalVisible(false)}
+        onConfirm={handlePasswordUpdate}
       />
     </ScrollView>
   );

@@ -17,6 +17,8 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+google-services.json
+GoogleService-Info.plist
 
 # Metro
 .metro-health-check*
@@ -30,14 +32,28 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+*.env
+
+# IDE / Editor
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
 
 # typescript
 *.tsbuildinfo
 
-app-example
+# temporary files
+app-example/
+tmp/
+temp/
 
 # generated native folders
-/ios
-/android
+/ios/
+/android/
