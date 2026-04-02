@@ -13,7 +13,7 @@ import { Colors, Gradients } from '../../constants/theme';
 import FeedbackModal, { FeedbackType } from '../../components/FeedbackModal';
 
 export default function LoginScreen() {
-  const { signInAsGuest } = useAuth();
+  const { user } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -125,10 +125,6 @@ export default function LoginScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.guestBtn} onPress={signInAsGuest}>
-          <Text style={styles.guestText}>Continue as Guest (Test Mode)</Text>
-        </TouchableOpacity>
-
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
           <Link href="/(auth)/register" asChild>
@@ -168,11 +164,6 @@ const styles = StyleSheet.create({
   btnWrapper: { marginTop: 8 },
   btn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
   btnText: { color: '#FFF', fontWeight: '700', fontSize: 16, letterSpacing: 0.3 },
-  guestBtn: {
-    marginTop: 14, borderWidth: 1, borderColor: Colors.border,
-    borderRadius: 14, paddingVertical: 14, alignItems: 'center',
-  },
-  guestText: { color: Colors.textSecondary, fontSize: 14 },
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 32 },
   footerText: { color: Colors.textSecondary, fontSize: 14 },
   linkText: { color: Colors.primary, fontSize: 14, fontWeight: '700' },

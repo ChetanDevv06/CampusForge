@@ -35,6 +35,7 @@ export default function ProfileScreen() {
   };
 
   const menuItems = [
+    ...(profile?.role === 'admin' ? [{ icon: 'shield-checkmark-outline', label: 'Platform Admin', route: '/admin' }] : []),
     { icon: 'person-outline', label: 'Edit Profile', route: '/edit-profile' },
     { icon: 'chatbubbles-outline', label: 'Messages', route: '/messages' },
     { icon: 'bookmark-outline', label: 'Saved Items', route: '/saved-items' },

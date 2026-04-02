@@ -5,7 +5,7 @@ import { registerNotificationHandler, registerForPushNotificationsAsync, getNoti
 /**
  * Custom hook to handle all notification-related logic (permissions, listeners, etc.)
  */
-export function useNotifications() {
+export function useNotifications(uid?: string) {
   const router = useRouter();
 
   useEffect(() => {
@@ -13,7 +13,25 @@ export function useNotifications() {
     registerNotificationHandler();
 
     // 2. Request permissions on mount (when the user is logged in)
-    registerForPushNotificationsAsync().catch(e => console.log("Note: Skipping remote token (Expo Go SDK 53+)."));
+    const setupNotifications = async () => {
+      if (!uid) return;
+      try {
+        const token = await registerForPushNotificationsAsync();
+        if (token) {
+          console.log("Saving push token to Firestore:", token);
+          const { db } = require('../firebaseConfig');
+          const { doc, updateDoc } = require('firebase/firestore');
+          await updateDoc(doc(db, 'users', uid), { 
+            expoPushToken: token,
+            notificationsEnabled: true
+          });
+        }
+      } catch (e) {
+        console.log("Note: Notification setup skipped (SDK 53+).");
+      }
+    };
+
+    setupNotifications();
 
     // 3. Listen for notification responses (interaction)
     let subscription: any;

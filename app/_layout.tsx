@@ -22,7 +22,7 @@ function RootLayoutNav() {
   const rootNavigationState = useRootNavigationState();
   
   // Use our centralized notifications hook
-  useNotifications();
+  useNotifications(user?.uid);
 
   useEffect(() => {
     if (isLoading || !rootNavigationState?.key) return;

@@ -15,6 +15,7 @@ interface UserProfile {
   rating?: number;
   reviewCount?: number;
   hasSeenOnboarding?: boolean;
+  role?: 'admin' | 'user';
   createdAt: string;
 }
 
@@ -22,7 +23,6 @@ interface AuthContextType {
   user: User | any | null;
   profile: UserProfile | null;
   isLoading: boolean;
-  signInAsGuest: () => void;
   signOutUser: () => Promise<void>;
 }
 
@@ -30,7 +30,6 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   isLoading: true,
-  signInAsGuest: () => {},
   signOutUser: async () => {},
 });
 
@@ -46,13 +45,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     // Listen for authentication state changes
     const unsubscribeAuth = onAuthStateChanged(auth, (authUser) => {
-      if (authUser) {
-        setUser(authUser);
-      } else {
-        // Do not overwrite the user state if they are currently a guest
-        setUser((prevUser: any) => (prevUser?.uid === 'guest-user-123' ? prevUser : null));
-        if (user?.uid !== 'guest-user-123') setProfile(null);
-      }
+      setUser(authUser);
+      if (!authUser) setProfile(null);
       setIsLoading(false);
     });
 
@@ -60,19 +54,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    if (!user || user.uid === 'guest-user-123') {
-      if (user?.uid === 'guest-user-123') {
-        setProfile({
-          uid: 'guest-user-123',
-          name: 'Guest Student',
-          college: 'Demo University',
-          email: 'guest@college.edu',
-          createdAt: new Date().toISOString(),
-          hasSeenOnboarding: true,
-        });
-      }
-      return;
-    }
+    if (!user) return;
 
     // Listen for Firestore profile updates
     const unsubscribeProfile = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
@@ -130,14 +112,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, [user]);
 
-  const signInAsGuest = () => {
-    setUser({
-      uid: 'guest-user-123',
-      email: 'guest@college.edu',
-      displayName: 'Guest Student',
-    });
-  };
-
   const signOutUser = async () => {
     try {
       setUser(null);
@@ -149,7 +123,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, isLoading, signInAsGuest, signOutUser }}>
+    <AuthContext.Provider value={{ user, profile, isLoading, signOutUser }}>
       {children}
     </AuthContext.Provider>
   );
