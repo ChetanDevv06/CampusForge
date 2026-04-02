@@ -1,4 +1,4 @@
-// CampusLoop Design System
+// CampusForge Design System
 export const Colors = {
   // Backgrounds
   bg: '#0A0A12',

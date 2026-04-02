@@ -87,7 +87,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // 3. The lastMessage is not empty
           // 4. This isn't the first time the app is loading existing data
           if (lastMsgAt > prevLastMsgAt && data.lastSenderId !== user.uid && data.lastMessage && !isFirstRun.current) {
-            const senderName = data.participantNames?.[data.lastSenderId] || 'CampusLoop Student';
+            const senderName = data.participantNames?.[data.lastSenderId] || 'CampusForge Student';
             sendLocalNotification(
               `New message from ${senderName}`,
               data.lastMessage,

@@ -1,6 +1,6 @@
-# CampusLoop 🔄
+# CampusForge ⚒️
 
-**CampusLoop** is a smart campus exchange platform designed to bridge the gap between students. Whether you've lost an item, want to sell a textbook, or need to learn a new skill, CampusLoop is the go-to app for your university community.
+**CampusForge** is a smart campus exchange platform designed to bridge the gap between students. Whether you've lost an item, want to sell a textbook, or need to learn a new skill, CampusForge is the go-to app for your university community.
 
 ---
 
@@ -28,8 +28,8 @@ Before you begin, ensure you have the following installed:
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/ChetanDev06/CampusLoop.git
-cd CampusLoop
+git clone https://github.com/ChetanDev06/CampusForge.git
+cd CampusForge
 ```
 
 ### 2. Install Dependencies
@@ -98,4 +98,4 @@ Distributed under the MIT License. See `LICENSE` for more information.
 ## 📧 Contact
 **Chetan** - [GitHub](https://github.com/ChetanDev06)
 
-Project Link: [https://github.com/ChetanDev06/CampusLoop](https://github.com/ChetanDev06/CampusLoop)
+Project Link: [https://github.com/ChetanDev06/CampusForge](https://github.com/ChetanDev06/CampusForge)
