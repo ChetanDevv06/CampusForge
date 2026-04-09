@@ -1,38 +1,79 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar
+  ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StatusBar, Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
-import { Link } from 'expo-router';
-import { Colors, Gradients } from '../../constants/theme';
+import { Link, useRouter, useLocalSearchParams } from 'expo-router';
+import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
 import FeedbackModal, { FeedbackType } from '../../components/FeedbackModal';
+import { BlurView } from 'expo-blur';
+
+const { width, height } = Dimensions.get('window');
 
 const Field = ({ icon, placeholder, value, onChangeText, secure = false, keyboard = 'default' }: any) => (
   <View style={styles.inputWrapper}>
-    <Ionicons name={icon} size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+    <View style={styles.inputIconBox}>
+      <Ionicons name={icon} size={20} color={Colors.primary} />
+    </View>
     <TextInput
-      style={styles.input} placeholder={placeholder} placeholderTextColor={Colors.textMuted}
-      value={value} onChangeText={onChangeText} secureTextEntry={secure}
-      autoCapitalize="none" keyboardType={keyboard}
+      style={styles.input} 
+      placeholder={placeholder} 
+      placeholderTextColor={Colors.on_surface_variant}
+      value={value} 
+      onChangeText={onChangeText} 
+      secureTextEntry={secure}
+      autoCapitalize="none" 
+      keyboardType={keyboard}
       autoCorrect={false}
       spellCheck={false}
-      textContentType={secure ? 'password' : 'none'}
+      cursorColor={Colors.primary}
     />
   </View>
 );
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
-  const [college, setCollege] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  const router = useRouter();
+  const { 
+    collegeId: selectedId, 
+    collegeName: selectedName, 
+    collegeShortName: selectedShort,
+    email: prefillEmail
+  } = useLocalSearchParams<{ 
+    collegeId: string, 
+    collegeName: string, 
+    collegeShortName: string,
+    email?: string 
+  }>();
+
+  // Sync state if coming back from college-select
+  const [collegeId, setCollegeId] = useState('');
+  const [collegeName, setCollegeName] = useState('');
+  const [collegeShortName, setCollegeShortName] = useState('');
+
+  React.useEffect(() => {
+    if (selectedId && selectedName) {
+      setCollegeId(selectedId);
+      setCollegeName(selectedName);
+      setCollegeShortName(selectedShort || '');
+    }
+  }, [selectedId, selectedName, selectedShort]);
+
+  React.useEffect(() => {
+    if (prefillEmail) {
+      setEmail(prefillEmail);
+    }
+  }, [prefillEmail]);
 
   // Modal State
   const [modalVisible, setModalVisible] = useState(false);
@@ -46,12 +87,12 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    if (!name || !college || !email || !password || !confirmPassword) { 
-      showAlert('Missing Fields', 'Please fill in all your details to create an account.'); 
+    if (!name || !collegeId || !email || !password || !confirmPassword) { 
+      showAlert('Missing Intel', 'Please complete all fields and select your college.'); 
       return; 
     }
     if (password !== confirmPassword) { 
-      showAlert('Password Mismatch', 'The password and confirmation do not match.'); 
+      showAlert('Cipher Mismatch', 'The password entries do not align.'); 
       return; 
     }
     setLoading(true);
@@ -60,19 +101,20 @@ export default function RegisterScreen() {
       await setDoc(doc(db, 'users', cred.user.uid), {
         uid: cred.user.uid, 
         name, 
-        college, 
+        collegeId,
+        collegeName,
+        collegeShortName,
         email: email.toLowerCase(),
         avatarUrl: null,
         rating: 5,
         reviewCount: 0,
         hasSeenOnboarding: false,
-        createdAt: new Date().toISOString(), 
+        createdAt: serverTimestamp(), 
         skillsOffered: [], 
         skillsRequested: []
       });
-
     } catch (error: any) {
-      showAlert('Registration Error', error.message);
+      showAlert('Forge Error', error.message);
     } finally {
       setLoading(false);
     }
@@ -81,38 +123,80 @@ export default function RegisterScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <LinearGradient colors={['#1C1C3A', '#0A0A12']} style={StyleSheet.absoluteFill} />
+      
+      <View style={StyleSheet.absoluteFill}>
+        <LinearGradient colors={[Colors.background, '#0A0A0F']} style={StyleSheet.absoluteFill} />
+        <View style={[styles.glowCircle, { top: -100, right: -100, backgroundColor: Colors.primary + '20' }]} />
+        <View style={[styles.glowCircle, { bottom: -150, left: -150, backgroundColor: Colors.tertiary + '15' }]} />
+      </View>
+
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          contentContainerStyle={styles.scroll} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.header}>
-            <LinearGradient colors={Gradients.primary} style={styles.logoBox}>
-              <Ionicons name="person-add" size={28} color="#FFF" />
-            </LinearGradient>
+            <View style={styles.logoRing}>
+              <LinearGradient colors={Gradients.primary} style={styles.logoPill}>
+                <Ionicons name="sparkles" size={28} color={Colors.on_primary} />
+              </LinearGradient>
+            </View>
             <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join your campus community</Text>
+            <Text style={styles.subtitle}>Join your campus community today</Text>
           </View>
 
-          <Field icon="person-outline" placeholder="Full Name" value={name} onChangeText={setName} />
-          <Field icon="school-outline" placeholder="College / University" value={college} onChangeText={setCollege} />
-          <Field icon="mail-outline" placeholder="College Email" value={email} onChangeText={setEmail} keyboard="email-address" />
-          <Field icon="lock-closed-outline" placeholder="Password" value={password} onChangeText={setPassword} secure />
-          <Field icon="shield-checkmark-outline" placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secure />
+          <View style={styles.formArea}>
+            <Field icon="person" placeholder="Full Name" value={name} onChangeText={setName} />
+            
+            <TouchableOpacity 
+              activeOpacity={0.7}
+              onPress={() => router.push({
+                pathname: '/(auth)/college-select',
+                params: { returnTo: '/(auth)/register' }
+              })}
+              style={styles.inputWrapper}
+            >
+              <View style={styles.inputIconBox}>
+                <Ionicons name="school" size={20} color={Colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.inputLabel, !collegeName && { color: Colors.on_surface_variant }]}>
+                  {collegeName || 'Select your College'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.on_surface_variant} />
+            </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleRegister} disabled={loading} style={{ marginTop: 8 }}>
-            <LinearGradient colors={Gradients.primary} style={styles.btn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Register</Text>}
-            </LinearGradient>
-          </TouchableOpacity>
+            <Field icon="mail" placeholder="College Email Address" value={email} onChangeText={setEmail} keyboard="email-address" />
+            <Field icon="key" placeholder="Password" value={password} onChangeText={setPassword} secure />
+            <Field icon="shield-checkmark" placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secure />
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
-            <Link href="/(auth)/login" asChild>
-              <TouchableOpacity><Text style={styles.linkText}>Sign In</Text></TouchableOpacity>
-            </Link>
+            <TouchableOpacity 
+              onPress={handleRegister} 
+              disabled={loading} 
+              activeOpacity={0.85}
+              style={styles.submitBtn}
+            >
+              <LinearGradient 
+                colors={Gradients.primary} 
+                style={styles.submitGrad} 
+                start={{ x: 0, y: 0 }} 
+                end={{ x: 1, y: 1 }}
+              >
+                {loading ? <ActivityIndicator color={Colors.on_primary} /> : <Text style={styles.submitText}>Create Account</Text>}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Existing member? </Text>
+              <Link href="/(auth)/login" asChild>
+                <TouchableOpacity><Text style={styles.linkText}>Sign In</Text></TouchableOpacity>
+              </Link>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -128,24 +212,24 @@ export default function RegisterScreen() {
   );
 }
 
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  scroll: { padding: 24, paddingTop: 60 },
-  header: { alignItems: 'center', marginBottom: 36 },
-  logoBox: { width: 64, height: 64, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  title: { fontSize: 26, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4 },
-  subtitle: { fontSize: 14, color: Colors.textSecondary },
-  inputWrapper: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.bgCard, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border, marginBottom: 14, paddingHorizontal: 14,
-  },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, color: Colors.textPrimary, fontSize: 15, paddingVertical: 16 },
-  btn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
-  btnText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 28, marginBottom: 32 },
-  footerText: { color: Colors.textSecondary, fontSize: 14 },
-  linkText: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
+  container: { flex: 1, backgroundColor: Colors.background },
+  scroll: { padding: Spacing.margin, paddingTop: 60, paddingBottom: 40 },
+  glowCircle: { position: 'absolute', width: 300, height: 300, borderRadius: 150, opacity: 0.8 },
+  header: { alignItems: 'center', marginBottom: 40, marginTop: 20 },
+  logoRing: { width: 90, height: 90, borderRadius: 45, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', justifyContent: 'center', alignItems: 'center', marginBottom: Spacing.lg },
+  logoPill: { width: 64, height: 64, borderRadius: Roundness.md, justifyContent: 'center', alignItems: 'center', ...Shadows.ambient },
+  title: { ...Typography.display, color: Colors.on_background, fontSize: 34, textAlign: 'center' },
+  subtitle: { ...Typography.body, color: Colors.on_surface_variant, marginTop: 6, textAlign: 'center' },
+  formArea: { gap: Spacing.md },
+  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface_container_low, borderRadius: Roundness.md, height: 60, paddingHorizontal: Spacing.md, gap: Spacing.sm },
+  inputIconBox: { width: 32, alignItems: 'center' },
+  input: { flex: 1, ...Typography.body_medium, color: Colors.on_background, fontSize: 16, paddingVertical: 10 },
+  inputLabel: { ...Typography.body_medium, color: Colors.on_background, fontSize: 16 },
+  submitBtn: { height: 60, borderRadius: Roundness.full, marginTop: Spacing.lg, overflow: 'hidden', ...Shadows.ambient },
+  submitGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  submitText: { ...Typography.title, color: Colors.on_primary, fontSize: 18 },
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 32 },
+  footerText: { ...Typography.body, color: Colors.on_surface_variant, fontSize: 14 },
+  linkText: { ...Typography.title, color: Colors.primary, fontSize: 14 },
 });

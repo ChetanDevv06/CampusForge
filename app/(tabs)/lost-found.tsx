@@ -1,17 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Image, ActivityIndicator, TextInput
+  Image, ActivityIndicator, TextInput, Platform, StatusBar
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db, auth } from '../../firebaseConfig';
+import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
+import { useAuth } from '../../contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Gradients } from '../../constants/theme';
-import { startChat } from '../../utils/chat';
-
-import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { Colors, Typography, Spacing, Roundness } from '../../constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function LostFoundScreen() {
   const [items, setItems] = useState<any[]>([]);
@@ -19,25 +17,35 @@ export default function LostFoundScreen() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const router = useRouter();
-  const uid = auth.currentUser?.uid;
+  const { profile } = useAuth();
 
   useEffect(() => {
-    const q = query(collection(db, 'lost_found'), orderBy('createdAt', 'desc'));
+    if (!profile?.collegeId) return;
+    const q = query(
+      collection(db, 'lost_found'), 
+      where('collegeId', '==', profile.collegeId),
+      orderBy('createdAt', 'desc')
+    );
     const unsub = onSnapshot(q, (snap) => {
       setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
     }, () => setLoading(false));
     return unsub;
-  }, []);
+  }, [profile?.collegeId]);
 
-  const handleResolve = async (id: string, currentStatus: string) => {
-    try {
-      await updateDoc(doc(db, 'lost_found', id), {
-        status: currentStatus === 'resolved' ? 'open' : 'resolved'
-      });
-    } catch (e) {
-      console.error(e);
+  const formatTimeAgo = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    const intervals: { [key: string]: number } = { year: 31536000, month: 2592000, week: 604800, day: 86400, hour: 3600, minute: 60 };
+    for (const [unit, secondsInUnit] of Object.entries(intervals)) {
+        const interval = Math.floor(seconds / secondsInUnit);
+        if (interval > 0) {
+            return `${interval} ${unit}${interval === 1 ? '' : 's'} ago`;
+        }
     }
+    return 'Just now';
   };
 
   const filtered = items.filter(item => {
@@ -46,216 +54,177 @@ export default function LostFoundScreen() {
     return matchSearch && matchFilter;
   });
 
-  const renderItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-      activeOpacity={0.9}
-      onPress={() => router.push({ pathname: '/item-details/[id]', params: { id: item.id } } as any)}
-      style={[styles.card, item.status === 'resolved' && styles.cardResolved]}
-    >
-      {item.imageUrl && (
-        <View>
-          <Image source={{ uri: item.imageUrl }} style={[styles.image, item.status === 'resolved' && { opacity: 0.6 }]} />
-          {item.status === 'resolved' && (
-            <View style={styles.resolvedOverlay}>
-              <Text style={styles.resolvedOverlayText}>RESOLVED</Text>
+  const renderItem = ({ item }: { item: any }) => {
+    return (
+      <TouchableOpacity 
+        activeOpacity={0.9}
+        onPress={() => router.push({ pathname: '/item-details/[id]', params: { id: item.id } } as any)}
+        style={styles.card}
+      >
+        {item.imageUrl ? (
+          <View style={styles.imageWrap}>
+             <Image source={{ uri: item.imageUrl }} style={styles.cardImage} />
+             <View style={styles.absBadges}>
+               <View style={[
+                  styles.typeBadge, 
+                  { backgroundColor: item.type === 'lost' ? '#D9214E' : '#6B52FF' }
+               ]}>
+                 <Text style={styles.typeBadgeText}>{item.type?.toUpperCase()}</Text>
+               </View>
+             </View>
+          </View>
+        ) : null}
+
+        <View style={[styles.cardInfo, !item.imageUrl && { paddingTop: Spacing.xl }]}>
+          {!item.imageUrl && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+               <View style={[
+                  styles.typeBadge, 
+                  { backgroundColor: item.type === 'lost' ? '#D9214E' : '#6B52FF', paddingVertical: 4, paddingHorizontal: 12 }
+               ]}>
+                 <Text style={styles.typeBadgeText}>{item.type?.toUpperCase()}</Text>
+               </View>
+               <Text style={[styles.cardTime, { marginLeft: 'auto' }]}>{formatTimeAgo(item.createdAt)}</Text>
             </View>
           )}
-        </View>
-      )}
-      <View style={styles.cardContent}>
-        <View style={styles.badgeRow}>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            <LinearGradient
-              colors={item.type === 'lost' ? Gradients.lostBadge : Gradients.foundBadge}
-              style={styles.badge} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-            >
-              <Text style={styles.badgeText}>{item.type === 'lost' ? '● LOST' : '✓ FOUND'}</Text>
-            </LinearGradient>
-            {item.status === 'resolved' && (
-              <View style={[styles.badge, { backgroundColor: Colors.success }]}>
-                <Text style={styles.badgeText}>COMPLETED</Text>
-              </View>
-            )}
+
+          <View style={styles.cardTitleRow}>
+             <Text style={styles.cardTitle} numberOfLines={item.imageUrl ? 1 : 2}>{item.title}</Text>
+             {item.imageUrl && <Text style={styles.cardTime}>{formatTimeAgo(item.createdAt)}</Text>}
           </View>
 
-          {uid === item.userId ? (
-            <TouchableOpacity 
-              style={[styles.actionBtn, item.status === 'resolved' && styles.actionBtnActive]} 
-              onPress={() => handleResolve(item.id, item.status)}
-            >
-              <Ionicons name={item.status === 'resolved' ? "refresh-outline" : "checkmark-done-outline"} size={16} color={item.status === 'resolved' ? Colors.textPrimary : Colors.success} />
-              <Text style={[styles.actionBtnText, item.status === 'resolved' && { color: Colors.textPrimary }]}>
-                {item.status === 'resolved' ? 'Reopen' : 'Resolve'}
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            uid !== item.userId && item.status !== 'resolved' && (
-              <TouchableOpacity 
-                style={styles.msgBtn} 
-                onPress={() => startChat(item.userId, item.userName || 'Student', router, {
-                  type: item.type as any,
-                  title: item.title,
-                  image: item.imageUrl,
-                  itemId: item.id
-                })}
-              >
-                <Ionicons name="chatbubble-outline" size={16} color={Colors.primary} />
-                <Text style={styles.msgBtnText}>Message</Text>
-              </TouchableOpacity>
-            )
+          {!item.imageUrl && item.description && (
+             <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
           )}
+
+          <View style={styles.locationRow}>
+             <Ionicons name="location-outline" size={14} color="#6B52FF" />
+             <Text style={styles.locationText} numberOfLines={1}>{item.location}</Text>
+          </View>
         </View>
-        <Text style={[styles.cardTitle, item.status === 'resolved' && { color: Colors.textMuted }]}>{item.title}</Text>
-        <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
-        <View style={styles.cardMeta}>
-          <Ionicons name="location-outline" size={13} color={Colors.textMuted} />
-          <Text style={styles.metaText}>{item.location}</Text>
-          <Ionicons name="time-outline" size={13} color={Colors.textMuted} style={{ marginLeft: 10 }} />
-          <Text style={styles.metaText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={18} color={Colors.textSecondary} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search lost & found..."
-            placeholderTextColor={Colors.textMuted}
-            value={search}
-            onChangeText={setSearch}
-          />
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')}>
-              <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
-            </TouchableOpacity>
-          )}
+      <StatusBar barStyle="light-content" />
+      
+      <View style={styles.header}>
+        <View style={styles.avatar}>
+           <Ionicons name="person" size={16} color="#FFF" />
         </View>
+        <Text style={styles.headerTitle}>{profile?.collegeShortName || profile?.collegeName || 'Campus'}</Text>
+        <TouchableOpacity>
+           <Ionicons name="notifications-outline" size={20} color="#6B52FF" />
+        </TouchableOpacity>
       </View>
 
-      {/* Filter Pills */}
-      <View style={styles.filterRow}>
-        {['all', 'lost', 'found'].map(f => (
-          <TouchableOpacity key={f} onPress={() => setFilter(f)} style={[styles.pill, filter === f && styles.pillActive]}>
-            {filter === f
-              ? <LinearGradient colors={Gradients.primary} style={styles.pillGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                  <Text style={styles.pillTextActive}>{f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}</Text>
-                </LinearGradient>
-              : <Text style={styles.pillText}>{f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}</Text>
-            }
-          </TouchableOpacity>
-        ))}
-        <Text style={styles.resultCount}>{filtered.length} item{filtered.length !== 1 ? 's' : ''}</Text>
+      <View style={{ paddingHorizontal: Spacing.margin, marginBottom: Spacing.md }}>
+         <View style={styles.searchBox}>
+            <Ionicons name="search" size={18} color="#6B52FF" />
+            <TextInput 
+              style={styles.searchInput}
+              placeholder="Search for items..."
+              placeholderTextColor={Colors.on_surface_variant}
+              value={search}
+              onChangeText={setSearch}
+            />
+         </View>
+      </View>
+
+      <View style={styles.filterContainer}>
+         {[
+           { id: 'all', label: 'All Items' },
+           { id: 'lost', label: 'Lost' },
+           { id: 'found', label: 'Found' }
+         ].map(f => (
+           <TouchableOpacity 
+             key={f.id} 
+             style={[styles.filterPill, filter === f.id && styles.filterPillActive]}
+             onPress={() => setFilter(f.id)}
+           >
+             <Text style={[styles.filterPillText, filter === f.id && styles.filterPillTextActive]}>
+                {f.label}
+             </Text>
+           </TouchableOpacity>
+         ))}
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color={Colors.primary} style={{ flex: 1 }} />
+        <View style={styles.center}><ActivityIndicator color={Colors.primary} /></View>
       ) : (
         <FlatList
           data={filtered}
           renderItem={renderItem}
           keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 160 }]}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="search-outline" size={48} color={Colors.textMuted} />
-              <Text style={styles.emptyTitle}>Nothing here yet</Text>
-              <Text style={styles.emptyText}>Be the first to report a lost or found item!</Text>
+            <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 100}}>
+               <Ionicons name="scan-outline" size={48} color="#1A1C23" />
+               <Text style={{color: '#8A8D93', marginTop: 12}}>No matching items found</Text>
             </View>
           }
         />
       )}
 
-      <TouchableOpacity style={styles.fabWrapper} onPress={() => router.push('/post-item')}>
-        <LinearGradient colors={Gradients.primary} style={styles.fab} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <Ionicons name="add" size={28} color="#FFF" />
-        </LinearGradient>
-      </TouchableOpacity>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  searchContainer: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: Colors.bgCard, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 14, paddingVertical: 12,
-  },
-  searchInput: { flex: 1, color: Colors.textPrimary, fontSize: 15 },
-  filterRow: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 8, gap: 8, alignItems: 'center' },
-  pill: { borderRadius: 20, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
-  pillActive: { borderColor: 'transparent' },
-  pillGradient: { paddingHorizontal: 16, paddingVertical: 8 },
-  pillText: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600', paddingHorizontal: 16, paddingVertical: 8 },
-  pillTextActive: { color: '#FFF', fontSize: 13, fontWeight: '700' },
-  resultCount: { marginLeft: 'auto', fontSize: 13, color: Colors.textMuted },
-  list: { padding: 16, paddingBottom: 100 },
-  card: {
-    backgroundColor: Colors.bgCard, borderRadius: 18, marginBottom: 16,
-    overflow: 'hidden', borderWidth: 1, borderColor: Colors.border,
-  },
-  image: { width: '100%', height: 180, resizeMode: 'cover' },
-  cardContent: { padding: 16 },
-  badgeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  badge: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5 },
-  badgeText: { color: '#FFF', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
-  msgBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.bgSurface, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: Colors.border },
-  msgBtnText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
-  cardResolved: { opacity: 0.8, borderColor: Colors.success },
-  resolvedOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
+  container: { flex: 1, backgroundColor: '#15151A' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: Spacing.margin,
+    paddingBottom: Spacing.md,
+    backgroundColor: '#15151A',
   },
-  resolvedOverlayText: {
-    color: '#FFF',
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: 2,
-    borderWidth: 2,
-    borderColor: '#FFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    transform: [{ rotate: '-15deg' }],
+  avatar: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: '#1E1E24',
+    justifyContent: 'center', alignItems: 'center',
+    overflow: 'hidden',
   },
-  actionBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 6, 
-    backgroundColor: 'rgba(52,238,154,0.1)', 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 10, 
-    borderWidth: 1, 
-    borderColor: Colors.success 
+  headerTitle: { ...Typography.title, color: '#FFF', fontSize: 18 },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E24',
+    borderRadius: Roundness.full,
+    paddingHorizontal: Spacing.lg,
+    height: 48,
+    gap: Spacing.sm,
   },
-  actionBtnActive: { 
-    backgroundColor: Colors.bgSurface, 
-    borderColor: Colors.border 
+  searchInput: { flex: 1, color: '#FFF', fontSize: 14 },
+  filterContainer: { flexDirection: 'row', paddingHorizontal: Spacing.margin, gap: Spacing.sm, marginBottom: Spacing.lg },
+  filterPill: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: Roundness.full, backgroundColor: '#1A1C23' },
+  filterPillActive: { backgroundColor: '#6B52FF' },
+  filterPillText: { ...Typography.label, color: '#A0A0A5', fontSize: 13 },
+  filterPillTextActive: { color: '#FFF' },
+  listContent: { paddingHorizontal: Spacing.margin, gap: 24 },
+  card: { backgroundColor: '#1E1E24', borderRadius: 24, overflow: 'hidden', paddingBottom: Spacing.lg },
+  imageWrap: { height: 300, width: '100%', position: 'relative', backgroundColor: '#1A1D24' },
+  cardImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  absBadges: { position: 'absolute', top: 16, left: 16 },
+  typeBadge: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: Roundness.full },
+  typeBadgeText: { ...Typography.label, color: '#FFF', fontSize: 11, letterSpacing: 1 },
+  cardInfo: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg },
+  cardTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  cardTitle: { ...Typography.headline, color: '#FFF', fontSize: 18, flex: 1, marginRight: Spacing.sm },
+  cardDesc: { ...Typography.body, color: '#A0A0A5', fontSize: 13, marginBottom: 12, lineHeight: 18 },
+  cardTime: { ...Typography.caption, color: '#8A8D93', fontSize: 11 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  locationText: { ...Typography.caption, color: '#6B52FF', fontSize: 12 },
+  fab: { 
+    position: 'absolute', bottom: 100, right: 20, width: 64, height: 64, borderRadius: 32, overflow: 'hidden',
+    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8, zIndex: 999
   },
-  actionBtnText: { 
-    color: Colors.success, 
-    fontSize: 12, 
-    fontWeight: '700' 
-  },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: 6 },
-  cardDesc: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20, marginBottom: 12 },
-  cardMeta: { flexDirection: 'row', alignItems: 'center' },
-  metaText: { fontSize: 12, color: Colors.textMuted, marginLeft: 4 },
-  empty: { alignItems: 'center', marginTop: 80, paddingHorizontal: 32 },
-  emptyTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: '700', marginTop: 16 },
-  emptyText: { color: Colors.textMuted, fontSize: 14, marginTop: 8, textAlign: 'center' },
-  fabWrapper: { position: 'absolute', bottom: 24, right: 24 },
-  fab: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
+  fabGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });
-

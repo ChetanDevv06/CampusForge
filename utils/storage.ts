@@ -1,42 +1,39 @@
 import * as ImageManipulator from 'expo-image-manipulator';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../firebaseConfig';
 
 /**
- * Uploads an image to Firebase Storage and returns the public download URL.
+ * Converts a local image URI to a compressed Base64 string for direct Firestore storage.
+ * This bypasses Firebase Storage (Standard/Premium plans) by embedding image data
+ * directly in document fields.
  * 
  * @param uri - The local URI of the image to process.
- * @param path - The destination path in Firebase Storage (e.g. 'users/123/avatar').
- * @returns A promise that resolves to the download URL string.
+ * @returns A promise that resolves to a data-uri string (base64).
  */
 export const uploadImage = async (uri: string, path: string): Promise<string> => {
-  console.log(`Starting Cloud upload: URI=${uri}, Path=${path}`);
+  console.log(`Starting Local Base64 Conversion: URI=${uri.substring(0, 50)}...`);
   
   try {
-    // 1. Process and compress the image locally first to optimize upload
-    // We use a larger max dimension of 1200px for high resolution
+    // 1. COMPRESS HEAVILY (Firestore has a 1MB per document limit)
+    // We resize to a small thumbnail size to ensure we stay well under the 1MB limit
     const processed = await ImageManipulator.manipulateAsync(
       uri,
-      [{ resize: { width: 1200 } }], // High resolution
-      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+      [{ resize: { width: 300 } }], // Small size for Firestore storage
+      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
     );
 
-    // 2. Convert the processed image URI to a Blob for Firebase Storage
-    const response = await fetch(processed.uri);
-    const blob = await response.blob();
-
-    // 3. Upload to Firebase Storage
-    const storageRef = ref(storage, path);
-    const snapshot = await uploadBytes(storageRef, blob);
-
-    // 4. Get the public download URL
-    const downloadURL = await getDownloadURL(snapshot.ref);
+    const base64Data = `data:image/jpeg;base64,${processed.base64}`;
     
-    console.log(`Image uploaded successfully. URL: ${downloadURL}`);
-    return downloadURL;
+    // Check approximate size (Base64 is ~33% larger than binary)
+    const sizeInBytes = base64Data.length;
+    console.log(`Image converted to Base64. Size: ${(sizeInBytes / 1024).toFixed(2)} KB`);
+
+    if (sizeInBytes > 800000) {
+       throw new Error("Image too large for local storage workaround. Try a smaller photo.");
+    }
+
+    return base64Data;
 
   } catch (error: any) {
-    console.error("Cloud Upload Error: ", error);
-    throw new Error(`Failed to upload photo: ${error.message}`);
+    console.error("Base64 Conversion Error: ", error);
+    throw new Error(`Failed to process photo: ${error.message}`);
   }
 };

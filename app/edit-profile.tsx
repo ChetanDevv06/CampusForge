@@ -1,29 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  Image, ActivityIndicator, Alert, ScrollView, KeyboardAvoidingView, Platform
+  Image, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, StatusBar, Dimensions, Modal
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
-import { Colors, Gradients } from '../constants/theme';
+import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImage } from '../utils/storage';
 import ImageSourceModal from '../components/ImageSourceModal';
 import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
+
+const { width } = Dimensions.get('window');
 
 export default function EditProfileScreen() {
   const { user, profile } = useAuth();
   const router = useRouter();
   
   const [name, setName] = useState(profile?.name || '');
-  const [college, setCollege] = useState(profile?.college || '');
+  const [major, setMajor] = useState(profile?.major || 'Computer Science');
+  const [gradYear, setGradYear] = useState(profile?.gradYear || '2025');
+  const [bio, setBio] = useState(profile?.bio || '');
+  const [instagram, setInstagram] = useState(profile?.socials?.instagram || '');
+  const [linkedin, setLinkedin] = useState(profile?.socials?.linkedin || '');
+  
   const [image, setImage] = useState<string | null>(profile?.avatarUrl || null);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showGradModal, setShowGradModal] = useState(false);
+  
+  const gradYears = ['2024', '2025', '2026', '2027', '2028', '2029', '2030'];
 
   // Feedback Modal State
   const [feedbackVisible, setFeedbackVisible] = useState(false);
@@ -36,21 +47,13 @@ export default function EditProfileScreen() {
     setFeedbackVisible(true);
   };
 
-  useEffect(() => {
-    if (profile) {
-      setName(profile.name);
-      setCollege(profile.college);
-      setImage(profile.avatarUrl || null);
-    }
-  }, [profile]);
-
   const pickImage = async (useCamera: boolean) => {
     const { status } = useCamera 
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     
     if (status !== 'granted') {
-      showFeedback('Permission Denied', `Sorry, we need ${useCamera ? 'camera' : 'gallery'} permissions to make this work!`);
+      showFeedback('Access Denied', `Permissions required to update your profile image.`);
       return;
     }
 
@@ -70,193 +73,426 @@ export default function EditProfileScreen() {
     }
   };
 
-  const showImageSourceOptions = () => {
-    setShowModal(true);
-  };
-
-
   const handleUpdate = async () => {
-    if (!name || !college) {
-      showFeedback('Missing Info', 'Please enter your name and college to continue.');
+    if (!name) {
+      showFeedback('Missing Info', 'Full Name is required.');
       return;
     }
 
-    if (!user) {
-      showFeedback('Not Authenticated', 'You must be signed in to update your profile.');
-      return;
-    }
+    if (!user) return;
 
     setLoading(true);
     try {
       let avatarUrl = profile?.avatarUrl || null;
       
-      // Only process if the image URI is a local path (not a remote URL or Base64)
-      if (image && !image.startsWith('http') && !image.startsWith('data:image')) {
-        console.log("EditProfile: Attempting image processing...");
+      if (image && !image.startsWith('http')) {
         avatarUrl = await uploadImage(image, `avatars/${user.uid}`);
-      } else if (image === null) {
-        avatarUrl = null;
       }
 
-      console.log("EditProfile: Updating Firestore document...");
       await setDoc(doc(db, 'users', user.uid), {
         name,
-        college,
+        major,
+        gradYear,
+        bio,
+        socials: {
+            instagram,
+            linkedin
+        },
         avatarUrl,
-        updatedAt: new Date().toISOString()
+        updatedAt: serverTimestamp()
       }, { merge: true });
 
-      showFeedback('Success', 'Profile updated successfully!', 'success');
-      // Delay navigation to let the success modal be seen
-      setTimeout(() => router.back(), 2000);
+      showFeedback('Profile Saved', 'Your changes have been updated.', 'success');
+      setTimeout(() => router.back(), 1500);
     } catch (error: any) {
-      console.error("EditProfile Update Error:", error);
-      showFeedback('Update Failed', error.message || "An unexpected error occurred while saving your profile.");
+      showFeedback('Update Error', error.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-      style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        
-        {/* Avatar Selection */}
-        <View style={styles.avatarContainer}>
-          <TouchableOpacity style={styles.avatarWrapper} onPress={showImageSourceOptions}>
-            {image ? (
-              <Image source={{ uri: image }} style={styles.avatar} />
-            ) : (
-              <LinearGradient colors={Gradients.primary} style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={40} color="#FFF" />
-              </LinearGradient>
-            )}
-            <View style={styles.editBadge}>
-              <Ionicons name="camera" size={16} color="#FFF" />
-            </View>
-          </TouchableOpacity>
-          <Text style={styles.avatarHint}>Tap to change profile picture</Text>
-        </View>
-
-        {/* Form Fields */}
-        <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Full Name</Text>
-            <View style={styles.inputWrapper}>
-              <Ionicons name="person-outline" size={20} color={Colors.textSecondary} />
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="Enter your full name"
-                placeholderTextColor={Colors.textMuted}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>College / University</Text>
-            <View style={styles.inputWrapper}>
-              <Ionicons name="school-outline" size={20} color={Colors.textSecondary} />
-              <TextInput
-                style={styles.input}
-                value={college}
-                onChangeText={setCollege}
-                placeholder="Enter your college name"
-                placeholderTextColor={Colors.textMuted}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email Address (Read-only)</Text>
-            <View style={[styles.inputWrapper, styles.disabledInput]}>
-              <Ionicons name="mail-outline" size={20} color={Colors.textMuted} />
-              <TextInput
-                style={[styles.input, { color: Colors.textMuted }]}
-                value={profile?.email}
-                editable={false}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Update Button */}
-        <TouchableOpacity 
-          style={styles.updateBtn} 
-          onPress={handleUpdate}
-          disabled={loading}
-        >
-          <LinearGradient 
-            colors={Gradients.primary} 
-            style={styles.btnGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" />
-                <Text style={styles.btnText}>Save Changes</Text>
-              </>
-            )}
-          </LinearGradient>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+          <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <TouchableOpacity onPress={handleUpdate} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator size="small" color={Colors.primary} />
+          ) : (
+            <Text style={styles.saveBtnText}>Save</Text>
+          )}
+        </TouchableOpacity>
+      </View>
 
-      </ScrollView>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        style={{ flex: 1 }}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent} 
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Avatar Section */}
+          <View style={styles.avatarContainer}>
+            <TouchableOpacity onPress={() => setShowModal(true)} activeOpacity={0.9}>
+                <View style={styles.avatarOutline}>
+                    <View style={styles.avatarMain}>
+                        {image ? (
+                            <Image source={{ uri: image }} style={styles.avatarImg} />
+                        ) : (
+                            <View style={[styles.avatarImg, { backgroundColor: '#2A2A32', justifyContent: 'center', alignItems: 'center' }]}>
+                                <Ionicons name="person" size={50} color="#5A5A5E" />
+                            </View>
+                        )}
+                        <View style={styles.avatarOverlay}>
+                            <Text style={styles.avatarOverlayText}>Edit Profile</Text>
+                        </View>
+                    </View>
+                </View>
+            </TouchableOpacity>
+          </View>
 
-      <ImageSourceModal 
-        isVisible={showModal} 
-        onClose={() => setShowModal(false)}
-        onSelect={pickImage}
-      />
+          {/* Form Group 1 */}
+          <View style={styles.formGroup}>
+            <View style={styles.inputItem}>
+                <Text style={styles.inputLabel}>Full Name</Text>
+                <View style={styles.inputBox}>
+                    <TextInput 
+                        style={styles.input} 
+                        value={name} 
+                        onChangeText={setName}
+                        placeholder="Elena Rodriguez"
+                        placeholderTextColor="#5A5A5E"
+                    />
+                </View>
+            </View>
 
-      <FeedbackModal 
-        isVisible={feedbackVisible}
-        onClose={() => setFeedbackVisible(false)}
-        title={feedbackConfig.title}
-        message={feedbackConfig.message}
-        type={feedbackConfig.type}
-      />
-    </KeyboardAvoidingView>
+            <View style={styles.inputItem}>
+                <Text style={styles.inputLabel}>Major</Text>
+                <View style={styles.selectBox}>
+                    <TextInput 
+                        style={styles.input} 
+                        value={major} 
+                        onChangeText={setMajor}
+                    />
+                    <Ionicons name="chevron-down" size={18} color="#5A5A5E" />
+                </View>
+            </View>
+
+            <View style={styles.inputItem}>
+                <Text style={styles.inputLabel}>Graduation Year</Text>
+                <TouchableOpacity 
+                    style={styles.selectBox} 
+                    onPress={() => setShowGradModal(true)}
+                    activeOpacity={0.7}
+                >
+                    <Text style={[styles.input, !gradYear && { color: '#5A5A5E' }]}>
+                        {gradYear || 'Select Year'}
+                    </Text>
+                    <Ionicons name="calendar-outline" size={18} color={Colors.primary} />
+                </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Bio Section */}
+          <View style={styles.formGroup}>
+            <View style={styles.inputItem}>
+                <Text style={styles.inputLabel}>Bio</Text>
+                <View style={[styles.inputBox, styles.bioBox]}>
+                    <TextInput 
+                        style={[styles.input, styles.bioInput]} 
+                        value={bio} 
+                        onChangeText={setBio}
+                        multiline
+                        placeholder="Tell others about yourself..."
+                        placeholderTextColor="#5A5A5E"
+                    />
+                </View>
+            </View>
+          </View>
+
+          {/* Campus Selection */}
+          <View style={styles.formGroup}>
+            <View style={styles.campusCard}>
+                <View style={styles.campusHeader}>
+                    <Ionicons name="location" size={18} color="#6B52FF" />
+                    <Text style={styles.campusLabel}>Campus Selection</Text>
+                </View>
+                <TouchableOpacity style={styles.campusSelect}>
+                    <Text style={styles.campusName} numberOfLines={1}>
+                        {profile?.collegeName || 'Downtown Tech Hub (North Can'}
+                    </Text>
+                    <Ionicons name="swap-vertical" size={18} color="#5A5A5E" />
+                </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Social Links */}
+          <View style={styles.socialLink}>
+            <LinearGradient colors={['#F58529', '#DD2A7B', '#8134AF']} style={styles.socialIcon} start={{x:0, y:0}} end={{x:1, y:1}}>
+                <Ionicons name="logo-instagram" size={20} color="#FFF" />
+            </LinearGradient>
+            <TextInput 
+                style={styles.socialInput} 
+                value={instagram} 
+                onChangeText={setInstagram}
+                placeholder="@instagram_handle"
+                placeholderTextColor="#5A5A5E"
+            />
+          </View>
+
+          <View style={styles.socialLink}>
+            <View style={[styles.socialIcon, { backgroundColor: '#0077B5' }]}>
+                <Ionicons name="logo-linkedin" size={20} color="#FFF" />
+            </View>
+            <TextInput 
+                style={styles.socialInput} 
+                value={linkedin} 
+                onChangeText={setLinkedin}
+                placeholder="LinkedIn Profile"
+                placeholderTextColor="#5A5A5E"
+            />
+          </View>
+
+          {/* Security */}
+          <TouchableOpacity 
+            style={styles.securityButton} 
+            onPress={() => router.push('/settings')}
+            activeOpacity={0.7}
+          >
+             <View style={styles.securityIconBox}>
+                <Ionicons name="lock-closed" size={18} color="#FF4B7D" />
+             </View>
+             <View style={styles.securityTextContent}>
+                <Text style={styles.securityTitle}>Password & Security</Text>
+                <Text style={styles.securitySub}>Update your login credentials</Text>
+             </View>
+             <Ionicons name="chevron-forward" size={18} color="#5A5A5E" />
+          </TouchableOpacity>
+
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Graduation Year Modal */}
+      <Modal
+        visible={showGradModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowGradModal(false)}
+      >
+        <TouchableOpacity 
+            style={styles.modalOverlay} 
+            activeOpacity={1} 
+            onPress={() => setShowGradModal(false)}
+        >
+            <BlurView intensity={20} style={StyleSheet.absoluteFill} tint="dark" />
+            <View style={styles.gradModalContent}>
+                <View style={styles.gradModalHeader}>
+                    <Text style={styles.gradModalTitle}>Batch Year</Text>
+                    <TouchableOpacity onPress={() => setShowGradModal(false)}>
+                        <Ionicons name="close-circle" size={24} color="#5A5A5E" />
+                    </TouchableOpacity>
+                </View>
+                <ScrollView bounces={false}>
+                    {gradYears.map((year) => (
+                        <TouchableOpacity 
+                            key={year}
+                            style={[
+                                styles.gradOption,
+                                gradYear === year && styles.gradOptionActive
+                            ]}
+                            onPress={() => {
+                                setGradYear(year);
+                                setShowGradModal(false);
+                            }}
+                        >
+                            <Text style={[
+                                styles.gradOptionText,
+                                gradYear === year && styles.gradOptionTextActive
+                            ]}>
+                                Class of {year}
+                            </Text>
+                            {gradYear === year && (
+                                <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />
+                            )}
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <ImageSourceModal isVisible={showModal} onClose={() => setShowModal(false)} onSelect={pickImage} />
+      <FeedbackModal isVisible={feedbackVisible} onClose={() => setFeedbackVisible(false)} title={feedbackConfig.title} message={feedbackConfig.message} type={feedbackConfig.type} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  scroll: { padding: 24, paddingBottom: 60 },
-  avatarContainer: { alignItems: 'center', marginBottom: 32, marginTop: 10 },
-  avatarWrapper: { position: 'relative' },
-  avatar: { width: 110, height: 110, borderRadius: 55, borderWidth: 3, borderColor: Colors.border },
-  avatarPlaceholder: { width: 110, height: 110, borderRadius: 55, justifyContent: 'center', alignItems: 'center' },
-  editBadge: {
-    position: 'absolute', bottom: 5, right: 5,
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 3, borderColor: Colors.bg,
+  container: { flex: 1, backgroundColor: '#09090B' },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 20, 
+    height: 60,
+    marginTop: Platform.OS === 'ios' ? 44 : 0
   },
-  avatarHint: { color: Colors.textSecondary, fontSize: 13, marginTop: 12, fontWeight: '500' },
-  form: { gap: 20 },
-  inputGroup: { gap: 8 },
-  label: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary, marginLeft: 4 },
-  inputWrapper: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.bgCard, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.border,
+  headerBtn: { width: 40, height: 40, justifyContent: 'center' },
+  headerTitle: { color: '#FFF', fontSize: 18, fontWeight: '700', fontFamily: 'PlusJakartaSans_700Bold' },
+  saveBtnText: { color: '#6B52FF', fontSize: 16, fontWeight: '700' },
+
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 10 },
+
+  avatarContainer: { alignItems: 'center', marginVertical: 30 },
+  avatarOutline: { 
+    width: 140, height: 140, 
+    borderRadius: 70, 
+    backgroundColor: '#1E1E24', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    padding: 2
+  },
+  avatarMain: { width: '100%', height: '100%', borderRadius: 70, overflow: 'hidden', position: 'relative' },
+  avatarImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  avatarOverlay: { 
+    position: 'absolute', bottom: 0, left: 0, right: 0, 
+    height: 30, backgroundColor: 'rgba(0,0,0,0.6)', 
+    justifyContent: 'center', alignItems: 'center' 
+  },
+  avatarOverlayText: { color: '#FFF', fontSize: 8, fontWeight: '600' },
+
+  formGroup: { 
+    backgroundColor: '#111116', 
+    borderRadius: 24, 
+    padding: 20, 
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.03)'
+  },
+  inputItem: { marginBottom: 20 },
+  inputItemLast: { marginBottom: 0 },
+  inputLabel: { color: '#8A8D93', fontSize: 13, fontWeight: '500', marginBottom: 12, marginLeft: 4 },
+  inputBox: { 
+    backgroundColor: '#000', 
+    borderRadius: 16, 
+    height: 56, 
+    paddingHorizontal: 16, 
+    justifyContent: 'center' 
+  },
+  selectBox: {
+    backgroundColor: '#000', 
+    borderRadius: 16, 
+    height: 56, 
+    paddingHorizontal: 16, 
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  input: { color: '#FFF', fontSize: 15, fontFamily: 'Manrope_500Medium', flex: 1 },
+  
+  bioBox: { height: 120, paddingVertical: 16, alignItems: 'flex-start' },
+  bioInput: { textAlignVertical: 'top' },
+
+  campusCard: { gap: 12 },
+  campusHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 4 },
+  campusLabel: { color: '#8A8D93', fontSize: 14, fontWeight: '500' },
+  campusSelect: {
+    backgroundColor: '#000', 
+    borderRadius: 16, 
+    height: 56, 
+    paddingHorizontal: 16, 
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  campusName: { color: '#FFF', fontSize: 15, fontFamily: 'Manrope_500Medium', flex: 1 },
+
+  socialLink: {
+    backgroundColor: '#111116',
+    borderRadius: 20,
+    height: 70,
     paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.03)'
   },
-  disabledInput: { backgroundColor: 'rgba(255,255,255,0.02)', borderColor: 'transparent' },
-  input: { flex: 1, color: Colors.textPrimary, fontSize: 15, paddingVertical: 14, marginLeft: 12 },
-  updateBtn: { marginTop: 40, borderRadius: 16, overflow: 'hidden' },
-  btnGradient: { 
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', 
-    paddingVertical: 18, gap: 10 
+  socialIcon: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  socialInput: { color: '#FFF', fontSize: 15, fontFamily: 'Manrope_500Medium', flex: 1 },
+
+  securityButton: {
+    backgroundColor: '#111116',
+    borderRadius: 24,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.03)',
+    marginTop: 10
   },
-  btnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  securityIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(255, 75, 125, 0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  securityTextContent: { flex: 1 },
+  securityTitle: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  securitySub: { color: '#8A8D93', fontSize: 12, marginTop: 2 },
+
+  // Grad Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  gradModalContent: {
+    width: '100%',
+    maxHeight: 400,
+    backgroundColor: '#111116',
+    borderRadius: 32,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  gradModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20
+  },
+  gradModalTitle: {
+    ...Typography.title,
+    color: '#FFF',
+    fontSize: 20
+  },
+  gradOption: {
+    height: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    marginBottom: 8,
+    backgroundColor: 'rgba(255,255,255,0.02)'
+  },
+  gradOptionActive: {
+    backgroundColor: 'rgba(107,82,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(107,82,255,0.2)',
+  },
+  gradOptionText: {
+    ...Typography.body_medium,
+    color: '#8A8D93',
+    fontSize: 16
+  },
+  gradOptionTextActive: {
+    color: '#FFF',
+    fontFamily: 'PlusJakartaSans_700Bold'
+  }
 });

@@ -5,9 +5,10 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useRouter } from 'expo-router';
+import { useAuth } from '../contexts/AuthContext';
 import { Colors, Gradients } from '../constants/theme';
 
 const { width } = Dimensions.get('window');
@@ -30,10 +31,13 @@ export default function SearchScreen() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const router = useRouter();
+  const { profile } = useAuth();
 
   useEffect(() => {
-    fetchAllData();
-  }, []);
+    if (profile?.collegeId) {
+      fetchAllData();
+    }
+  }, [profile?.collegeId]);
 
   const fetchAllData = async () => {
     setLoading(true);
@@ -41,21 +45,21 @@ export default function SearchScreen() {
       const all: SearchResult[] = [];
       
       // 1. Lost & Found
-      const lostSnap = await getDocs(query(collection(db, 'lost_found'), orderBy('createdAt', 'desc')));
+      const lostSnap = await getDocs(query(collection(db, 'lost_found'), where('collegeId', '==', profile?.collegeId), orderBy('createdAt', 'desc')));
       lostSnap.forEach(doc => {
         const data = doc.data();
         all.push({ id: doc.id, title: data.title, description: data.description, type: data.type as any, imageUrl: data.imageUrl, createdAt: data.createdAt });
       });
 
       // 2. Skills
-      const skillSnap = await getDocs(query(collection(db, 'skills'), orderBy('createdAt', 'desc')));
+      const skillSnap = await getDocs(query(collection(db, 'skills'), where('collegeId', '==', profile?.collegeId), orderBy('createdAt', 'desc')));
       skillSnap.forEach(doc => {
         const data = doc.data();
         all.push({ id: doc.id, title: data.title, description: data.description, type: 'skill', category: data.category, createdAt: data.createdAt });
       });
 
       // 3. Marketplace
-      const marketSnap = await getDocs(query(collection(db, 'marketplace'), orderBy('createdAt', 'desc')));
+      const marketSnap = await getDocs(query(collection(db, 'marketplace'), where('collegeId', '==', profile?.collegeId), orderBy('createdAt', 'desc')));
       marketSnap.forEach(doc => {
         const data = doc.data();
         all.push({ id: doc.id, title: data.title, description: data.category, type: 'product', price: data.price, imageUrl: data.imageUrl, createdAt: data.createdAt });

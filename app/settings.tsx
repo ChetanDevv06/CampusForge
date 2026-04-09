@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Switch, Alert, StatusBar, Linking
+  Switch, StatusBar, Linking, Platform, Image
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Gradients } from '../constants/theme';
+import { Colors, Typography, Spacing, Roundness, Gradients } from '../constants/theme';
 import { auth, db } from '../firebaseConfig';
-import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
-import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
-import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
-import PasswordModal from '../components/PasswordModal';
+import { LinearGradient } from 'expo-linear-gradient';
 
 type SectionProps = { title: string; children: React.ReactNode };
 const Section = ({ title, children }: SectionProps) => (
@@ -24,243 +20,259 @@ const Section = ({ title, children }: SectionProps) => (
 
 type RowProps = {
   icon: string;
-  iconColor?: string;
   label: string;
   sublabel?: string;
   onPress?: () => void;
   rightElement?: React.ReactNode;
   showChevron?: boolean;
-  danger?: boolean;
 };
-const Row = ({ icon, iconColor, label, sublabel, onPress, rightElement, showChevron = true, danger = false }: RowProps) => (
+const Row = ({ icon, label, sublabel, onPress, rightElement, showChevron = true }: RowProps) => (
   <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={onPress ? 0.7 : 1}>
-    <View style={[styles.rowIcon, { backgroundColor: danger ? 'rgba(255,107,107,0.15)' : Colors.bgSurface }]}>
-      <Ionicons name={icon as any} size={20} color={iconColor || (danger ? Colors.danger : Colors.primary)} />
+    <View style={styles.rowIconContainer}>
+      <Ionicons name={icon as any} size={20} color="#8E8E93" />
     </View>
     <View style={styles.rowContent}>
-      <Text style={[styles.rowLabel, danger && { color: Colors.danger }]}>{label}</Text>
+      <Text style={styles.rowLabel}>{label}</Text>
       {sublabel && <Text style={styles.rowSublabel}>{sublabel}</Text>}
     </View>
-    {rightElement ?? (showChevron && onPress && <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />)}
+    {rightElement ?? (showChevron && onPress && <Ionicons name="chevron-forward" size={18} color="#444" />)}
   </TouchableOpacity>
 );
 
 export default function SettingsScreen() {
-  const { signOutUser } = useAuth();
+  const { signOutUser, profile } = useAuth();
   const router = useRouter();
 
-  // Modal State
-  const [feedbackVisible, setFeedbackVisible] = useState(false);
-  const [feedbackConfig, setFeedbackConfig] = useState<{
-    title: string, 
-    message: string, 
-    type: FeedbackType,
-    buttonText?: string,
-    onAction?: () => void
-  }>({
-    title: '', message: '', type: 'info'
-  });
-
-  const showFeedback = (title: string, message: string, type: FeedbackType = 'error', buttonText?: string, onAction?: () => void) => {
-    setFeedbackConfig({ title, message, type, buttonText, onAction });
-    setFeedbackVisible(true);
-  };
-
-  // Notification prefs (local state - can be persisted to Firestore later)
   const [pushEnabled, setPushEnabled] = useState(true);
-  const [chatEnabled, setChatEnabled] = useState(true);
-  const [marketEnabled, setMarketEnabled] = useState(false);
-  const [profileVisible, setProfileVisible] = useState(true);
-  const [showOnline, setShowOnline] = useState(true);
-  const [passModalVisible, setPassModalVisible] = useState(false);
-
-  const handlePasswordUpdate = async (currentPass: string, newPass: string) => {
-    const user = auth.currentUser;
-    if (!user || !user.email) return;
-
-    try {
-      // 1. Re-authenticate
-      const credential = EmailAuthProvider.credential(user.email, currentPass);
-      await reauthenticateWithCredential(user, credential);
-      
-      // 2. Update password
-      await updatePassword(user, newPass);
-      
-      setPassModalVisible(false);
-      showFeedback('Password Updated', 'Your security credentials have been refreshed successfully.', 'success');
-    } catch (e: any) {
-      throw new Error(e.message || 'Verification failed. Please check your current password.');
-    }
-  };
-
-  const handleDeleteAccount = () => {
-    showFeedback(
-      'Delete Account?',
-      'This action is permanent and cannot be undone. All your data, posts, and listings will be deleted.',
-      'error',
-      'Delete Permanently',
-      async () => {
-        try {
-          const user = auth.currentUser;
-          if (!user) return;
-          const uid = user.uid;
-
-          // 1. Scrub user posts from all collections
-          const collections = ['lost_found', 'skills', 'marketplace'];
-          for (const collName of collections) {
-            const q = query(collection(db, collName), where('userId', '==', uid));
-            const snap = await getDocs(q);
-            for (const d of snap.docs) {
-              await deleteDoc(doc(db, collName, d.id));
-            }
-          }
-
-          // 2. Delete user document
-          await deleteDoc(doc(db, 'users', uid));
-
-          // 3. Delete Auth User
-          await deleteUser(user);
-          await signOutUser();
-          router.replace('/(auth)/login');
-        } catch (e: any) {
-          showFeedback('Error', e.message + '\n\nYou may need to log out and log back in before deleting for security re-authentication.');
-        }
-      }
-    );
-  };
+  const [emailDigest, setEmailDigest] = useState(false);
 
   const handleSignOut = async () => {
     await signOutUser();
     router.replace('/(auth)/login');
   };
 
-  const Toggle = ({ value, onValueChange }: { value: boolean; onValueChange: (v: boolean) => void }) => (
-    <Switch
-      value={value}
-      onValueChange={onValueChange}
-      trackColor={{ false: Colors.bgSurface, true: Colors.primary }}
-      thumbColor="#FFF"
-      ios_backgroundColor={Colors.bgSurface}
-    />
-  );
+  const initials = profile?.name?.split(' ').map((w: any) => w[0]).join('').toUpperCase() || 'U';
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color="#FFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={styles.headerRightText}>{initials}</Text>
+      </View>
 
-      {/* Profile Preview */}
-      <LinearGradient colors={Gradients.primary} style={styles.profileBanner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-        <View style={styles.avatarCircle}>
-          <Text style={styles.avatarText}>{auth.currentUser?.email?.charAt(0).toUpperCase() || 'U'}</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        
+        {/* Profile Card */}
+        <View style={styles.profileCard}>
+          <TouchableOpacity onPress={() => router.push('/edit-profile')} style={styles.avatarWrapper}>
+            {profile?.avatarUrl ? (
+              <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
+            ) : (
+              <LinearGradient colors={Gradients.primary} style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarText}>{initials[0]}</Text>
+              </LinearGradient>
+            )}
+            <View style={styles.editIconBadge}>
+              <Ionicons name="pencil" size={12} color="#FFF" />
+            </View>
+          </TouchableOpacity>
+          
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileName}>{profile?.name || 'Alex Rivera'}</Text>
+            <Text style={styles.profileSub}>
+              {profile?.major || 'Computer Science'} • {profile?.gradYear || 'Junior'}
+            </Text>
+          </View>
+
+          <View style={styles.verifiedBadge}>
+            <Text style={styles.verifiedText}>VERIFIED</Text>
+          </View>
         </View>
-        <View>
-          <Text style={styles.bannerEmail}>{auth.currentUser?.email}</Text>
-          <Text style={styles.bannerSub}>Campus Student</Text>
-        </View>
-      </LinearGradient>
 
-      {/* Account */}
-      <Section title="Account">
-        <Row icon="person-outline" label="Edit Profile" sublabel="Update your name and college" onPress={() => router.push('/edit-profile')} />
-        <Row icon="lock-closed-outline" label="Change Password" sublabel="Update your login password" onPress={() => setPassModalVisible(true)} />
-        <Row icon="mail-outline" label="Email" sublabel={auth.currentUser?.email || ''} showChevron={false} />
-      </Section>
+        {/* Account Section */}
+        <Section title="ACCOUNT">
+          <Row icon="person-outline" label="Profile Information" onPress={() => router.push('/edit-profile')} />
+          <Row icon="shield-outline" label="Security & Password" onPress={() => {}} />
+        </Section>
 
-      {/* Notifications */}
-      <Section title="Notifications">
-        <Row
-          icon="notifications-outline" label="Push Notifications" sublabel="App alerts and updates"
-          rightElement={<Toggle value={pushEnabled} onValueChange={setPushEnabled} />} showChevron={false}
-        />
-        <Row
-          icon="chatbubble-outline" label="Chat Messages" sublabel="New message alerts"
-          rightElement={<Toggle value={chatEnabled} onValueChange={setChatEnabled} />} showChevron={false}
-        />
-        <Row
-          icon="storefront-outline" label="Marketplace Updates" sublabel="Offers and price drops"
-          rightElement={<Toggle value={marketEnabled} onValueChange={setMarketEnabled} />} showChevron={false}
-        />
-      </Section>
+        {/* Notifications Section */}
+        <Section title="NOTIFICATIONS">
+          <Row 
+            icon="notifications-outline" 
+            label="Push Notifications" 
+            showChevron={false}
+            rightElement={
+              <Switch 
+                value={pushEnabled} 
+                onValueChange={setPushEnabled}
+                trackColor={{ false: '#2C2C2E', true: '#6B52FF' }}
+                thumbColor="#FFF"
+              />
+            }
+          />
+          <Row 
+            icon="mail-outline" 
+            label="Email Digest" 
+            showChevron={false}
+            rightElement={
+              <Switch 
+                value={emailDigest} 
+                onValueChange={setEmailDigest}
+                trackColor={{ false: '#2C2C2E', true: '#6B52FF' }}
+                thumbColor="#FFF"
+              />
+            }
+          />
+        </Section>
 
-      {/* Privacy */}
-      <Section title="Privacy">
-        <Row
-          icon="eye-outline" label="Public Profile" sublabel="Others can view your profile"
-          rightElement={<Toggle value={profileVisible} onValueChange={setProfileVisible} />} showChevron={false}
-        />
-        <Row
-          icon="radio-outline" label="Show Online Status" sublabel="Let others see when you're active"
-          rightElement={<Toggle value={showOnline} onValueChange={setShowOnline} />} showChevron={false}
-        />
-      </Section>
+        {/* Preferences Section */}
+        <Section title="PREFERENCES">
+          <Row icon="moon-outline" label="Theme" sublabel="Dark Mode" onPress={() => {}} />
+          <Row icon="globe-outline" label="Language" sublabel="English (US)" onPress={() => {}} />
+        </Section>
 
-      {/* About */}
-      <Section title="About">
-        <Row icon="information-circle-outline" label="App Version" sublabel="CampusForge v1.0.0" showChevron={false} />
-        <Row icon="document-text-outline" label="Terms of Service" onPress={() => Linking.openURL('https://campusforge.app/terms')} />
-        <Row icon="shield-outline" label="Privacy Policy" onPress={() => Linking.openURL('https://campusforge.app/privacy')} />
-        <Row icon="star-outline" label="Rate CampusForge" iconColor={Colors.warning} onPress={() => showFeedback('Thank you!', 'Rating will be available on the app stores.', 'success')} />
-      </Section>
+        {/* Support Section */}
+        <Section title="SUPPORT">
+          <Row icon="help-circle-outline" label="Help Center" onPress={() => {}} />
+          <Row icon="shield-checkmark-outline" label="Privacy Policy" onPress={() => {}} />
+          <Row icon="document-text-outline" label="Terms of Service" onPress={() => {}} />
+        </Section>
 
-      {/* Danger Zone */}
-      <Section title="Danger Zone">
-        <Row icon="log-out-outline" label="Log Out" danger onPress={handleSignOut} />
-        <Row icon="trash-outline" label="Delete Account" sublabel="Permanently remove your account" danger onPress={handleDeleteAccount} />
-      </Section>
+        {/* Sign Out Button */}
+        <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+          <Ionicons name="log-out-outline" size={20} color="#FF4B4B" style={{ marginRight: 10 }} />
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
 
-      <View style={{ height: 40 }} />
+        <Text style={styles.versionText}>CAMPUS ETHER V2.4.0-BETA</Text>
+      </ScrollView>
 
-      <FeedbackModal 
-        isVisible={feedbackVisible}
-        onClose={() => setFeedbackVisible(false)}
-        title={feedbackConfig.title}
-        message={feedbackConfig.message}
-        type={feedbackConfig.type}
-        buttonText={feedbackConfig.buttonText}
-        onAction={feedbackConfig.onAction}
-      />
-      <PasswordModal 
-        visible={passModalVisible}
-        onClose={() => setPassModalVisible(false)}
-        onConfirm={handlePasswordUpdate}
-      />
-    </ScrollView>
+      {/* Placeholder Bottom Bar */}
+      <View style={styles.bottomBarPlace}>
+         {/* This is just to visual match the image provided */}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  scroll: { paddingBottom: 24 },
-  profileBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 16,
-    paddingHorizontal: 20, paddingVertical: 24, marginBottom: 8,
+  container: { flex: 1, backgroundColor: '#09090B' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
-  avatarCircle: {
-    width: 52, height: 52, borderRadius: 26,
-    backgroundColor: 'rgba(255,255,255,0.25)', justifyContent: 'center', alignItems: 'center',
+  backBtn: { padding: 5 },
+  headerTitle: { color: '#FFF', fontSize: 20, fontWeight: '700', fontFamily: 'PlusJakartaSans_700Bold' },
+  headerRightText: { color: '#FFF', fontSize: 18, fontWeight: '600', opacity: 0.9 },
+
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  
+  // Profile Card
+  profileCard: {
+    backgroundColor: '#15151A',
+    borderRadius: 32,
+    padding: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.03)',
   },
-  avatarText: { fontSize: 22, fontWeight: '800', color: '#FFF' },
-  bannerEmail: { fontSize: 15, fontWeight: '700', color: '#FFF' },
-  bannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
-  section: { marginBottom: 8 },
+  avatarWrapper: { position: 'relative' },
+  avatar: { width: 80, height: 80, borderRadius: 40 },
+  avatarPlaceholder: { width: 80, height: 80, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  avatarText: { color: '#FFF', fontSize: 32, fontWeight: 'bold' },
+  editIconBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#6B52FF',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#15151A',
+  },
+  profileInfo: { flex: 1, marginLeft: 16 },
+  profileName: { color: '#FFF', fontSize: 20, fontWeight: '700', marginBottom: 4 },
+  profileSub: { color: '#8E8E93', fontSize: 14 },
+  verifiedBadge: {
+    backgroundColor: 'rgba(107, 82, 255, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  verifiedText: { color: '#6B52FF', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+
+  // Sections
+  section: { marginBottom: 24 },
   sectionTitle: {
-    fontSize: 12, fontWeight: '700', color: Colors.textMuted,
-    textTransform: 'uppercase', letterSpacing: 1,
-    marginHorizontal: 20, marginBottom: 8, marginTop: 16,
+    color: '#8A8A8E',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginBottom: 12,
+    marginLeft: 4,
   },
   sectionCard: {
-    marginHorizontal: 16, backgroundColor: Colors.bgCard,
-    borderRadius: 18, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden',
+    backgroundColor: '#15151A',
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.03)',
   },
   row: {
-    flexDirection: 'row', alignItems: 'center', padding: 14,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.03)',
   },
-  rowIcon: {
-    width: 38, height: 38, borderRadius: 10,
-    justifyContent: 'center', alignItems: 'center', marginRight: 14,
+  rowIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#1C1C23',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
   rowContent: { flex: 1 },
-  rowLabel: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
-  rowSublabel: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+  rowLabel: { color: '#FFF', fontSize: 16, fontWeight: '500' },
+  rowSublabel: { color: '#8E8E93', fontSize: 12, marginTop: 2 },
+
+  // Sign Out
+  signOutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,75,75,0.05)',
+    height: 60,
+    borderRadius: 30,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,75,75,0.1)',
+  },
+  signOutText: { color: '#FF4B4B', fontSize: 16, fontWeight: '700' },
+  versionText: {
+    textAlign: 'center',
+    color: '#3A3A3C',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginTop: 24,
+  },
+  bottomBarPlace: { height: 20 },
 });
