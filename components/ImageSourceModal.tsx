@@ -1,11 +1,11 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Modal, Pressable, Platform
+  Modal, Pressable, Platform, Dimensions
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Gradients } from '../constants/theme';
+import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface ImageSourceModalProps {
@@ -14,28 +14,38 @@ interface ImageSourceModalProps {
   onSelect: (useCamera: boolean) => void;
 }
 
+const { width } = Dimensions.get('window');
+
 export default function ImageSourceModal({ isVisible, onClose, onSelect }: ImageSourceModalProps) {
   return (
     <Modal
       visible={isVisible}
       transparent={true}
       animationType="fade"
+      statusBarTranslucent
       onRequestClose={onClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <View style={styles.overlay}>
+        <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+        
+        <Pressable style={styles.flexFill} onPress={onClose} />
+        
         <View style={styles.container}>
           <View style={styles.sheet}>
-            {/* Header / Drag Indicator */}
+            {/* Drag Indicator */}
             <View style={styles.indicator} />
             
             <View style={styles.content}>
-              <Text style={styles.title}>Upload Image</Text>
-              <Text style={styles.subtitle}>Choose a source for your photo</Text>
+              <View style={styles.headerArea}>
+                <Text style={styles.title}>Capture Protocol</Text>
+                <Text style={styles.subtitle}>Choose a source to forge your imagery</Text>
+              </View>
 
               <View style={styles.options}>
                 <TouchableOpacity 
-                  style={styles.optionBtn} 
+                  style={styles.commandCard} 
                   onPress={() => { onSelect(true); onClose(); }}
+                  activeOpacity={0.8}
                 >
                   <LinearGradient 
                     colors={Gradients.primary} 
@@ -43,29 +53,30 @@ export default function ImageSourceModal({ isVisible, onClose, onSelect }: Image
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                   >
-                    <Ionicons name="camera" size={24} color="#FFF" />
+                    <Ionicons name="camera" size={30} color={Colors.on_primary} />
                   </LinearGradient>
-                  <Text style={styles.optionLabel}>Take Photo</Text>
+                  <Text style={styles.optionLabel}>Capture Live</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  style={styles.optionBtn} 
+                  style={styles.commandCard} 
                   onPress={() => { onSelect(false); onClose(); }}
+                  activeOpacity={0.8}
                 >
-                  <View style={[styles.iconBox, { backgroundColor: Colors.bgSurface, borderWidth: 1, borderColor: Colors.border }]}>
-                    <Ionicons name="images" size={24} color={Colors.primary} />
+                  <View style={styles.tonalIconBox}>
+                    <Ionicons name="images" size={30} color={Colors.primary} />
                   </View>
-                  <Text style={styles.optionLabel}>Choose from Gallery</Text>
+                  <Text style={styles.optionLabel}>Forge Archives</Text>
                 </TouchableOpacity>
               </View>
 
               <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>Relinquish</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
@@ -73,81 +84,93 @@ export default function ImageSourceModal({ isVisible, onClose, onSelect }: Image
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'flex-end',
   },
+  flexFill: { flex: 1 },
   container: {
-    padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    padding: Spacing.md,
+    paddingBottom: Platform.OS === 'ios' ? 48 : Spacing.xl,
   },
   sheet: {
-    backgroundColor: Colors.bgCard,
-    borderRadius: 32,
+    backgroundColor: Colors.surface_container_low,
+    borderRadius: Roundness.lg,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.border,
+    ...Shadows.ambient,
   },
   indicator: {
-    width: 40,
-    height: 4,
-    backgroundColor: Colors.border,
-    borderRadius: 2,
+    width: 44,
+    height: 5,
+    backgroundColor: Colors.surface_container_high,
+    borderRadius: 2.5,
     alignSelf: 'center',
     marginTop: 12,
   },
   content: {
-    padding: 24,
+    padding: Spacing.xl,
+    paddingTop: Spacing.lg,
     alignItems: 'center',
   },
+  headerArea: { alignItems: 'center', marginBottom: Spacing.xxl },
   title: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-    marginBottom: 4,
+    ...Typography.display,
+    fontSize: 24,
+    color: Colors.on_background,
+    textAlign: 'center',
   },
   subtitle: {
+    ...Typography.body,
+    color: Colors.on_surface_variant,
     fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 24,
+    marginTop: 4,
+    textAlign: 'center',
   },
   options: {
     flexDirection: 'row',
-    gap: 20,
-    marginBottom: 24,
+    gap: Spacing.md,
+    marginBottom: Spacing.xxl,
+    width: '100%',
   },
-  optionBtn: {
+  commandCard: {
     flex: 1,
     alignItems: 'center',
-    backgroundColor: Colors.bgSurface,
-    padding: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    justifyContent: 'center',
+    backgroundColor: Colors.surface_container_high,
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Roundness.md,
+    gap: Spacing.md,
   },
   iconBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
+    width: 64,
+    height: 64,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+  },
+  tonalIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    backgroundColor: Colors.surface_container_low,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   optionLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.textPrimary,
+    ...Typography.label,
+    color: Colors.on_background,
+    fontSize: 14,
     textAlign: 'center',
   },
   cancelBtn: {
     width: '100%',
     paddingVertical: 16,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: Roundness.full,
+    backgroundColor: Colors.surface_container_high,
     alignItems: 'center',
   },
   cancelText: {
+    ...Typography.title,
     fontSize: 15,
-    fontWeight: '600',
-    color: Colors.textMuted,
+    color: Colors.on_surface_variant,
   },
 });

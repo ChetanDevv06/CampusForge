@@ -13,12 +13,16 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  Platform,
+  Dimensions
 } from 'react-native';
-import { Colors, Gradients } from '../../constants/theme';
+import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
 import { auth, db } from '../../firebaseConfig';
 import { startChat } from '../../utils/chat';
 import ModernAlert from '../../components/ModernAlert';
+
+const { width } = Dimensions.get('window');
 
 export default function SkillDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -57,12 +61,11 @@ export default function SkillDetails() {
   const handleDelete = async () => {
     try {
       setLoading(true);
-      const skillId = (skill as any).id;
-      await deleteDoc(doc(db, 'skills', skillId));
+      await deleteDoc(doc(db, 'skills', skill.id));
       router.back();
     } catch (e) {
       console.error(e);
-      Alert.alert("Error", "Failed to delete the skill. Please try again.");
+      Alert.alert("Forge Error", "Failed to relinquish this expertise listing.");
       setLoading(false);
     }
   };
@@ -78,10 +81,10 @@ export default function SkillDetails() {
   if (!skill) {
     return (
       <View style={styles.error}>
-        <Ionicons name="alert-circle-outline" size={48} color={Colors.textMuted} />
-        <Text style={styles.errorText}>Skill listing not found</Text>
+        <Ionicons name="flash-off" size={64} color={Colors.surface_container_high} />
+        <Text style={styles.errorText}>Expertise listing not found</Text>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>Go Back</Text>
+          <Text style={styles.backBtnText}>Return to Hub</Text>
         </TouchableOpacity>
       </View>
     );
@@ -89,149 +92,153 @@ export default function SkillDetails() {
 
   const isOwner = uid === skill.userId;
   const isOffer = skill.type === 'offer';
+  const accentColor = isOffer ? Colors.primary : Colors.tertiary;
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="light-content" />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-
-        {/* Header Hero */}
-        <LinearGradient colors={isOffer ? Gradients.skillOffer : Gradients.skillRequest} style={styles.hero}>
+      
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Expertise Pedestal */}
+        <LinearGradient 
+          colors={isOffer ? Gradients.primary : [Colors.tertiary, Colors.tertiary_container]} 
+          style={styles.hero}
+          start={{x:0, y:0}} end={{x:1, y:1}}
+        >
           <TouchableOpacity style={styles.absBack} onPress={() => router.back()}>
             <BlurView intensity={30} tint="dark" style={styles.backBlur}>
-              <Ionicons name="chevron-back" size={24} color="#FFF" />
+              <Ionicons name="chevron-back" size={24} color={Colors.on_primary} />
             </BlurView>
           </TouchableOpacity>
 
           <View style={styles.heroContent}>
-            <View style={styles.iconBox}>
-              <Ionicons name={isOffer ? 'bulb' : 'book'} size={32} color="#FFF" />
+            <View style={[styles.iconBox, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Ionicons name={isOffer ? 'bulb' : 'school'} size={40} color={Colors.on_primary} />
             </View>
             <Text style={styles.heroTitle}>{skill.title}</Text>
-            <View style={styles.heroPills}>
-              <View style={styles.heroPill}>
-                <Text style={styles.heroPillText}>{skill.category}</Text>
+            <View style={styles.heroTags}>
+              <View style={styles.heroTag}>
+                <Text style={styles.heroTagText}>{skill.category}</Text>
               </View>
-              <View style={[styles.heroPill, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
-                <Text style={styles.heroPillText}>{isOffer ? 'Offering' : 'Requesting'}</Text>
+              <View style={[styles.heroTag, { backgroundColor: 'rgba(0,0,0,0.15)' }]}>
+                <Text style={styles.heroTagText}>{isOffer ? 'MENTOR' : 'LEARNER'}</Text>
               </View>
             </View>
           </View>
-
-          <LinearGradient colors={['transparent', 'rgba(10,10,18,0.5)', Colors.bg]} style={styles.heroOverlay} />
+          
+          <LinearGradient 
+            colors={['transparent', 'rgba(10,10,18,0.4)', Colors.background]} 
+            style={styles.heroOverlay} 
+          />
         </LinearGradient>
 
-        {/* Content */}
         <View style={styles.content}>
-          <Text style={styles.sectionTitle}>Overview</Text>
-          <Text style={styles.description}>{skill.description}</Text>
+          <View style={styles.infoBlock}>
+            <Text style={[styles.sectionHeading, { color: accentColor }]}>Expertise Overview</Text>
+            <Text style={styles.description}>{skill.description}</Text>
+          </View>
 
-          <View style={styles.divider} />
-
-          <Text style={styles.sectionTitle}>Instructor / Learner</Text>
-          <View style={styles.authorCard}>
-            {authorProfile?.avatarUrl ? (
-              <Image source={{ uri: authorProfile.avatarUrl }} style={styles.authorAvatar} />
-            ) : (
-              <LinearGradient colors={Gradients.primary} style={styles.authorAvatar}>
-                <Text style={styles.authorInitial}>{(authorProfile?.name || skill.userName || 'S').charAt(0).toUpperCase()}</Text>
-              </LinearGradient>
-            )}
-            <View style={styles.authorInfo}>
-              <Text style={styles.authorName}>{authorProfile?.name || skill.userName || 'Campus Student'}</Text>
-              <Text style={styles.authorRole}>Skills Exchange Member</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.reviewBtn}
+          {/* Mentor Presence */}
+          <View style={styles.infoBlock}>
+            <Text style={[styles.sectionHeading, { color: accentColor }]}>Identity Provider</Text>
+            <TouchableOpacity 
+              style={styles.identityToken}
               onPress={() => router.push({ pathname: '/review/[id]', params: { id: skill.userId } } as any)}
             >
-              <Ionicons name="star" size={14} color="#FFD700" />
-              <Text style={styles.reviewBtnText}>Reviews</Text>
+              <View style={styles.avatarPill}>
+                {authorProfile?.avatarUrl ? (
+                  <Image source={{ uri: authorProfile.avatarUrl }} style={styles.avatarImg} />
+                ) : (
+                  <LinearGradient colors={Gradients.primary} style={styles.avatarImg}>
+                    <Text style={styles.avatarChar}>{(authorProfile?.name || 'S')[0]}</Text>
+                  </LinearGradient>
+                )}
+              </View>
+              <View style={styles.identityMeta}>
+                <Text style={styles.identityName}>{authorProfile?.name || 'Campus Talent'}</Text>
+                <Text style={styles.identitySub}>Verified Professional • {authorProfile?.college || 'Verified'}</Text>
+              </View>
+              <Ionicons name="chatbubble-outline" size={18} color={Colors.on_surface_variant} />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.divider} />
-
-          {/* Quick Info Grid */}
-          <View style={styles.infoGrid}>
-            <View style={styles.infoItem}>
-              <Ionicons name="time-outline" size={20} color={isOffer ? Colors.primary : Colors.warning} />
-              <Text style={styles.infoValue}>Flexible Timing</Text>
+          {/* Collaborative Grid */}
+          <View style={styles.collabRow}>
+            <View style={styles.collabTile}>
+              <Ionicons name="time" size={20} color={accentColor} />
+              <Text style={styles.collabLabel}>Flexible Pace</Text>
             </View>
-            <View style={styles.infoItem}>
-              <Ionicons name="people-outline" size={20} color={isOffer ? Colors.primary : Colors.warning} />
-              <Text style={styles.infoValue}>1-on-1 Sessions</Text>
+            <View style={styles.collabTile}>
+              <Ionicons name="people" size={20} color={accentColor} />
+              <Text style={styles.collabLabel}>Direct Bridge</Text>
             </View>
-            <View style={styles.infoItem}>
-              <Ionicons name="school-outline" size={20} color={isOffer ? Colors.primary : Colors.warning} />
-              <Text style={styles.infoValue}>Peer Learning</Text>
+            <View style={styles.collabTile}>
+              <Ionicons name="medal" size={20} color={accentColor} />
+              <Text style={styles.collabLabel}>Peer Mastered</Text>
             </View>
           </View>
         </View>
       </ScrollView>
 
-      {/* Action Bar */}
-      {isOwner ? (
-        <View style={styles.actionBar}>
-          <BlurView intensity={80} tint="dark" style={styles.actionBlur}>
-            <View style={styles.dualActions}>
+      {/* Floating Dialogue Bar */}
+      <View style={[styles.tacticalBar, { paddingBottom: Platform.OS === 'ios' ? 40 : 20 }]}>
+        <BlurView intensity={30} tint="dark" style={styles.actionBarBlur}>
+          {isOwner ? (
+            <View style={styles.ownerActions}>
               <TouchableOpacity 
-                style={[styles.actionBtn, styles.editBtn]}
+                style={[styles.actionBtn, { backgroundColor: Colors.primary }]}
                 onPress={() => router.push({ pathname: '/post-skill', params: { editId: skill.id } } as any)}
               >
-                <Ionicons name="create-outline" size={20} color="#FFF" />
-                <Text style={styles.actionText}>Edit</Text>
+                <Ionicons name="create" size={20} color={Colors.on_primary} />
+                <Text style={styles.actionBtnText}>Update Forge</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={[styles.actionBtn, styles.deleteBtn]}
+                style={[styles.actionBtn, { backgroundColor: Colors.error, width: 56, flex: 0 }]}
                 onPress={() => setShowDeleteAlert(true)}
               >
-                <Ionicons name="trash-outline" size={20} color="#FFF" />
-                <Text style={styles.actionText}>Delete</Text>
+                <Ionicons name="trash" size={20} color={Colors.on_primary} />
               </TouchableOpacity>
             </View>
-          </BlurView>
-        </View>
-      ) : (
-        skill.status !== 'completed' && (
-          <View style={styles.actionBar}>
-            <BlurView intensity={80} tint="dark" style={styles.actionBlur}>
-              <TouchableOpacity
-                style={styles.mainAction}
-                onPress={() =>
-                  startChat(
-                    skill.userId,
-                    authorProfile?.name || skill.userName || 'Campus Student',
-                    router,
-                    {
-                      type: "skill",
-                      title: skill.title,
-                      itemId: skill.id
-                    }
-                  )
-                }
+          ) : (
+            <TouchableOpacity 
+              style={styles.primaryAction}
+              onPress={() => 
+                startChat(
+                  skill.userId,
+                  authorProfile?.name || skill.userName || 'Campus Student',
+                  router,
+                  {
+                    type: "skill",
+                    title: skill.title,
+                    itemId: skill.id
+                  }
+                )
+              }
+            >
+              <LinearGradient 
+                colors={isOffer ? Gradients.primary : [Colors.tertiary, Colors.tertiary_container]} 
+                style={styles.mainActionGrad}
+                start={{x:0, y:0}} end={{x:1, y:1}}
               >
-                <LinearGradient
-                  colors={isOffer ? Gradients.skillOffer : Gradients.skillRequest}
-                  style={styles.actionGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                >
-                  <Ionicons name="sparkles" size={20} color="#FFF" />
-                  <Text style={styles.actionText}>{isOffer ? 'Request Learning Session' : 'Teach this Skill'}</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </BlurView>
-          </View>
-        )
-      )}
+                <Ionicons name="sparkles" size={22} color={Colors.on_primary} />
+                <Text style={styles.mainActionText}>{isOffer ? 'Request Learning' : 'Offer Mentorship'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+        </BlurView>
+      </View>
 
       <ModernAlert 
         visible={showDeleteAlert}
-        title="Remove Skill?"
-        message="Are you sure you want to delete this skill offer/request? This cannot be undone."
+        title="Strike Expertise?"
+        message="This will remove your skill profile from the CampusForge archives permanently."
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteAlert(false)}
-        confirmText="Delete"
+        confirmText="Strike"
         isDestructive
       />
     </View>
@@ -239,65 +246,61 @@ export default function SkillDetails() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  loading: { flex: 1, backgroundColor: Colors.bg, justifyContent: 'center', alignItems: 'center' },
-  error: { flex: 1, backgroundColor: Colors.bg, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  errorText: { color: Colors.textMuted, fontSize: 16, marginTop: 12, marginBottom: 24 },
-  backBtn: { backgroundColor: Colors.bgSurface, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.border },
-  backBtnText: { color: Colors.textPrimary, fontWeight: '700' },
-  hero: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 60, position: 'relative' },
+  container: { flex: 1, backgroundColor: Colors.background },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  error: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
+  errorText: { ...Typography.title, color: Colors.on_surface_variant, marginTop: 12 },
+  backBtn: { marginTop: 24, paddingVertical: 12, paddingHorizontal: 24, borderRadius: Roundness.md, backgroundColor: Colors.surface_container_high },
+  backBtnText: { ...Typography.label, color: Colors.on_background },
+
+  scrollContent: { paddingBottom: 140 },
+  hero: { paddingTop: 80, paddingHorizontal: Spacing.margin, paddingBottom: 80, position: 'relative' },
   heroContent: { alignItems: 'center', marginTop: 20 },
-  iconBox: { width: 64, height: 64, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  heroTitle: { fontSize: 26, fontWeight: '800', color: '#FFF', textAlign: 'center', marginBottom: 12 },
-  heroPills: { flexDirection: 'row', gap: 8 },
-  heroPill: { backgroundColor: 'rgba(0,0,0,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  heroPillText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
-  heroOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 100 },
-  absBack: { position: 'absolute', top: 50, left: 20, zIndex: 10 },
-  backBlur: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  content: { paddingHorizontal: 20, marginTop: -20 },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: Colors.textPrimary, marginBottom: 16, textTransform: 'uppercase', letterSpacing: 1 },
-  description: { fontSize: 15, color: Colors.textSecondary, lineHeight: 26 },
-  divider: { height: 1, backgroundColor: Colors.border, marginVertical: 32 },
-  authorCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.bgSurface, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: Colors.border },
-  authorAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  authorInitial: { color: '#FFF', fontSize: 20, fontWeight: '800' },
-  authorInfo: { flex: 1 },
-  authorName: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
-  authorRole: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
-  reviewBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  reviewBtnText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
-  infoGrid: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
-  infoItem: { flex: 1, alignItems: 'center', gap: 8, padding: 12, backgroundColor: Colors.bgSurface, borderRadius: 16, borderWidth: 1, borderColor: Colors.border },
-  infoValue: { fontSize: 11, color: Colors.textSecondary, fontWeight: '700', textAlign: 'center' },
-  actionBar: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, paddingHorizontal: 20, justifyContent: 'center' },
-  actionBlur: { borderRadius: 24, overflow: 'hidden' },
-  mainAction: { height: 60, borderRadius: 24 },
-  actionGrad: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  actionText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700',
+  iconBox: { width: 88, height: 88, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: Spacing.lg },
+  heroTitle: { ...Typography.display, color: Colors.on_primary, fontSize: 32, textAlign: 'center' },
+  heroTags: { flexDirection: 'row', gap: 10, marginTop: Spacing.lg },
+  heroTag: { backgroundColor: 'rgba(0,0,0,0.1)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: Roundness.full },
+  heroTagText: { ...Typography.label, color: Colors.on_primary, fontSize: 11, letterSpacing: 1 },
+  heroOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 120 },
+
+  absBack: { position: 'absolute', top: 60, left: 20, zIndex: 10 },
+  backBlur: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+
+  content: { paddingHorizontal: Spacing.margin, marginTop: -20 },
+  infoBlock: { marginTop: Spacing.xxl },
+  sectionHeading: { ...Typography.label, marginBottom: Spacing.md, textTransform: 'uppercase', letterSpacing: 1.5 },
+  description: { ...Typography.body, color: Colors.on_surface_variant, fontSize: 16, lineHeight: 28 },
+
+  identityToken: { 
+    flexDirection: 'row', alignItems: 'center', 
+    backgroundColor: Colors.surface_container_low, 
+    padding: Spacing.md, 
+    borderRadius: Roundness.lg,
+    gap: Spacing.md,
   },
-  dualActions: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  avatarPill: { width: 48, height: 48, borderRadius: 24, overflow: 'hidden' },
+  avatarImg: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
+  avatarChar: { ...Typography.title, color: Colors.on_primary },
+  identityMeta: { flex: 1 },
+  identityName: { ...Typography.body_medium, color: Colors.on_background, fontSize: 17 },
+  identitySub: { ...Typography.caption, color: Colors.on_surface_variant, marginTop: 2 },
+
+  collabRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.xxl },
+  collabTile: { 
+    flex: 1, alignItems: 'center', gap: 10,
+    backgroundColor: Colors.surface_container_high,
+    paddingVertical: Spacing.lg, paddingHorizontal: Spacing.sm,
+    borderRadius: Roundness.md,
   },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  editBtn: {
-    backgroundColor: Colors.primary,
-  },
-  deleteBtn: {
-    backgroundColor: Colors.danger,
-  },
+  collabLabel: { ...Typography.caption, color: Colors.on_background, fontSize: 10, fontWeight: '700', textAlign: 'center' },
+
+  tacticalBar: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 20 },
+  actionBarBlur: { borderRadius: Roundness.full, overflow: 'hidden', ...Shadows.ambient },
+  ownerActions: { flexDirection: 'row', padding: 8, gap: 8 },
+  actionBtn: { flex: 1, height: 56, borderRadius: 28, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  actionBtnText: { ...Typography.title, color: Colors.on_primary, fontSize: 16 },
+  
+  primaryAction: { height: 60 },
+  mainActionGrad: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
+  mainActionText: { ...Typography.title, color: Colors.on_primary, fontSize: 17 },
 });

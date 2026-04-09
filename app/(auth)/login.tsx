@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StatusBar, ScrollView
+  ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar, ScrollView, Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../../firebaseConfig';
 import { Link } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { Colors, Gradients } from '../../constants/theme';
+import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
 import FeedbackModal, { FeedbackType } from '../../components/FeedbackModal';
+
+const { width } = Dimensions.get('window');
 
 export default function LoginScreen() {
   const { user } = useAuth();
@@ -45,94 +47,105 @@ export default function LoginScreen() {
     }
   };
 
+  const handleReset = async () => {
+    if (!email) {
+      showAlert('Reset Password', 'Please enter your email address first.');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      showAlert('Email Sent', 'Check your inbox for password reset instructions.', 'success');
+    } catch (error: any) {
+      showAlert('Reset Failed', error.message);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <LinearGradient colors={['#1C1C3A', '#0A0A12']} style={StyleSheet.absoluteFill} />
-
-      {/* Logo */}
-      <View style={styles.logoSection}>
-        <LinearGradient colors={Gradients.primary} style={styles.logoBox}>
-          <Ionicons name="infinite" size={32} color="#FFF" />
-        </LinearGradient>
-        <Text style={styles.appName}>CampusForge</Text>
-        <Text style={styles.tagline}>Lost it • Post it • Find it</Text>
-      </View>
-
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-        style={styles.form}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Welcome back</Text>
-        <Text style={styles.subtitle}>Sign in to your campus account</Text>
+        {/* Decorative Circles (Tonal Depth) */}
+        <View style={styles.decorCircle1} />
+        <View style={styles.decorCircle2} />
 
-        <View style={styles.inputWrapper}>
-          <Ionicons name="mail-outline" size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-          <TextInput
-            style={styles.input}
-            placeholder="College Email"
-            placeholderTextColor={Colors.textMuted}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-        </View>
-
-        <View style={styles.inputWrapper}>
-          <Ionicons name="lock-closed-outline" size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor={Colors.textMuted}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry={!showPass}
-            autoCapitalize="none"
-            autoCorrect={false}
-            spellCheck={false}
-            textContentType="password"
-          />
-          <TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.inputIcon}>
-            <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity 
-          style={{ alignSelf: 'flex-end', marginBottom: 20 }}
-          onPress={async () => {
-            if (!email) {
-              showAlert('Reset Password', 'Please enter your email address first.');
-              return;
-            }
-            try {
-              const { sendPasswordResetEmail } = await import('firebase/auth');
-              await sendPasswordResetEmail(auth, email);
-              showAlert('Email Sent', 'Check your inbox for password reset instructions.', 'success');
-            } catch (error: any) {
-              showAlert('Reset Failed', error.message);
-            }
-          }}
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={styles.form}
         >
-          <Text style={styles.linkText}>Forgot Password?</Text>
-        </TouchableOpacity>
+          {/* Logo Section */}
+          <View style={styles.logoSection}>
+            <LinearGradient colors={Gradients.primary} style={styles.logoBox} start={{x:0, y:0}} end={{x:1, y:1}}>
+              <Ionicons name="infinite" size={36} color={Colors.on_primary} />
+            </LinearGradient>
+            <Text style={styles.appName}>CampusLoop</Text>
+            <Text style={styles.tagline}>Your Smart Campus Network</Text>
+          </View>
 
-        <TouchableOpacity onPress={handleLogin} disabled={loading} style={styles.btnWrapper}>
-          <LinearGradient colors={Gradients.primary} style={styles.btn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Sign In</Text>}
-          </LinearGradient>
-        </TouchableOpacity>
+          <View style={styles.welcomeSection}>
+            <Text style={styles.title}>Welcome Back</Text>
+            <Text style={styles.subtitle}>Sign in to access your campus exchange</Text>
+          </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account? </Text>
-          <Link href="/(auth)/register" asChild>
-            <TouchableOpacity><Text style={styles.linkText}>Register</Text></TouchableOpacity>
-          </Link>
-        </View>
+          {/* Form Fields */}
+          <View style={styles.inputContainer}>
+            <View style={styles.inputField}>
+              <Ionicons name="mail" size={20} color={Colors.on_surface_variant} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="College Email"
+                placeholderTextColor={Colors.on_surface_variant}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+            </View>
+
+            <View style={styles.inputField}>
+              <Ionicons name="lock-closed" size={20} color={Colors.on_surface_variant} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor={Colors.on_surface_variant}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPass}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+                <Ionicons name={showPass ? 'eye-off' : 'eye'} size={20} color={Colors.on_surface_variant} />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity onPress={handleReset} style={styles.forgotBtn}>
+              <Text style={styles.forgotText}>Forgot Password?</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actions}>
+            <TouchableOpacity onPress={handleLogin} disabled={loading} style={styles.mainBtnWrapper}>
+              <LinearGradient colors={Gradients.primary} style={styles.mainBtn} start={{x:0, y:0}} end={{x:1, y:1}}>
+                {loading ? <ActivityIndicator color={Colors.on_primary} /> : <Text style={styles.mainBtnText}>Sign In</Text>}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>New to the forge? </Text>
+              <Link href="/(auth)/register" asChild>
+                <TouchableOpacity>
+                  <Text style={styles.linkText}>Create Account</Text>
+                </TouchableOpacity>
+              </Link>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </ScrollView>
-    </KeyboardAvoidingView>
 
       <FeedbackModal 
         isVisible={modalVisible}
@@ -146,25 +159,104 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  logoSection: { alignItems: 'center', marginTop: 80, marginBottom: 40 },
-  logoBox: { width: 64, height: 64, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  appName: { fontSize: 30, fontWeight: '800', color: Colors.textPrimary, letterSpacing: -0.5 },
-  tagline: { fontSize: 13, color: Colors.textSecondary, marginTop: 4, letterSpacing: 1 },
-  form: { flex: 1, paddingHorizontal: 24 },
-  title: { fontSize: 26, fontWeight: '700', color: Colors.textPrimary, marginBottom: 6 },
-  subtitle: { fontSize: 14, color: Colors.textSecondary, marginBottom: 28 },
-  inputWrapper: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.bgCard, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border, marginBottom: 14, paddingHorizontal: 14,
+  container: { flex: 1, backgroundColor: Colors.background },
+  scrollContent: { flexGrow: 1, paddingTop: 60, paddingBottom: 40 },
+  
+  // Decorative Elements
+  decorCircle1: {
+    position: 'absolute', top: -100, right: -50,
+    width: 300, height: 300, borderRadius: 150,
+    backgroundColor: Colors.primary, opacity: 0.05,
   },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, color: Colors.textPrimary, fontSize: 15, paddingVertical: 16 },
-  btnWrapper: { marginTop: 8 },
-  btn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
-  btnText: { color: '#FFF', fontWeight: '700', fontSize: 16, letterSpacing: 0.3 },
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 32 },
-  footerText: { color: Colors.textSecondary, fontSize: 14 },
-  linkText: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
+  decorCircle2: {
+    position: 'absolute', top: 200, left: -100,
+    width: 250, height: 250, borderRadius: 125,
+    backgroundColor: Colors.secondary, opacity: 0.05,
+  },
+
+  form: { flex: 1, paddingHorizontal: Spacing.xl },
+  
+  logoSection: { alignItems: 'center', marginBottom: Spacing.xxl },
+  logoBox: {
+    width: 72, height: 72, borderRadius: Roundness.lg,
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: Spacing.md,
+    ...Shadows.ambient,
+  },
+  appName: {
+    ...Typography.display,
+    fontSize: 32,
+    color: Colors.on_background,
+  },
+  tagline: {
+    ...Typography.caption,
+    color: Colors.on_surface_variant,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginTop: 4,
+  },
+
+  welcomeSection: { marginBottom: Spacing.xl },
+  title: {
+    ...Typography.headline,
+    color: Colors.on_background,
+    fontSize: 32,
+  },
+  subtitle: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.on_surface_variant,
+    marginTop: 4,
+  },
+
+  inputContainer: { gap: Spacing.md, marginBottom: Spacing.xl },
+  inputField: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.surface_container_low,
+    borderRadius: Roundness.md,
+    paddingHorizontal: Spacing.lg,
+    height: 64,
+  },
+  inputIcon: { marginRight: Spacing.md },
+  input: {
+    flex: 1,
+    ...Typography.body_medium,
+    color: Colors.on_background,
+  },
+  
+  forgotBtn: { alignSelf: 'flex-end' },
+  forgotText: {
+    ...Typography.label,
+    color: Colors.primary,
+  },
+
+  actions: { gap: Spacing.xl, marginTop: Spacing.lg },
+  mainBtnWrapper: { ...Shadows.ambient },
+  mainBtn: {
+    height: 64,
+    borderRadius: Roundness.full,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mainBtnText: {
+    ...Typography.title,
+    color: Colors.on_primary,
+    fontSize: 18,
+  },
+
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  footerText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.on_surface_variant,
+  },
+  linkText: {
+    ...Typography.label,
+    fontSize: 14,
+    color: Colors.primary,
+  },
 });

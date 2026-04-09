@@ -17,6 +17,20 @@ interface UserProfile {
   hasSeenOnboarding?: boolean;
   role?: 'admin' | 'user';
   createdAt: string;
+  // College community fields
+  collegeId?: string;
+  collegeName?: string;
+  colDomain?: string;
+  collegeShortName?: string;
+  collegeEmail?: string;
+  collegeEmailVerified?: boolean;
+  major?: string;
+  gradYear?: string;
+  bio?: string;
+  socials?: {
+    instagram?: string;
+    linkedin?: string;
+  };
 }
 
 interface AuthContextType {

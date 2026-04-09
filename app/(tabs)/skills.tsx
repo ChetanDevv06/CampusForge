@@ -1,212 +1,542 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, StatusBar
+import React, { useState } from 'react';
+import { 
+  View, Text, TextInput, TouchableOpacity, StyleSheet, 
+  ScrollView, StatusBar, KeyboardAvoidingView, Platform, 
+  Image, ActivityIndicator, Alert
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors, Typography, Spacing, Roundness } from '../../constants/theme';
 import { useRouter } from 'expo-router';
-import { Colors, Gradients } from '../../constants/theme';
-import { startChat } from '../../utils/chat';
+import * as ImagePicker from 'expo-image-picker';
+import { collection, addDoc } from 'firebase/firestore';
+import { db, auth } from '../../firebaseConfig';
+import { uploadImage } from '../../utils/storage';
+import { useAuth } from '../../contexts/AuthContext';
 
-export default function SkillsScreen() {
-  const [skills, setSkills] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('offer');
+export default function CreatePostScreen() {
   const router = useRouter();
-  const uid = auth.currentUser?.uid;
+  const [category, setCategory] = useState('Lost/Found');
 
-  useEffect(() => {
-    const q = query(collection(db, 'skills'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setSkills(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    }, () => setLoading(false));
-    return unsub;
-  }, []);
+  // Urgency toggle
+  const [urgencyOn, setUrgencyOn] = useState(true);
 
-  const handleToggleStatus = async (id: string, currentStatus: string) => {
+  // Tags
+  const [selectedTags, setSelectedTags] = useState<string[]>(['Electronics']);
+  const [customTags, setCustomTags] = useState<string[]>([]);
+  const [showTagInput, setShowTagInput] = useState(false);
+  const [customTagInput, setCustomTagInput] = useState('');
+
+  // Form fields
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [location, setLocation] = useState('');
+  const [price, setPrice] = useState('');
+
+  // Media
+  const [image, setImage] = useState<string | null>(null);
+  const [videoUri, setVideoUri] = useState<string | null>(null);
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+
+  const [loading, setLoading] = useState(false);
+  const { profile } = useAuth();
+
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to upload images.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled) setImage(result.assets[0].uri);
+  };
+
+  const pickVideo = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to upload videos.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled) setVideoUri(result.assets[0].uri);
+  };
+
+  const handleAddCustomTag = () => {
+    const newTag = customTagInput.trim();
+    if (newTag.length > 0 && !customTags.includes(newTag)) {
+      setCustomTags(prev => [...prev, newTag]);
+      setSelectedTags(prev => [...prev, newTag]);
+    }
+    setCustomTagInput('');
+    setShowTagInput(false);
+  };
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const handlePost = async () => {
+    if (!title.trim()) {
+      Alert.alert('Missing info', 'Please add a title.');
+      return;
+    }
+    if (!description.trim()) {
+      Alert.alert('Missing info', 'Please add a description.');
+      return;
+    }
+    setLoading(true);
     try {
-      await updateDoc(doc(db, 'skills', id), {
-        status: currentStatus === 'completed' ? 'open' : 'completed'
-      });
-    } catch (e) {
-      console.error(e);
+      let imageUrl: string | null = null;
+      if (image) imageUrl = await uploadImage(image, 'unified_posts');
+
+      const userId = auth.currentUser?.uid;
+      const userName = auth.currentUser?.email?.split('@')[0] || 'Student';
+
+      const payload: any = {
+        title: title.trim(),
+        description: description.trim(),
+        location: location.trim(),
+        visibility: 'Everyone in Campus',
+        imageUrl,
+        linkUrl: linkUrl.trim() || null,
+        userId,
+        userName,
+        collegeId: profile?.collegeId || null,
+        createdAt: new Date().toISOString(),
+      };
+
+      let colName = 'lost_found';
+      if (category === 'Lost/Found') {
+        payload.type = 'lost';
+        payload.urgency = urgencyOn ? 'High' : 'Normal';
+        payload.tags = selectedTags;
+      } else if (category === 'Sell') {
+        colName = 'marketplace';
+        payload.price = price ? parseFloat(price) : 0;
+        payload.category = 'Other';
+        payload.tags = selectedTags;
+      } else if (category === 'Skill') {
+        colName = 'skills';
+        payload.type = 'offer';
+        payload.status = 'open';
+        payload.price = price ? parseFloat(price) : 0;
+        payload.tags = selectedTags;
+      }
+
+      await addDoc(collection(db, colName), payload);
+      router.push('/(tabs)');
+    } catch (error) {
+      console.error('Posting failed:', error);
+      Alert.alert('Error', 'Failed to post. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const filtered = skills.filter(s => s.type === filter);
-
-  const renderItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-      activeOpacity={0.9}
-      onPress={() => router.push({ pathname: '/skill-details/[id]', params: { id: item.id } } as any)}
-      style={[styles.card, item.status === 'completed' && styles.cardCompleted]}
-    >
-      <View style={styles.cardTop}>
-        <LinearGradient
-          colors={filter === 'offer' ? Gradients.skillOffer : Gradients.skillRequest}
-          style={styles.catIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        >
-          <Ionicons name={filter === 'offer' ? 'bulb' : 'book'} size={18} color="#FFF" />
-        </LinearGradient>
-        <View style={styles.cardTopText}>
-          <Text style={styles.cardTitle}>{item.title}</Text>
-          <Text style={styles.cardCategory}>{item.category}</Text>
-        </View>
-        
-        {uid === item.userId ? (
-          <TouchableOpacity 
-            style={[styles.actionBtn, item.status === 'completed' && styles.actionBtnActive]}
-            onPress={() => handleToggleStatus(item.id, item.status)}
-          >
-            <Ionicons name={item.status === 'completed' ? "refresh-outline" : "checkmark-circle-outline"} size={14} color={item.status === 'completed' ? Colors.textPrimary : Colors.success} />
-            <Text style={[styles.actionText, item.status === 'completed' && { color: Colors.textPrimary }]}>
-              {item.status === 'completed' ? 'Reopen' : 'Complete'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          uid !== item.userId && item.status !== 'completed' && (
-            <TouchableOpacity 
-              style={styles.connectBtn}
-              onPress={() => startChat(item.userId, item.userName || 'Student', router, {
-                type: 'skill',
-                title: item.title,
-                itemId: item.id
-              })}
-            >
-              <Text style={styles.connectText}>Connect</Text>
-            </TouchableOpacity>
-          )
-        )}
-      </View>
-      <Text style={styles.cardDesc}>{item.description}</Text>
-      <View style={styles.cardMeta}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <Ionicons name="person-circle-outline" size={16} color={Colors.textMuted} />
-          <Text style={styles.metaText}>
-            {(() => {
-              const rawName = item.authorName || item.userName || 'Student';
-              // If it looks like a roll number (e.g., starts with numbers or has many numbers)
-              return /^\d/.test(rawName) || (rawName.match(/\d/g)?.length || 0) > 4 ? 'Student' : rawName;
-            })()}
-          </Text>
-        </View>
-        {item.status === 'completed' && (
-          <View style={styles.completedBadge}>
-            <Ionicons name="checkmark-done" size={14} color={Colors.success} />
-            <Text style={styles.completedBadgeText}>COMPLETED</Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+  const allTags = ['Electronics', 'Personal Item', 'Pets', ...customTags];
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" backgroundColor="#15151A" />
 
-      {/* Hero */}
-      <LinearGradient colors={['#1C1C3A', Colors.bg]} style={styles.hero}>
-        <Text style={styles.heroTitle}>Skill Exchange</Text>
-        <Text style={styles.heroSub}>Teach what you know, learn what you don't</Text>
-      </LinearGradient>
-
-      {/* Toggle */}
-      <View style={styles.toggle}>
-        {[{ key: 'offer', label: 'Offering', grad: Gradients.skillOffer },
-          { key: 'request', label: 'Requesting', grad: Gradients.skillRequest }].map(t => (
-          <TouchableOpacity key={t.key} style={[styles.toggleBtn, filter === t.key && styles.toggleActive]} onPress={() => setFilter(t.key)}>
-            {filter === t.key
-              ? <LinearGradient colors={t.grad} style={styles.toggleGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                  <Text style={styles.toggleTextActive}>{t.label}</Text>
-                </LinearGradient>
-              : <Text style={styles.toggleText}>{t.label}</Text>
-            }
-          </TouchableOpacity>
-        ))}
+      {/* ── Header ── */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.closeBtn} onPress={() => router.push('/(tabs)')}>
+          <Ionicons name="close" size={24} color="#FFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>New Post</Text>
+        <TouchableOpacity
+          style={[styles.postBtn, (!title || loading) && { opacity: 0.5 }]}
+          onPress={handlePost}
+          disabled={loading || !title}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#FFF" />
+          ) : (
+            <Text style={styles.postBtnText}>Post</Text>
+          )}
+        </TouchableOpacity>
       </View>
 
-      {loading
-        ? <ActivityIndicator size="large" color={Colors.primary} style={{ flex: 1 }} />
-        : <FlatList
-            data={filtered}
-            renderItem={renderItem}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.list}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.empty}>
-                <Ionicons name="flash-outline" size={48} color={Colors.textMuted} />
-                <Text style={styles.emptyText}>No skills posted yet</Text>
-              </View>
-            }
-          />
-      }
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* ── Category Toggle ── */}
+          <View style={styles.categoryContainer}>
+            {['Lost/Found', 'Sell', 'Skill'].map(cat => (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.catBtn, category === cat && styles.catBtnActive]}
+                onPress={() => setCategory(cat)}
+              >
+                <Text style={[styles.catBtnText, category === cat && styles.catBtnTextActive]}>
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-      <TouchableOpacity style={styles.fabWrapper} onPress={() => router.push('/post-skill')}>
-        <LinearGradient colors={Gradients.skillOffer} style={styles.fab} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <Ionicons name="add" size={28} color="#FFF" />
-        </LinearGradient>
-      </TouchableOpacity>
+          {/* ── Media Grid ── */}
+          <View style={styles.mediaGrid}>
+            {/* Big photo panel */}
+            <TouchableOpacity
+              style={[styles.mediaBig, image ? { borderWidth: 0 } : {}]}
+              onPress={pickImage}
+              activeOpacity={0.8}
+            >
+              {image ? (
+                <>
+                  <Image source={{ uri: image }} style={styles.mediaImage} />
+                  <TouchableOpacity
+                    style={styles.removeMedia}
+                    onPress={() => setImage(null)}
+                  >
+                    <Ionicons name="close-circle" size={24} color="#FFF" />
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <View style={styles.mediaEmptyCenter}>
+                  <Ionicons name="camera" size={32} color="#6B52FF" style={{ marginBottom: 10 }} />
+                  <Text style={styles.mediaBigText}>Add photo</Text>
+                  <Text style={styles.mediaHint}>MAX 10MB</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Right mini panels */}
+            <View style={styles.mediaRightCol}>
+              <TouchableOpacity
+                style={[styles.mediaSmall, videoUri && styles.mediaSmallActive]}
+                onPress={pickVideo}
+                activeOpacity={0.8}
+              >
+                {videoUri ? (
+                  <Ionicons name="checkmark-circle" size={26} color="#6B52FF" />
+                ) : (
+                  <Ionicons name="videocam" size={24} color="#A0A0A5" />
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.mediaSmall, (showLinkInput || linkUrl) && styles.mediaSmallActive]}
+                onPress={() => setShowLinkInput(v => !v)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="link" size={24} color={linkUrl ? '#6B52FF' : '#A0A0A5'} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Link input (shown when toggled) */}
+          {showLinkInput && (
+            <View style={[styles.locationBox, { marginBottom: Spacing.xl }]}>
+              <Ionicons name="link" size={20} color="#6B52FF" style={{ marginRight: 12 }} />
+              <TextInput
+                style={styles.input}
+                placeholder="Paste a URL..."
+                placeholderTextColor="#5A5A5E"
+                value={linkUrl}
+                onChangeText={setLinkUrl}
+                autoCapitalize="none"
+                keyboardType="url"
+                returnKeyType="done"
+                onSubmitEditing={() => setShowLinkInput(false)}
+              />
+              {linkUrl.length > 0 && (
+                <TouchableOpacity onPress={() => setLinkUrl('')}>
+                  <Ionicons name="close-circle" size={20} color="#5A5A5E" />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {/* ── Title ── */}
+          <Text style={styles.sectionLabel}>
+            {category === 'Sell' || category === 'Skill' ? 'TITLE' : 'WHAT HAPPENED?'}
+          </Text>
+          <View style={styles.inputBox}>
+            <TextInput
+              style={styles.input}
+              placeholder={
+                category === 'Lost/Found'
+                  ? 'e.g. Lost Silver iPhone at Library'
+                  : category === 'Sell'
+                  ? 'e.g. Selling Used iPad Pro'
+                  : 'e.g. Offering Math Tutoring'
+              }
+              placeholderTextColor="#5A5A5E"
+              value={title}
+              onChangeText={setTitle}
+              returnKeyType="next"
+            />
+          </View>
+
+          {/* ── Price (Sell / Skill) ── */}
+          {(category === 'Sell' || category === 'Skill') && (
+            <>
+              <Text style={styles.sectionLabel}>PRICE / RATE</Text>
+              <View style={styles.inputBox}>
+                <Ionicons name="pricetag-outline" size={18} color="#6B52FF" style={{ marginRight: 10 }} />
+                <TextInput
+                  style={styles.input}
+                  placeholder={category === 'Sell' ? 'e.g. 250.00' : 'e.g. 15/hr'}
+                  placeholderTextColor="#5A5A5E"
+                  value={price}
+                  onChangeText={setPrice}
+                  keyboardType="decimal-pad"
+                  returnKeyType="next"
+                />
+              </View>
+            </>
+          )}
+
+          {/* ── Description ── */}
+          <Text style={styles.sectionLabel}>DESCRIPTION</Text>
+          <View style={styles.textAreaBox}>
+            <TextInput
+              style={styles.textArea}
+              placeholder="Describe the item, surroundings, or any specific details..."
+              placeholderTextColor="#5A5A5E"
+              multiline
+              value={description}
+              onChangeText={setDescription}
+            />
+          </View>
+
+          {/* ── Location ── */}
+          <Text style={styles.sectionLabel}>WHERE WAS IT?</Text>
+          <View style={styles.locationBox}>
+            <Ionicons name="location" size={20} color="#6B52FF" style={{ marginRight: 12 }} />
+            <TextInput
+              style={styles.input}
+              placeholder="Tag a campus building or zone"
+              placeholderTextColor="#5A5A5E"
+              value={location}
+              onChangeText={setLocation}
+              returnKeyType="done"
+            />
+          </View>
+
+          {/* ── Tags / Urgency ── */}
+          <Text style={styles.sectionLabel}>
+            {category === 'Lost/Found' ? 'URGENCY & CATEGORY' : 'TAGS & CATEGORY'}
+          </Text>
+          <View style={styles.tagsCloud}>
+            {/* Urgency pill (Lost/Found only) */}
+            {category === 'Lost/Found' && (
+              <TouchableOpacity
+                style={[styles.tagPill, urgencyOn && styles.tagPillHighUrgency]}
+                onPress={() => setUrgencyOn(v => !v)}
+              >
+                <View style={[styles.urgencyDot, urgencyOn && { backgroundColor: '#FFA1B8' }]} />
+                <Text style={[styles.tagText, urgencyOn && { color: '#FFF' }]}>
+                  {urgencyOn ? 'High Urgency' : 'Normal Urgency'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Static + custom tags */}
+            {allTags.map((tag, idx) => (
+              <TouchableOpacity
+                key={`${tag}-${idx}`}
+                style={[styles.tagPill, selectedTags.includes(tag) && styles.tagPillSelected]}
+                onPress={() => toggleTag(tag)}
+              >
+                <Text style={[styles.tagText, selectedTags.includes(tag) && { color: '#FFF' }]}>
+                  {tag}
+                </Text>
+              </TouchableOpacity>
+            ))}
+
+            {/* Add Tag */}
+            {showTagInput ? (
+              <View style={[styles.tagPill, { backgroundColor: '#040405', paddingVertical: 6, paddingHorizontal: 14 }]}>
+                <TextInput
+                  autoFocus
+                  style={{ color: '#FFF', fontSize: 13, minWidth: 80, fontFamily: 'Manrope_500Medium' }}
+                  placeholder="New tag..."
+                  placeholderTextColor="#5A5A5E"
+                  value={customTagInput}
+                  onChangeText={setCustomTagInput}
+                  onSubmitEditing={handleAddCustomTag}
+                  onBlur={handleAddCustomTag}
+                  returnKeyType="done"
+                />
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.tagPill, { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#2A2A30' }]}
+                onPress={() => setShowTagInput(true)}
+              >
+                <Text style={styles.tagText}>+ Add Tag</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* ── Community Reach Card ── */}
+          <View style={styles.reachCard}>
+            <View style={styles.reachOverlay}>
+              <View style={styles.reachIconWrap}>
+                <Ionicons name="megaphone" size={18} color="#A4A6FF" />
+              </View>
+              <View style={styles.reachTexts}>
+                <Text style={styles.reachTitle}>Community Reach</Text>
+                <Text style={styles.reachSub}>
+                  Your post will be visible to 4,200+ students in this zone.
+                </Text>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  hero: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
-  heroTitle: { fontSize: 26, fontWeight: '800', color: Colors.textPrimary, marginBottom: 4 },
-  heroSub: { fontSize: 14, color: Colors.textSecondary },
-  toggle: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 8, gap: 10 },
-  toggleBtn: { flex: 1, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
-  toggleActive: { borderColor: 'transparent' },
-  toggleGrad: { paddingVertical: 12, alignItems: 'center' },
-  toggleText: { color: Colors.textSecondary, fontSize: 14, fontWeight: '600', paddingVertical: 12, textAlign: 'center' },
-  toggleTextActive: { color: '#FFF', fontSize: 14, fontWeight: '700' },
-  list: { padding: 16, paddingBottom: 100 },
-  card: {
-    backgroundColor: Colors.bgCard, borderRadius: 18, padding: 16,
-    marginBottom: 14, borderWidth: 1, borderColor: Colors.border,
+  container: { flex: 1, backgroundColor: '#15151A' },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: Spacing.margin,
+    paddingBottom: Spacing.md,
+    backgroundColor: '#15151A',
   },
-  cardCompleted: { opacity: 0.7, borderColor: Colors.success },
-  sellerCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.bgSurface, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: Colors.border },
-  sellerAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  sellerInitial: { color: '#FFF', fontSize: 20, fontWeight: '800' },
-  sellerInfo: { flex: 1 },
-  sellerName: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
-  sellerRole: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
-  authorCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.bgSurface, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: Colors.border },
-  authorAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  authorInitial: { color: '#FFF', fontSize: 20, fontWeight: '800' },
-  authorInfo: { flex: 1 },
-  authorName: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
-  authorRole: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  catIcon: { width: 42, height: 42, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  cardTopText: { flex: 1, marginLeft: 12 },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
-  cardCategory: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
-  connectBtn: {
-    backgroundColor: Colors.bgSurface, borderRadius: 20,
-    paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: Colors.borderActive,
+  closeBtn: { padding: Spacing.xs },
+  headerTitle: { ...Typography.headline, color: '#FFF', fontSize: 18, letterSpacing: 0 },
+  postBtn: {
+    backgroundColor: '#6B52FF',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: Roundness.full,
   },
-  connectText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
-  actionBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(52,238,154,0.1)', borderRadius: 20,
-    paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: Colors.success,
+  postBtnText: { ...Typography.label, color: '#FFF', fontSize: 14, fontWeight: 'bold' },
+
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: Spacing.margin, paddingBottom: 120, paddingTop: Spacing.md },
+
+  // Category
+  categoryContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#121216',
+    borderRadius: Roundness.full,
+    padding: 6,
+    marginBottom: Spacing.xl,
   },
-  actionBtnActive: { backgroundColor: Colors.bgSurface, borderColor: Colors.border },
-  actionText: { color: Colors.success, fontSize: 12, fontWeight: '700' },
-  cardDesc: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20, marginBottom: 12 },
-  cardMeta: { flexDirection: 'row', alignItems: 'center' },
-  metaText: { color: Colors.textMuted, fontSize: 13, marginLeft: 6 },
-  completedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(52,238,154,0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  completedBadgeText: { color: Colors.success, fontSize: 10, fontWeight: '800' },
-  empty: { alignItems: 'center', marginTop: 80 },
-  emptyText: { color: Colors.textMuted, fontSize: 16, marginTop: 12 },
-  fabWrapper: { position: 'absolute', bottom: 24, right: 24 },
-  fab: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
+  catBtn: {
+    flex: 1, height: 40,
+    justifyContent: 'center', alignItems: 'center',
+    borderRadius: Roundness.full,
+  },
+  catBtnActive: { backgroundColor: '#6B52FF' },
+  catBtnText: { ...Typography.body_medium, color: '#8A8A8E', fontSize: 13, fontWeight: 'bold' },
+  catBtnTextActive: { color: '#FFF' },
+
+  // Media
+  mediaGrid: { flexDirection: 'row', gap: 16, marginBottom: Spacing.xl },
+  mediaBig: {
+    flex: 1, height: 220, borderRadius: 32,
+    borderWidth: 1.5, borderColor: '#2A2A30', borderStyle: 'dashed',
+    backgroundColor: 'rgba(255,255,255,0.01)',
+    justifyContent: 'center', alignItems: 'center',
+    overflow: 'hidden',
+  },
+  mediaImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  removeMedia: {
+    position: 'absolute', top: 10, right: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12,
+  },
+  mediaEmptyCenter: { alignItems: 'center' },
+  mediaBigText: { color: '#A0A0A5', fontSize: 13, marginBottom: 4 },
+  mediaHint: { color: '#4A4A4E', fontSize: 10, fontWeight: 'bold', letterSpacing: 1 },
+  mediaRightCol: { width: 90, gap: 16 },
+  mediaSmall: {
+    flex: 1, backgroundColor: '#1A1C23',
+    borderRadius: 32, justifyContent: 'center', alignItems: 'center',
+  },
+  mediaSmallActive: { borderWidth: 2, borderColor: '#6B52FF' },
+
+  // Labels
+  sectionLabel: {
+    ...Typography.label,
+    color: '#8E8E93',
+    fontSize: 11, letterSpacing: 1.5,
+    marginBottom: Spacing.sm,
+    textTransform: 'uppercase',
+    marginLeft: 4,
+  },
+
+  // Inputs
+  inputBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#040405',
+    borderRadius: Roundness.full,
+    height: 60, paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.xl,
+  },
+  input: { flex: 1, ...Typography.body_medium, color: '#FFF', fontSize: 16 },
+
+  textAreaBox: {
+    backgroundColor: '#040405', borderRadius: 32,
+    height: 140, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.lg,
+    marginBottom: Spacing.xl,
+  },
+  textArea: { ...Typography.body_medium, color: '#FFF', fontSize: 16, flex: 1, textAlignVertical: 'top' },
+
+  locationBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#040405', borderRadius: Roundness.full,
+    height: 60, paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.xl,
+  },
+
+  // Tags
+  tagsCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: Spacing.xxl },
+  tagPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#1E1E24',
+    paddingHorizontal: 20, paddingVertical: 12,
+    borderRadius: Roundness.full,
+  },
+  tagPillHighUrgency: { backgroundColor: '#4F3A96', borderWidth: 1, borderColor: '#6B52FF' },
+  tagPillSelected: { backgroundColor: '#2C2C36' },
+  tagText: { color: '#D1D1D6', fontSize: 14, fontWeight: '600' },
+  urgencyDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#8E8E93' },
+
+  // Community Reach
+  reachCard: {
+    height: 110, borderRadius: 32, backgroundColor: '#16161A',
+    overflow: 'hidden', marginBottom: Spacing.xxl,
+    borderWidth: 1, borderColor: '#2A2A30',
+  },
+  reachOverlay: {
+    flex: 1, padding: Spacing.xl,
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
+  reachIconWrap: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(107, 82, 255, 0.2)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  reachTexts: { flex: 1 },
+  reachTitle: { color: '#FFF', fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
+  reachSub: { color: '#8E8E93', fontSize: 11, lineHeight: 16 },
 });

@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Pressable, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../constants/theme';
+import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface ModernAlertProps {
@@ -31,41 +31,44 @@ export default function ModernAlert({
       transparent
       visible={visible}
       animationType="fade"
+      statusBarTranslucent
       onRequestClose={onCancel}
     >
-      <Pressable style={styles.overlay} onPress={onCancel}>
+      <View style={styles.overlay}>
         <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
         
-        <View style={styles.alertBox}>
-          <View style={styles.iconContainer}>
-            <Ionicons 
-              name={isDestructive ? "trash-outline" : "alert-circle-outline"} 
-              size={32} 
-              color={isDestructive ? Colors.danger : Colors.primary} 
-            />
-          </View>
-          
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
-          
-          <View style={styles.actions}>
-            <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
-              <Text style={styles.cancelText}>{cancelText}</Text>
-            </TouchableOpacity>
+        <Pressable style={styles.content} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.alertBox}>
+            <View style={[styles.iconContainer, { backgroundColor: isDestructive ? 'rgba(255,107,107,0.1)' : Colors.surface_container_high }]}>
+              <Ionicons 
+                name={isDestructive ? "trash" : "alert-circle"} 
+                size={32} 
+                color={isDestructive ? Colors.error : Colors.primary} 
+              />
+            </View>
             
-            <TouchableOpacity style={styles.confirmBtn} onPress={onConfirm}>
-              <LinearGradient
-                colors={isDestructive ? ['#FF5E5E', '#FF3B3B'] : ['#7C6FFF', '#5041FF']}
-                style={styles.confirmGrad}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Text style={styles.confirmText}>{confirmText}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.message}>{message}</Text>
+            
+            <View style={styles.actions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
+                <Text style={styles.cancelText}>{cancelText}</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.confirmBtn} onPress={onConfirm}>
+                <LinearGradient
+                  colors={isDestructive ? [Colors.error, Colors.error_container] : Gradients.primary}
+                  style={styles.confirmGrad}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Text style={styles.confirmText}>{confirmText}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </Pressable>
+        </Pressable>
+      </View>
     </Modal>
   );
 }
@@ -73,72 +76,65 @@ export default function ModernAlert({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: Spacing.xl,
+  },
+  content: {
+    width: '100%',
+    maxWidth: 400,
   },
   alertBox: {
-    width: '100%',
-    backgroundColor: Colors.bgCard,
-    borderRadius: 24,
-    padding: 24,
+    backgroundColor: Colors.surface_container_low,
+    borderRadius: Roundness.lg,
+    padding: Spacing.xl,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
+    ...Shadows.ambient,
   },
   iconContainer: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: Colors.bgSurface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-    marginBottom: 8,
+    ...Typography.title,
+    color: Colors.on_background,
+    fontSize: 22,
+    marginBottom: Spacing.sm,
     textAlign: 'center',
   },
   message: {
-    fontSize: 15,
-    color: Colors.textSecondary,
+    ...Typography.body,
+    color: Colors.on_surface_variant,
     lineHeight: 22,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   actions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: Spacing.md,
     width: '100%',
   },
   cancelBtn: {
     flex: 1,
-    height: 52,
-    borderRadius: 14,
+    height: 56,
+    borderRadius: Roundness.md,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.bgSurface,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    backgroundColor: Colors.surface_container_high,
   },
   cancelText: {
+    ...Typography.label,
+    color: Colors.on_background,
     fontSize: 15,
-    fontWeight: '700',
-    color: Colors.textSecondary,
   },
   confirmBtn: {
     flex: 1,
-    height: 52,
-    borderRadius: 14,
+    height: 56,
+    borderRadius: Roundness.md,
     overflow: 'hidden',
   },
   confirmGrad: {
@@ -147,8 +143,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmText: {
+    ...Typography.title,
+    color: Colors.on_primary,
     fontSize: 15,
-    fontWeight: '700',
-    color: '#FFF',
   },
 });

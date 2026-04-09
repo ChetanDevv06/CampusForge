@@ -1,19 +1,25 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView, StatusBar, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { 
+  View, Text, TextInput, TouchableOpacity, StyleSheet, 
+  ActivityIndicator, ScrollView, StatusBar, Image, 
+  KeyboardAvoidingView, Platform, Dimensions 
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Colors, Gradients } from '../constants/theme';
+import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImage } from '../utils/storage';
 import ImageSourceModal from '../components/ImageSourceModal';
 import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
 
+const { width } = Dimensions.get('window');
+
 export default function PostItemScreen() {
-  const { editId } = useLocalSearchParams<{ editId?: string }>();
+  const { editId, initialType } = useLocalSearchParams<{ editId?: string, initialType?: string }>();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
@@ -21,8 +27,14 @@ export default function PostItemScreen() {
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [isFocused, setIsFocused] = useState<string | null>(null);
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (initialType === 'found') setType('found');
+    else if (initialType === 'lost') setType('lost');
+  }, [initialType]);
   
-  // Feedback Modal State
   const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackConfig, setFeedbackConfig] = useState<{title: string, message: string, type: FeedbackType}>({
     title: '', message: '', type: 'info'
@@ -36,7 +48,7 @@ export default function PostItemScreen() {
   const { user, profile } = useAuth();
   const router = useRouter();
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (editId) {
       const fetchItem = async () => {
         setLoading(true);
@@ -60,13 +72,21 @@ export default function PostItemScreen() {
     }
   }, [editId]);
 
+  useEffect(() => {
+    if (profile?.collegeId) {
+      getDoc(doc(db, 'colleges', profile.collegeId)).then(snap => {
+        if (snap.exists()) setMemberCount(snap.data().memberCount || 0);
+      });
+    }
+  }, [profile?.collegeId]);
+
   const pickImage = async (useCamera: boolean) => {
     const { status } = useCamera 
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     
     if (status !== 'granted') {
-      showFeedback('Permission Denied', `Sorry, we need ${useCamera ? 'camera' : 'gallery'} permissions to make this work!`);
+      showFeedback('Permission Denied', 'We need access to your gallery or camera to upload item photos.');
       return;
     }
 
@@ -85,27 +105,16 @@ export default function PostItemScreen() {
     }
   };
 
-  const showImageSourceOptions = () => {
-    setShowModal(true);
-  };
-
-
   const handlePost = async () => {
     if (!title || !description || !location) { 
-      showFeedback('Missing Info', 'Please provide a title, description, and location for the item.'); 
+      showFeedback('Missing Details', 'Provide a name, location, and description for the item.'); 
       return; 
     }
     setLoading(true);
     try {
-      let imageUrl = null;
-      if (image) {
-        // Only process if the image URI is a local path (not a remote URL or Base64)
-        if (!image.startsWith('http') && !image.startsWith('data:image')) {
-          console.log("PostItem: Processing image...");
-          imageUrl = await uploadImage(image, 'lost_found');
-        } else {
-          imageUrl = image; // Already a URL or Base64
-        }
+      let imageUrl = image;
+      if (image && !image.startsWith('http') && !image.startsWith('data:image')) {
+        imageUrl = await uploadImage(image, 'lost_found');
       }
 
       if (editId) {
@@ -114,147 +123,235 @@ export default function PostItemScreen() {
           updatedAt: new Date().toISOString(),
           imageUrl,
         });
-        showFeedback('Updated!', 'Your report has been updated successfully.', 'success');
+        showFeedback('Updated', 'Report successfully updated.', 'success');
         setTimeout(() => router.replace({ pathname: '/item-details/[id]', params: { id: editId } } as any), 1500);
       } else {
         const docRef = await addDoc(collection(db, 'lost_found'), {
           title, description, location, type,
           userId: user?.uid, userEmail: user?.email,
-          userName: (profile as any)?.name || user?.displayName || user?.email?.split('@')[0] || 'Campus Student',
+          userName: (profile as any)?.name || user?.email?.split('@')[0] || 'Campus Student',
+          collegeId: profile?.collegeId,
           createdAt: new Date().toISOString(), imageUrl,
         });
-        showFeedback('Posted!', `Your item has been reported as ${type}.`, 'success');
+        showFeedback('Posted', `Report listed as ${type}.`, 'success');
         setTimeout(() => router.replace({ pathname: '/item-details/[id]', params: { id: docRef.id } } as any), 1500);
       }
     } catch (e: any) { 
       showFeedback('Error', e.message); 
-    }
-    finally { setLoading(false); }
+    } finally { setLoading(false); }
   };
 
+  const renderInput = (label: string, icon: string, value: string, setValue: (v: string) => void, placeholder: string, multiline = false) => (
+    <View style={styles.fieldGroup}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={[
+        styles.inputWrapper, 
+        isFocused === label && styles.inputFocused,
+        multiline && styles.textAreaWrapper
+      ]}>
+        <Ionicons name={icon as any} size={20} color={isFocused === label ? Colors.primary : Colors.on_surface_variant} style={multiline ? { marginTop: 14 } : {}} />
+        <TextInput 
+          style={[styles.input, multiline && styles.textArea]} 
+          placeholder={placeholder} 
+          placeholderTextColor={Colors.on_surface_variant} 
+          value={value} 
+          onChangeText={setValue}
+          onFocus={() => setIsFocused(label)}
+          onBlur={() => setIsFocused(null)}
+          multiline={multiline}
+        />
+      </View>
+    </View>
+  );
+
   return (
-    <KeyboardAvoidingView 
-      style={{ flex: 1 }} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
-      <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <StatusBar barStyle="light-content" />
-        <Text style={styles.title}>Report an Item</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView style={styles.container} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <Text style={styles.title}>Report Item</Text>
 
-        {/* Type Toggle */}
-        <View style={styles.typeRow}>
-          {([
-            { key: 'lost', label: 'I Lost Something', colors: Gradients.lostBadge },
-            { key: 'found', label: 'I Found Something', colors: Gradients.foundBadge },
-          ] as const).map(t => (
-            <TouchableOpacity key={t.key} style={[styles.typeBtn, type === t.key && styles.typeBtnActive]} onPress={() => setType(t.key)}>
-              {type === t.key
-                ? <LinearGradient colors={t.colors} style={styles.typeBtnInner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                    <Text style={styles.typeLabelActive}>{t.label}</Text>
-                  </LinearGradient>
-                : <Text style={styles.typeLabel}>{t.label}</Text>
-              }
+          {/* Premium Type Toggle */}
+          <View style={styles.typeToggle}>
+            <TouchableOpacity 
+              style={[styles.typeBtn, type === 'lost' && styles.typeBtnActive]} 
+              onPress={() => setType('lost')}
+            >
+              {type === 'lost' && <LinearGradient colors={[Colors.error, Colors.error_container]} style={styles.btnFill} />}
+              <Text style={[styles.typeBtnText, type === 'lost' && styles.typeBtnTextActive]}>Lost</Text>
             </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Image Picker */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Item Image</Text>
-          <TouchableOpacity style={styles.imagePicker} onPress={showImageSourceOptions}>
-            {image ? (
-              <Image source={{ uri: image }} style={styles.previewImage} />
-            ) : (
-              <View style={styles.imagePlaceholder}>
-                <Ionicons name="camera-outline" size={32} color={Colors.textMuted} />
-                <Text style={styles.imagePlaceholderText}>Connect an image of the item</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          {image && (
-            <TouchableOpacity style={styles.removeImage} onPress={() => setImage(null)}>
-              <Text style={styles.removeImageText}>Remove Image</Text>
+            <TouchableOpacity 
+              style={[styles.typeBtn, type === 'found' && styles.typeBtnActive]} 
+              onPress={() => setType('found')}
+            >
+              {type === 'found' && <LinearGradient colors={[Colors.success, Colors.primary]} style={styles.btnFill} />}
+              <Text style={[styles.typeBtnText, type === 'found' && styles.typeBtnTextActive]}>Found</Text>
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
 
-        {[
-          { icon: 'pricetag-outline', label: 'Item Name', value: title, set: setTitle, placeholder: 'e.g., Blue Water Bottle' },
-          { icon: 'location-outline', label: 'Location', value: location, set: setLocation, placeholder: 'e.g., Library 2nd Floor' },
-        ].map(f => (
-          <View key={f.label} style={styles.fieldGroup}>
-            <Text style={styles.label}>{f.label}</Text>
-            <View style={styles.inputWrapper}>
-              <Ionicons name={f.icon as any} size={18} color={Colors.textSecondary} />
-              <TextInput style={styles.input} placeholder={f.placeholder} placeholderTextColor={Colors.textMuted} value={f.value} onChangeText={f.set} />
+          {/* Image Upload Area */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Visual Proof</Text>
+            <TouchableOpacity style={styles.imageZone} onPress={() => setShowModal(true)}>
+              {image ? (
+                <View style={styles.imagePreviewWrap}>
+                  <Image source={{ uri: image }} style={styles.previewImage} />
+                  <TouchableOpacity style={styles.removeBtn} onPress={() => setImage(null)}>
+                    <Ionicons name="close" size={20} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.imageEmpty}>
+                  <View style={styles.cameraCircle}>
+                    <Ionicons name="camera" size={32} color={Colors.primary} />
+                  </View>
+                  <Text style={styles.imageInstruction}>Snap a clear photo of the item</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {renderInput('Item Name', 'pricetag', title, setTitle, 'What was lost or found?')}
+          {renderInput('Spot', 'location', location, setLocation, 'Where was it last seen or found?')}
+          {renderInput('Description', 'document-text', description, setDescription, 'Any distinguishing features (scratches, stickers, etc)?', true)}
+
+          {/* Social Reach Insight */}
+          {memberCount !== null && (
+            <View style={styles.reachInsight}>
+              <Ionicons name="megaphone" size={20} color={Colors.secondary} />
+              <Text style={styles.reachText}>
+                Your report will alert <Text style={styles.reachHighlight}>{memberCount}</Text> active students in {profile?.collegeShortName || 'your campus'}.
+              </Text>
             </View>
-          </View>
-        ))}
+          )}
 
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Description</Text>
-          <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
-            <TextInput
-              style={styles.textArea} placeholder="Describe any distinguishing features..." placeholderTextColor={Colors.textMuted}
-              value={description} onChangeText={setDescription} multiline numberOfLines={4}
-            />
-          </View>
-        </View>
+          <TouchableOpacity onPress={handlePost} disabled={loading} style={styles.postBtnContainer}>
+            <LinearGradient colors={Gradients.primary} style={styles.postBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              {loading ? <ActivityIndicator color={Colors.on_primary} /> : <Text style={styles.postBtnText}>{editId ? 'Save Changes' : 'Publish Report'}</Text>}
+            </LinearGradient>
+          </TouchableOpacity>
 
-        <TouchableOpacity onPress={handlePost} disabled={loading}>
-          <LinearGradient colors={Gradients.primary} style={styles.btn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-            {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>Post Report</Text>}
-          </LinearGradient>
-        </TouchableOpacity>
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
 
-        <ImageSourceModal 
-          isVisible={showModal} 
-          onClose={() => setShowModal(false)}
-          onSelect={pickImage}
-        />
+      <ImageSourceModal 
+        isVisible={showModal} 
+        onClose={() => setShowModal(false)}
+        onSelect={pickImage}
+      />
 
-        <FeedbackModal 
-          isVisible={feedbackVisible}
-          onClose={() => setFeedbackVisible(false)}
-          title={feedbackConfig.title}
-          message={feedbackConfig.message}
-          type={feedbackConfig.type}
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <FeedbackModal 
+        isVisible={feedbackVisible}
+        onClose={() => setFeedbackVisible(false)}
+        title={feedbackConfig.title}
+        message={feedbackConfig.message}
+        type={feedbackConfig.type}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  scroll: { padding: 24, paddingTop: 16, paddingBottom: 40 },
-  title: { fontSize: 26, fontWeight: '800', color: Colors.textPrimary, marginBottom: 24 },
-  typeRow: { gap: 10, marginBottom: 24 },
-  typeBtn: { borderRadius: 14, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
-  typeBtnActive: { borderColor: 'transparent' },
-  typeBtnInner: { paddingVertical: 14, alignItems: 'center' },
-  typeLabel: { color: Colors.textSecondary, fontWeight: '600', fontSize: 14, paddingVertical: 14, textAlign: 'center' },
-  typeLabelActive: { color: '#FFF', fontWeight: '700', fontSize: 14 },
-  imagePicker: {
-    width: '100%', height: 200, borderRadius: 14, borderStyle: 'dashed',
-    borderWidth: 2, borderColor: Colors.border, backgroundColor: Colors.bgCard,
-    justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
+  container: { flex: 1, backgroundColor: Colors.background },
+  scroll: { paddingHorizontal: Spacing.margin, paddingTop: 60, paddingBottom: 40 },
+  
+  title: {
+    ...Typography.display,
+    fontSize: 42,
+    color: Colors.on_background,
+    marginBottom: Spacing.xl,
   },
+
+  // Toggle Styles
+  typeToggle: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface_container_low,
+    borderRadius: Roundness.md,
+    padding: 6,
+    marginBottom: Spacing.xl,
+  },
+  typeBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: Roundness.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  btnFill: { ...StyleSheet.absoluteFillObject },
+  typeBtnActive: { ...Shadows.ambient },
+  typeBtnText: { ...Typography.label, color: Colors.on_surface_variant },
+  typeBtnTextActive: { color: Colors.on_primary },
+
+  // Image Area
+  imageZone: {
+    width: '100%',
+    height: 220,
+    backgroundColor: Colors.surface_container_low,
+    borderRadius: Roundness.lg,
+    overflow: 'hidden',
+  },
+  imageEmpty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: Spacing.md },
+  cameraCircle: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: Colors.surface_container_high,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  imageInstruction: { ...Typography.caption, color: Colors.on_surface_variant, fontSize: 13 },
+  imagePreviewWrap: { flex: 1 },
   previewImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  imagePlaceholder: { alignItems: 'center' },
-  imagePlaceholderText: { color: Colors.textMuted, marginTop: 8, fontSize: 14 },
-  removeImage: { marginTop: 8, alignSelf: 'flex-end' },
-  removeImageText: { color: Colors.danger, fontSize: 13, fontWeight: '600' },
-  fieldGroup: { marginBottom: 18 },
-  label: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600', marginBottom: 8, marginLeft: 4 },
-  inputWrapper: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 14,
+  removeBtn: {
+    position: 'absolute', top: 12, right: 12,
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center', alignItems: 'center',
   },
-  input: { flex: 1, color: Colors.textPrimary, fontSize: 15, paddingVertical: 14, marginLeft: 10 },
-  textAreaWrapper: { alignItems: 'flex-start', paddingVertical: 14 },
-  textArea: { flex: 1, color: Colors.textPrimary, fontSize: 15, minHeight: 100, textAlignVertical: 'top' },
-  btn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
-  btnText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
+
+  // Field Groups
+  fieldGroup: { marginBottom: Spacing.xl },
+  label: { ...Typography.label, color: Colors.primary, marginBottom: Spacing.sm, textTransform: 'uppercase', letterSpacing: 1 },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface_container_low,
+    borderRadius: Roundness.md,
+    paddingHorizontal: Spacing.lg,
+    height: 64,
+    gap: Spacing.md,
+  },
+  inputFocused: {
+    borderWidth: 1.5,
+    borderColor: `${Colors.primary}40`, // 30% opacity primary
+  },
+  input: { flex: 1, ...Typography.body_medium, color: Colors.on_background },
+  textAreaWrapper: { height: 160, alignItems: 'flex-start' },
+  textArea: { textAlignVertical: 'top', paddingTop: 18, height: '100%' },
+
+  postBtnContainer: { marginTop: Spacing.xl, ...Shadows.ambient },
+  postBtn: {
+    height: 64,
+    borderRadius: Roundness.full,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  postBtnText: { ...Typography.title, color: Colors.on_primary, fontSize: 18 },
+
+  reachInsight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(107,82,255,0.08)',
+    padding: 16,
+    borderRadius: 20,
+    marginTop: Spacing.xl,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(107,82,255,0.15)',
+  },
+  reachText: { ...Typography.caption, color: Colors.on_surface_variant, fontSize: 13, flex: 1 },
+  reachHighlight: { color: Colors.secondary, fontWeight: '700' },
 });

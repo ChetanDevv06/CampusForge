@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import { 
+  View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, 
+  ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, Dimensions 
+} from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Gradients } from '../constants/theme';
+import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface PasswordModalProps {
@@ -10,6 +13,8 @@ interface PasswordModalProps {
   onClose: () => void;
   onConfirm: (currentPass: string, newPass: string) => Promise<void>;
 }
+
+const { width } = Dimensions.get('window');
 
 export default function PasswordModal({ visible, onClose, onConfirm }: PasswordModalProps) {
   const [currentPass, setCurrentPass] = useState('');
@@ -22,15 +27,15 @@ export default function PasswordModal({ visible, onClose, onConfirm }: PasswordM
 
   const handleConfirm = async () => {
     if (!currentPass || !newPass || !confirmPass) {
-      setError('Please fill all fields');
+      setError('Coordinates Incomplete');
       return;
     }
     if (newPass.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError('Cipher must be at least 6 characters');
       return;
     }
     if (newPass !== confirmPass) {
-      setError('Passwords do not match');
+      setError('Cipher mismatch detected');
       return;
     }
 
@@ -38,202 +43,181 @@ export default function PasswordModal({ visible, onClose, onConfirm }: PasswordM
     setError(null);
     try {
       await onConfirm(currentPass, newPass);
-      // Success is handled by parent (usually closing modal)
       setCurrentPass('');
       setNewPass('');
       setConfirmPass('');
     } catch (e: any) {
-      setError(e.message || 'Failed to update password');
+      setError(e.message || 'Security protocol failed');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+    <Modal 
+      transparent 
+      visible={visible} 
+      animationType="slide" 
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+        
+        <Pressable style={styles.flexFill} onPress={onClose} />
         
         <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.keyboardView}
         >
           <Pressable style={styles.content} onPress={(e) => e.stopPropagation()}>
             <View style={styles.header}>
-              <Text style={styles.title}>Update Password</Text>
-              <TouchableOpacity onPress={onClose}>
-                <Ionicons name="close" size={24} color={Colors.textMuted} />
+              <View style={styles.headerTitleArea}>
+                <Text style={styles.title}>Identity Validation</Text>
+                <Text style={styles.subtitle}>Authorize coordinate change for CampusForge</Text>
+              </View>
+              <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
+                <Ionicons name="close" size={24} color={Colors.on_background} />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.subtitle}>For security, please enter your current password to proceed.</Text>
-
             {error && (
               <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={16} color={Colors.danger} />
+                <Ionicons name="alert-circle" size={16} color={Colors.error} />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Current Password</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={18} color={Colors.textSecondary} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="********"
-                  placeholderTextColor={Colors.textMuted}
-                  value={currentPass}
-                  onChangeText={setCurrentPass}
-                  secureTextEntry={!showCurrent}
-                />
-                <TouchableOpacity onPress={() => setShowCurrent(!showCurrent)}>
-                  <Ionicons name={showCurrent ? "eye-off-outline" : "eye-outline"} size={20} color={Colors.textMuted} />
-                </TouchableOpacity>
+            <View style={styles.form}>
+              <View style={styles.fieldBlock}>
+                <Text style={styles.label}>Current Cipher</Text>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="lock-closed" size={18} color={Colors.primary} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="********"
+                    placeholderTextColor={Colors.on_surface_variant}
+                    value={currentPass}
+                    onChangeText={setCurrentPass}
+                    secureTextEntry={!showCurrent}
+                  />
+                  <TouchableOpacity onPress={() => setShowCurrent(!showCurrent)}>
+                    <Ionicons name={showCurrent ? "eye-off" : "eye"} size={20} color={Colors.on_surface_variant} />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>New Password</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="key-outline" size={18} color={Colors.textSecondary} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Min 6 characters"
-                  placeholderTextColor={Colors.textMuted}
-                  value={newPass}
-                  onChangeText={setNewPass}
-                  secureTextEntry={!showNew}
-                />
-                <TouchableOpacity onPress={() => setShowNew(!showNew)}>
-                  <Ionicons name={showNew ? "eye-off-outline" : "eye-outline"} size={20} color={Colors.textMuted} />
-                </TouchableOpacity>
+              <View style={styles.fieldBlock}>
+                <Text style={styles.label}>New Security Cipher</Text>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="key" size={18} color={Colors.secondary} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Min 6 characters"
+                    placeholderTextColor={Colors.on_surface_variant}
+                    value={newPass}
+                    onChangeText={setNewPass}
+                    secureTextEntry={!showNew}
+                  />
+                  <TouchableOpacity onPress={() => setShowNew(!showNew)}>
+                    <Ionicons name={showNew ? "eye-off" : "eye"} size={20} color={Colors.on_surface_variant} />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Confirm New Password</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="shield-checkmark-outline" size={18} color={Colors.textSecondary} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Re-type new password"
-                  placeholderTextColor={Colors.textMuted}
-                  value={confirmPass}
-                  onChangeText={setConfirmPass}
-                  secureTextEntry={!showNew}
-                />
+              <View style={styles.fieldBlock}>
+                <Text style={styles.label}>Reseal Cipher</Text>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="shield-checkmark" size={18} color={Colors.tertiary} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Authorize new credentials"
+                    placeholderTextColor={Colors.on_surface_variant}
+                    value={confirmPass}
+                    onChangeText={setConfirmPass}
+                    secureTextEntry={!showNew}
+                  />
+                </View>
               </View>
             </View>
 
             <TouchableOpacity 
-              style={styles.actionBtn} 
+              style={styles.submitBtn} 
               onPress={handleConfirm}
               disabled={loading}
+              activeOpacity={0.8}
             >
               <LinearGradient
                 colors={Gradients.primary}
-                style={styles.btnGrad}
+                style={styles.submitGrad}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>Apply Changes</Text>}
+                {loading ? <ActivityIndicator color={Colors.on_primary} /> : <Text style={styles.submitText}>Seal New Credentials</Text>}
               </LinearGradient>
             </TouchableOpacity>
           </Pressable>
         </KeyboardAvoidingView>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  flexFill: { flex: 1 },
   keyboardView: { width: '100%' },
   content: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: Colors.surface_container_low,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
-    padding: 24,
-    paddingBottom: Platform.OS === 'ios' ? 48 : 24,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    padding: Spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? 60 : Spacing.xxl,
+    ...Shadows.ambient,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    marginBottom: Spacing.xl,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 20,
-    lineHeight: 20,
-  },
+  headerTitleArea: { flex: 1 },
+  title: { ...Typography.display, color: Colors.on_background, fontSize: 24 },
+  subtitle: { ...Typography.caption, color: Colors.on_surface_variant, marginTop: 4 },
+  closeBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: Colors.surface_container_high, justifyContent: 'center', alignItems: 'center' },
+
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,94,94,0.1)',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 20,
+    gap: 10,
+    backgroundColor: 'rgba(255,107,107,0.1)',
+    padding: Spacing.md,
+    borderRadius: Roundness.md,
+    marginBottom: Spacing.xl,
   },
-  errorText: {
-    fontSize: 13,
-    color: Colors.danger,
-    fontWeight: '600'
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginBottom: 8,
-    marginLeft: 4,
-  },
-  inputWrapper: {
+  errorText: { ...Typography.caption, color: Colors.error, fontWeight: '700' },
+
+  form: { gap: Spacing.lg },
+  fieldBlock: { gap: Spacing.sm },
+  label: { ...Typography.label, color: Colors.on_surface_variant, marginLeft: 4 },
+  inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: Colors.bgSurface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: 16,
+    backgroundColor: Colors.surface_container_high,
+    borderRadius: Roundness.md,
+    paddingHorizontal: Spacing.md,
     height: 56,
+    gap: Spacing.md,
   },
-  input: {
-    flex: 1,
-    color: Colors.textPrimary,
-    fontSize: 16,
-  },
-  actionBtn: {
-    marginTop: 12,
-    height: 56,
-    borderRadius: 16,
+  input: { flex: 1, ...Typography.body_medium, color: Colors.on_background, fontSize: 16 },
+
+  submitBtn: {
+    marginTop: Spacing.xxl,
+    height: 60,
+    borderRadius: Roundness.full,
     overflow: 'hidden',
+    ...Shadows.ambient,
   },
-  btnGrad: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  btnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFF',
-  },
+  submitGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  submitText: { ...Typography.title, color: Colors.on_primary, fontSize: 17 },
 });

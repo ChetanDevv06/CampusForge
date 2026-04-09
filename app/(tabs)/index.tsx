@@ -1,234 +1,409 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, TextInput, Dimensions, Image
+  StatusBar, TextInput, Dimensions, Image, Platform, ActivityIndicator
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, orderBy, limit, onSnapshot, getDocs, where } from 'firebase/firestore';
-import { db, auth } from '../../firebaseConfig';
+import { collection, query, orderBy, limit, getDocs, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
 import { useRouter } from 'expo-router';
-import { Colors, Gradients } from '../../constants/theme';
+import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
-function getGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good Morning';
-  if (hour < 17) return 'Good Afternoon';
-  return 'Good Evening';
-}
-
 export default function HomeScreen() {
   const { user, profile } = useAuth();
   const router = useRouter();
-  const [recentItems, setRecentItems] = useState<any[]>([]);
-  const [recentSkills, setRecentSkills] = useState<any[]>([]);
-  const [stats, setStats] = useState({ lost: 0, skills: 0, market: 0 });
-  const [search, setSearch] = useState('');
+  const [activeFilter, setActiveFilter] = useState('All');
+  
+  const [marketItems, setMarketItems] = useState<any[]>([]);
+  const [lostItems, setLostItems] = useState<any[]>([]);
+  const [skillItems, setSkillItems] = useState<any[]>([]);
+  const [loadingFeed, setLoadingFeed] = useState(true);
+  const [todayFoundCount, setTodayFoundCount] = useState(0);
+  const [newMarketCount, setNewMarketCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-  const username = profile?.name || (user?.email as string)?.split('@')[0] || 'Student';
+  const username = profile?.name?.split(' ')[0] || (user?.email as string)?.split('@')[0] || 'Sam';
   const initials = username.charAt(0).toUpperCase();
 
   useEffect(() => {
-    // Recent Lost & Found
-    const lostQ = query(collection(db, 'lost_found'), orderBy('createdAt', 'desc'), limit(3));
-    const unsub1 = onSnapshot(lostQ, (s) => setRecentItems(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+    if (!profile?.collegeId) return;
 
-    // Recent Skills
-    const skillQ = query(collection(db, 'skills'), orderBy('createdAt', 'desc'), limit(3));
-    const unsub2 = onSnapshot(skillQ, (s) => setRecentSkills(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+    // 1. Items Found Today (Fallback to memory filtering to avoid index errors)
+    const lostQuery = query(collection(db, 'lost_found'));
+    const unsubLost = onSnapshot(lostQuery, (snap) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const count = snap.docs.filter(doc => {
+        const d = doc.data();
+        return d.collegeId === profile.collegeId && parseMillis(d.createdAt) >= today.getTime();
+      }).length;
+      setTodayFoundCount(count);
+    });
 
-    // Stats
-    Promise.all([
-      getDocs(collection(db, 'lost_found')),
-      getDocs(collection(db, 'skills')),
-      getDocs(collection(db, 'marketplace')),
-    ]).then(([l, s, m]) => setStats({ lost: l.size, skills: s.size, market: m.size })).catch(() => {});
+    // 2. Market New Arrivals (Last 24h)
+    const marketQuery = query(collection(db, 'marketplace'));
+    const unsubMarket = onSnapshot(marketQuery, (snap) => {
+      const last24h = Date.now() - 24 * 60 * 60 * 1000;
+      const count = snap.docs.filter(doc => {
+        const d = doc.data();
+        return d.collegeId === profile.collegeId && parseMillis(d.createdAt) >= last24h;
+      }).length;
+      setNewMarketCount(count);
+    });
 
-    // Real-time unread messages check
-    let unsub3 = () => {};
+    // 3. Unread Messages
     if (user?.uid) {
-      const q = query(
-        collection(db, 'conversations'),
-        where('participants', 'array-contains', user.uid)
-      );
-      unsub3 = onSnapshot(q, (snap) => {
-        let total = 0;
-        snap.forEach(d => {
-          const data = d.data();
-          total += data.unreadCount?.[user.uid] || 0;
+        const chatsQuery = query(
+            collection(db, 'chats'),
+            where('participants', 'array-contains', user.uid)
+        );
+        
+        const unsubChats = onSnapshot(chatsQuery, (snap) => {
+            let totalUnread = 0;
+            snap.docs.forEach(doc => {
+                const data = doc.data();
+                if (data.unreadCount && data.unreadCount[user.uid]) {
+                    totalUnread += data.unreadCount[user.uid];
+                }
+            });
+            setUnreadCount(totalUnread);
         });
-        setUnreadCount(total);
-      });
+        return () => { unsubLost(); unsubMarket(); unsubChats(); };
     }
 
-    return () => { unsub1(); unsub2(); unsub3(); };
-  }, [user]);
+    return () => { unsubLost(); unsubMarket(); };
+  }, [profile?.collegeId, user?.uid]);
 
-  const quickActions = [
-    { icon: 'search-outline', label: 'Report\nLost', colors: Gradients.lostBadge, route: '/post-item', param: 'lost' },
-    { icon: 'checkmark-circle-outline', label: 'Found\nSomething', colors: Gradients.foundBadge, route: '/post-item', param: 'found' },
-    { icon: 'storefront-outline', label: 'Sell\nItem', colors: Gradients.primary, route: '/post-market', param: '' },
-    { icon: 'bulb-outline', label: 'Share\nSkill', colors: Gradients.skillOffer, route: '/post-skill', param: '' },
-  ];
+  useEffect(() => {
+    const fetchFeeds = async () => {
+      try {
+        const collegeId = profile?.collegeId || '';
+        const [mSnap, lSnap, sSnap] = await Promise.all([
+          getDocs(query(collection(db, 'marketplace'), where('collegeId', '==', collegeId), orderBy('createdAt', 'desc'), limit(5))),
+          getDocs(query(collection(db, 'lost_found'), where('collegeId', '==', collegeId), orderBy('createdAt', 'desc'), limit(5))),
+          getDocs(query(collection(db, 'skills'), where('collegeId', '==', collegeId), orderBy('createdAt', 'desc'), limit(5))),
+        ]);
+
+        setMarketItems(mSnap.docs.map(d => ({ id: d.id, _feedType: 'market', ...d.data() })));
+        setLostItems(lSnap.docs.map(d => ({ id: d.id, _feedType: 'lost', ...d.data() })));
+        setSkillItems(sSnap.docs.map(d => ({ id: d.id, _feedType: 'skill', ...d.data() })));
+      } catch (error) {
+        console.warn("Feed fetch error", error);
+      } finally {
+        setLoadingFeed(false);
+      }
+    };
+    fetchFeeds();
+  }, [profile?.collegeId]);
+
+  const parseMillis = (t: any) => {
+    if (!t) return 0;
+    if (typeof t.toMillis === 'function') return t.toMillis();
+    if (t instanceof Date) return t.getTime();
+    if (typeof t === 'number') return t;
+    if (t.seconds) return t.seconds * 1000;
+    const asDate = new Date(t);
+    return isNaN(asDate.getTime()) ? 0 : asDate.getTime();
+  };
+
+  // 1. Memoize the filtered list to prevent re-renders from triggering focus loss
+  const filteredFeed = useMemo(() => {
+    let feed = [...marketItems, ...lostItems, ...skillItems]
+      .sort((a, b) => parseMillis(b.createdAt) - parseMillis(a.createdAt));
+
+    if (activeFilter === 'Found') feed = feed.filter(i => i._feedType === 'lost');
+    if (activeFilter === 'Sale') feed = feed.filter(i => i._feedType === 'market');
+    if (activeFilter === 'Skills') feed = feed.filter(i => i._feedType === 'skill');
+
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      feed = feed.filter(i => 
+        (i.title?.toLowerCase().includes(q)) || 
+        (i.description?.toLowerCase().includes(q))
+      );
+    }
+    return feed;
+  }, [marketItems, lostItems, skillItems, activeFilter, searchQuery]);
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
-
-        {/* Hero Header */}
-        <LinearGradient colors={['#1A1535', '#0A0A12']} style={styles.header}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.greeting}>{getGreeting()}</Text>
-              <Text style={styles.username}>{username}</Text>
-            </View>
-            <View style={styles.headerRight}>
-              <TouchableOpacity style={styles.notifBtn} onPress={() => router.push('/messages')}>
-                <Ionicons name="chatbubble-outline" size={22} color={Colors.textPrimary} />
-                {unreadCount > 0 && <View style={styles.notifDot} />}
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
+      
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
+        <View style={styles.headerWrapper}>
+          <View style={styles.topNav}>
+            <View style={styles.navLeft}>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.avatarWrap}>
                 {profile?.avatarUrl ? (
-                  <Image source={{ uri: profile.avatarUrl }} style={styles.avatarSmallImage} />
+                  <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} />
                 ) : (
-                  <LinearGradient colors={Gradients.primary} style={styles.avatarSmall}>
-                    <Text style={styles.avatarSmallText}>{initials}</Text>
+                  <LinearGradient colors={Gradients.primary} style={styles.avatarPlaceholder}>
+                    <Text style={styles.avatarText}>{initials}</Text>
                   </LinearGradient>
                 )}
               </TouchableOpacity>
+              <Text style={styles.campusLogo}>
+                {profile?.collegeShortName || profile?.collegeName || 'Campus'}
+              </Text>
             </View>
-          </View>
-
-          {/* Search Bar */}
-          <View style={styles.searchBar}>
-            <Ionicons name="search-outline" size={18} color={Colors.textSecondary} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search items, skills, listings..."
-              placeholderTextColor={Colors.textMuted}
-              value={search}
-              onChangeText={setSearch}
-              onFocus={() => router.push('/search')}
-            />
-          </View>
-        </LinearGradient>
-
-        {/* Stats Row */}
-        <View style={styles.statsContainer}>
-          {[
-            { label: 'Items Reported', value: stats.lost, icon: 'flag-outline', colors: Gradients.lostBadge, route: '/(tabs)/lost-found' },
-            { label: 'Skills Listed', value: stats.skills, icon: 'flash-outline', colors: Gradients.skillOffer, route: '/(tabs)/skills' },
-            { label: 'On Market', value: stats.market, icon: 'storefront-outline', colors: Gradients.primary, route: '/(tabs)/market' },
-          ].map((s, i) => (
-            <TouchableOpacity key={i} style={styles.statCard} onPress={() => router.push(s.route as any)}>
-              <LinearGradient colors={s.colors} style={styles.statIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                <Ionicons name={s.icon as any} size={18} color="#FFF" />
-              </LinearGradient>
-              <Text style={styles.statValue}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Quick Actions */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-        </View>
-        <View style={styles.quickGrid}>
-          {quickActions.map((a, i) => (
-            <TouchableOpacity key={i} style={styles.quickCard} onPress={() => router.push(a.route as any)}>
-              <LinearGradient colors={a.colors} style={styles.quickIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                <Ionicons name={a.icon as any} size={26} color="#FFF" />
-              </LinearGradient>
-              <Text style={styles.quickLabel}>{a.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Recent Lost & Found */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Lost & Found</Text>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/lost-found' as any)}>
-            <Text style={styles.seeAll}>See All</Text>
-          </TouchableOpacity>
-        </View>
-        {recentItems.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Ionicons name="search-outline" size={28} color={Colors.textMuted} />
-            <Text style={styles.emptyCardText}>No items reported yet</Text>
-          </View>
-        ) : (
-          recentItems.map(item => (
             <TouchableOpacity 
-              key={item.id} 
-              style={styles.itemCard}
-              onPress={() => router.push({ pathname: '/item-details/[id]', params: { id: item.id } } as any)}
+              style={styles.searchIconBtn}
+              onPress={() => router.push('/notifications')}
             >
-              <LinearGradient
-                colors={item.type === 'lost' ? Gradients.lostBadge : Gradients.foundBadge}
-                style={styles.itemBadgeIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              >
-                <Ionicons name={item.type === 'lost' ? 'alert-circle' : 'checkmark-circle'} size={20} color="#FFF" />
-              </LinearGradient>
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemTitle}>{item.title}</Text>
-                <Text style={styles.itemMeta}>
-                  <Ionicons name="location-outline" size={11} /> {item.location}
-                </Text>
-              </View>
-              <View style={[styles.typePill, { backgroundColor: item.type === 'lost' ? 'rgba(255,107,107,0.15)' : 'rgba(52,238,154,0.15)' }]}>
-                <Text style={[styles.typePillText, { color: item.type === 'lost' ? Colors.danger : Colors.success }]}>
-                  {item.type.toUpperCase()}
-                </Text>
-              </View>
+              <Ionicons name="notifications-outline" size={24} color="#FFF" />
+              {unreadCount > 0 && <View style={styles.topNotificationDot} />}
             </TouchableOpacity>
-          ))
-        )}
+          </View>
 
-        {/* Recent Skills */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Skills Exchange</Text>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/skills' as any)}>
-            <Text style={styles.seeAll}>See All</Text>
+          <View style={styles.greetingSection}>
+            <Text style={styles.greetingHeading}>Hey, {username}!</Text>
+            <Text style={styles.greetingSub}>There are {todayFoundCount + newMarketCount} new listings in your circle today.</Text>
+          </View>
+
+          <View style={[
+            styles.searchBarContainer,
+            isSearchFocused && styles.searchBarContainerFocused,
+            searchQuery.length > 0 && styles.searchBarContainerActive
+          ]}>
+            <Ionicons 
+              name={isSearchFocused ? "search" : "search-outline"} 
+              size={20} 
+              color={isSearchFocused ? Colors.primary : Colors.on_surface_variant} 
+            />
+            <TextInput 
+              style={styles.searchInput}
+              placeholder="Find books, clubs, or skills..."
+              placeholderTextColor={Colors.on_surface_variant}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+            />
+            {searchQuery.length > 0 && (
+              <View style={styles.searchSideActions}>
+                 <View style={styles.resultCountBadge}>
+                   <Text style={styles.resultCountText}>{filteredFeed.length}</Text>
+                 </View>
+                 <TouchableOpacity 
+                   onPress={() => setSearchQuery('')}
+                   style={styles.clearSearchBtn}
+                 >
+                   <Ionicons name="close-circle" size={20} color={Colors.on_surface_variant} />
+                 </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+
+
+        <View style={styles.featureGrid}>
+          <TouchableOpacity 
+            style={styles.gridCard} 
+            activeOpacity={0.9}
+            onPress={() => router.push('/(tabs)/lost-found')}
+          >
+            <View style={styles.iconRow}>
+              <View style={[styles.iconCircle, { backgroundColor: 'rgba(164, 166, 255, 0.1)' }]}>
+                <Ionicons name="search" size={24} color={Colors.primary} />
+              </View>
+              <Ionicons name="search-outline" size={48} color="rgba(255,255,255,0.05)" style={styles.ghostIcon} />
+            </View>
+            <Text style={styles.gridCardTitle}>Lost & Found</Text>
+            <Text style={styles.gridCardSub}>{todayFoundCount} items found today</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            activeOpacity={0.9}
+            onPress={() => router.push('/(tabs)/market')}
+          >
+            <LinearGradient 
+              colors={['#4a339d', '#22006d']} 
+              style={[styles.gridCard, styles.marketCard]}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}
+            >
+              <View style={styles.iconRow}>
+                <View style={[styles.iconCircle, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
+                  <Ionicons name="storefront" size={24} color="#FFF" />
+                </View>
+                <Ionicons name="storefront-outline" size={48} color="rgba(255,255,255,0.1)" style={styles.ghostIcon} />
+              </View>
+              <Text style={styles.gridCardTitle}>Marketplace</Text>
+              <View style={styles.newBadge}>
+                <Text style={styles.newBadgeText}>{newMarketCount > 0 ? `${newMarketCount} NEW ARRIVALS` : 'VIEW MARKET'}</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.gridCard} 
+            activeOpacity={0.9}
+            onPress={() => router.push('/(tabs)/skills')}
+          >
+             <View style={styles.iconRow}>
+              <View style={[styles.iconCircle, { backgroundColor: 'rgba(255, 165, 216, 0.1)' }]}>
+                <Ionicons name="school" size={24} color={Colors.tertiary} />
+              </View>
+              <Ionicons name="school-outline" size={48} color="rgba(255,255,255,0.05)" style={styles.ghostIcon} />
+            </View>
+            <Text style={styles.gridCardTitle}>Skill Share</Text>
+            <Text style={styles.gridCardSub}>Learn from peers</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.gridCard} 
+            activeOpacity={0.9}
+            onPress={() => router.push('/messages')}
+          >
+            <View style={styles.iconRow}>
+              <View style={[styles.iconCircle, { backgroundColor: 'rgba(232, 228, 231, 0.1)' }]}>
+                <Ionicons name="chatbubble" size={24} color={Colors.on_background} />
+              </View>
+              {unreadCount > 0 && <View style={styles.notificationDot} />}
+            </View>
+            <Text style={styles.gridCardTitle}>Messages</Text>
+            <Text style={styles.gridCardSub}>{unreadCount} unread chats</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}>
-          {recentSkills.length === 0 ? (
-            <View style={[styles.emptyCard, { width: width - 32 }]}>
-              <Ionicons name="flash-outline" size={28} color={Colors.textMuted} />
-              <Text style={styles.emptyCardText}>No skills posted yet</Text>
-            </View>
-          ) : (
-            recentSkills.map(skill => (
-              <TouchableOpacity 
-                key={skill.id} 
-                onPress={() => router.push({ pathname: '/skill-details/[id]', params: { id: skill.id } } as any)}
-              >
-                <LinearGradient
-                  colors={skill.type === 'offer' ? ['#1C1C3A', '#13131F'] : ['#1C1A10', '#13131F']}
-                  style={styles.skillCard}
-                >
-                  <LinearGradient
-                    colors={skill.type === 'offer' ? Gradients.skillOffer : Gradients.skillRequest}
-                    style={styles.skillIcon}
-                  >
-                    <Ionicons name={skill.type === 'offer' ? 'bulb' : 'book'} size={18} color="#FFF" />
-                  </LinearGradient>
-                  <Text style={styles.skillTitle}>{skill.title}</Text>
-                  <Text style={styles.skillCat}>{skill.category}</Text>
-                  <View style={styles.skillTypePill}>
-                    <Text style={styles.skillTypeText}>{skill.type === 'offer' ? 'Teaching' : 'Learning'}</Text>
-                  </View>
-                </LinearGradient>
-              </TouchableOpacity>
-            ))
-          )}
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recent Activity</Text>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/market')}>
+            <Text style={styles.viewAllText}>View All</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+          {['All', 'Found', 'Sale', 'Skills'].map(f => (
+            <TouchableOpacity 
+              key={f} 
+              style={[styles.filterChip, activeFilter === f && styles.filterChipActive]}
+              onPress={() => setActiveFilter(f)}
+            >
+              <Text style={[styles.filterText, activeFilter === f && styles.filterTextActive]}>{f}</Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
+
+        <View style={styles.verticalFeed}>
+          {loadingFeed ? (
+             <LinearGradient colors={['#1f1f22', '#1A1A20']} style={[styles.feedCardContainer, { height: 160, justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator color={Colors.primary} />
+             </LinearGradient>
+          ) : filteredFeed.length > 0 ? (
+            filteredFeed.map((item) => {
+              const formatAgo = (timestamp: any) => {
+                if (!timestamp) return 'JUST NOW';
+                let targetTime = 0;
+                if (typeof timestamp.toMillis === 'function') targetTime = timestamp.toMillis();
+                else if (timestamp instanceof Date) targetTime = timestamp.getTime();
+                else if (typeof timestamp === 'number') targetTime = timestamp;
+                else if (timestamp.seconds) targetTime = timestamp.seconds * 1000;
+                else targetTime = new Date(timestamp).getTime();
+                
+                if (!targetTime || isNaN(targetTime)) return 'JUST NOW';
+                const hours = Math.floor((Date.now() - targetTime) / (1000 * 60 * 60));
+                if (hours < 1) return 'JUST NOW';
+                if (hours < 24) return `${hours}H AGO`;
+                return `${Math.floor(hours/24)}D AGO`;
+              };
+
+              if (item._feedType === 'market') {
+                return (
+                  <TouchableOpacity key={item.id} style={styles.feedCardContainer} onPress={() => router.push({ pathname: '/market-details/[id]', params: { id: item.id } } as any)}>
+                    {item.imageUrl ? (
+                      <View style={styles.feedImageWrap}>
+                        <Image source={{ uri: item.imageUrl }} style={styles.feedImageFull} />
+                        <View style={styles.pricePill}><Text style={styles.pricePillText}>${item.price || '0.00'}</Text></View>
+                      </View>
+                    ) : null}
+                    <View style={styles.feedCardBody}>
+                      <View style={styles.feedCardTop}>
+                         <View style={styles.tagBadge}><Text style={styles.tagText}>MARKETPLACE</Text></View>
+                         <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
+                      </View>
+                      <Text style={styles.feedCardTitle}>{item.title}</Text>
+                      <Text style={styles.feedCardDesc} numberOfLines={2}>{item.description}</Text>
+                      <View style={styles.feedCardBottom}>
+                        <View style={styles.feedAuthor}>
+                          <View style={styles.miniAvatar}><Ionicons name="person" size={14} color="#FFF"/></View>
+                          <Text style={styles.feedAuthorName}>Alex Rivera</Text>
+                        </View>
+                        <Ionicons name="heart-outline" size={24} color="#6B52FF" />
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }
+
+              if (item._feedType === 'skill') {
+                return (
+                  <TouchableOpacity key={item.id} style={[styles.feedCardContainer, {borderLeftWidth: 4, borderLeftColor: '#ff8fb3'}]} onPress={() => router.push({ pathname: '/skill-details/[id]', params: { id: item.id } } as any)}>
+                    <View style={styles.feedCardBody}>
+                      <View style={styles.feedCardTop}>
+                         <View style={[styles.tagBadge, {backgroundColor: 'rgba(255, 143, 179, 0.15)'}]}><Text style={[styles.tagText, {color: '#ff8fb3'}]}>SKILL SHARE</Text></View>
+                         <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
+                      </View>
+                      <Text style={styles.feedCardTitle}>{item.title}</Text>
+                      <Text style={styles.feedCardDesc} numberOfLines={3}>{item.description}</Text>
+                      <View style={styles.feedCardBottom}>
+                        <View style={styles.feedAuthor}>
+                          <View style={styles.miniAvatar}><Ionicons name="person" size={14} color="#FFF"/></View>
+                          <View style={styles.plusBadge}><Text style={styles.plusBadgeText}>+5</Text></View>
+                        </View>
+                        <TouchableOpacity style={styles.reserveBtn}><Text style={styles.reserveBtnText}>RESERVE SPOT</Text></TouchableOpacity>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }
+
+              if (item._feedType === 'lost') {
+                return (
+                  <TouchableOpacity key={item.id} style={styles.feedCardContainer} onPress={() => router.push({ pathname: '/item-details/[id]', params: { id: item.id } } as any)}>
+                    {item.imageUrl ? (
+                      <View style={styles.feedImageWrap}>
+                        <Image source={{ uri: item.imageUrl }} style={styles.feedImageFull} />
+                      </View>
+                    ) : null}
+                    <View style={styles.feedCardBody}>
+                      <View style={styles.feedCardTop}>
+                         <View style={[styles.tagBadge, {backgroundColor: 'rgba(255, 87, 87, 0.15)'}]}><Text style={[styles.tagText, {color: '#ff5757'}]}>{item.type?.toUpperCase() || 'FOUND'}</Text></View>
+                         <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
+                      </View>
+                      <Text style={styles.feedCardTitle}>{item.title}</Text>
+                      <Text style={styles.feedCardDesc} numberOfLines={2}>{item.description}</Text>
+                      <View style={styles.feedCardBottom}>
+                        <View style={styles.feedAuthor}>
+                          <Ionicons name="location-outline" size={16} color="#6B52FF" />
+                          <Text style={styles.feedLocationText}>{item.location?.toUpperCase() || 'MAIN CAMPUS HUB'}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }
+              return null;
+            })
+          ) : (
+            <View style={styles.emptySearch}>
+              <Ionicons name="search-outline" size={48} color="rgba(255,255,255,0.1)" />
+              <Text style={styles.emptySearchText}>No results found</Text>
+              <Text style={styles.emptySearchSub}>Try searching for something else or browse all categories.</Text>
+            </View>
+          )}
+        </View>
 
       </ScrollView>
     </View>
@@ -236,92 +411,188 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  header: { paddingTop: 52, paddingHorizontal: 20, paddingBottom: 20 },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  greeting: { fontSize: 14, color: Colors.textSecondary },
-  username: { fontSize: 24, fontWeight: '800', color: Colors.textPrimary, marginTop: 2 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  notifBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: Colors.bgCard, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
-  notifDot: { position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.danger },
-  avatarSmall: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
-  avatarSmallImage: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: Colors.border },
-  avatarSmallText: { fontSize: 18, fontWeight: '800', color: '#FFF' },
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: Colors.bgCard, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 14, paddingVertical: 12,
+  container: { flex: 1, backgroundColor: '#15151A' },
+  scrollContent: {
+    paddingBottom: 120,
   },
-  searchInput: { flex: 1, color: Colors.textPrimary, fontSize: 14 },
-  statsContainer: {
-    flexDirection: 'row', marginHorizontal: 16, marginTop: 16, gap: 10,
+  headerWrapper: {
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    backgroundColor: '#15151A',
   },
-  statCard: {
-    flex: 1, backgroundColor: Colors.bgCard, borderRadius: 16, padding: 14,
-    alignItems: 'center', borderWidth: 1, borderColor: Colors.border,
-  },
-  statIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  statValue: { fontSize: 20, fontWeight: '800', color: Colors.textPrimary },
-  statLabel: { fontSize: 10, color: Colors.textSecondary, marginTop: 2, textAlign: 'center' },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginTop: 24, marginBottom: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
-  seeAll: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
-  quickGrid: { 
-    flexDirection: 'row', 
-    flexWrap: 'wrap', 
-    paddingHorizontal: 16, 
-    gap: 12, 
-    justifyContent: 'center' 
-  },
-  quickCard: {
-    width: (width - 44) / 2 - 12, 
-    backgroundColor: Colors.bgCard,
-    borderRadius: 18, 
-    padding: 18, 
-    borderWidth: 1, 
-    borderColor: Colors.border,
+  topNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
-  quickIcon: { 
-    width: 52, 
-    height: 52, 
-    borderRadius: 16, 
-    justifyContent: 'center', 
+  navLeft: { 
+    flexDirection: 'row', 
     alignItems: 'center', 
-    marginBottom: 12 
+    gap: Spacing.sm,
+    height: 44, // Match avatar height
   },
-  quickLabel: { 
-    fontSize: 15, 
-    fontWeight: '700', 
-    color: Colors.textPrimary, 
-    lineHeight: 20, 
-    textAlign: 'center' 
+  avatarWrap: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden' },
+  avatarImage: { width: '100%', height: '100%' },
+  avatarPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  avatarText: { ...Typography.title, color: Colors.on_primary, fontSize: 18 },
+  campusLogo: { ...Typography.display, fontSize: 24, color: '#FFF' },
+  searchIconBtn: { padding: Spacing.xs },
+  greetingSection: { paddingHorizontal: Spacing.xl, marginBottom: Spacing.md },
+  greetingHeading: { ...Typography.display, fontSize: 32, color: '#FFF', marginBottom: Spacing.xs },
+  greetingSub: { ...Typography.body_medium, fontSize: 13, color: 'rgba(255,255,255,0.6)' },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F0F12',
+    marginHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    height: 56,
+    borderRadius: 18,
+    marginBottom: Spacing.xl,
+    gap: Spacing.sm,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
-  itemCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    marginHorizontal: 16, marginBottom: 10,
-    backgroundColor: Colors.bgCard, borderRadius: 16, padding: 14,
-    borderWidth: 1, borderColor: Colors.border,
+  searchContainerSticky: {
+    paddingBottom: 4,
   },
-  itemBadgeIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  itemInfo: { flex: 1 },
-  itemTitle: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
-  itemMeta: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
-  typePill: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  typePillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  skillCard: {
-    width: 160, borderRadius: 18, padding: 16,
-    borderWidth: 1, borderColor: Colors.border,
+  searchBarContainerFocused: {
+    borderColor: 'rgba(107, 82, 255, 0.4)',
+    backgroundColor: '#15151A',
+    transform: [{ scale: 1.02 }],
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  skillIcon: { width: 38, height: 38, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  skillTitle: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4 },
-  skillCat: { fontSize: 12, color: Colors.textSecondary, marginBottom: 12 },
-  skillTypePill: { backgroundColor: 'rgba(124,111,255,0.15)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start' },
-  skillTypeText: { fontSize: 11, color: Colors.primary, fontWeight: '700' },
-  emptyCard: {
-    marginHorizontal: 16, backgroundColor: Colors.bgCard, borderRadius: 16,
-    padding: 24, alignItems: 'center', borderWidth: 1, borderColor: Colors.border,
+  searchBarContainerActive: {
+    borderColor: 'rgba(107, 82, 255, 0.2)',
   },
-  emptyCardText: { color: Colors.textMuted, fontSize: 14, marginTop: 8 },
+  searchInput: { flex: 1, ...Typography.body, color: '#FFF', fontSize: 15, marginTop: Platform.OS === 'ios' ? 0 : 2 },
+  searchSideActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  resultCountBadge: {
+    backgroundColor: 'rgba(107, 82, 255, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  resultCountText: {
+    ...Typography.label,
+    color: Colors.primary,
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  clearSearchBtn: { padding: 4 },
+  featureGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: Spacing.lg,
+    gap: 12,
+    marginBottom: Spacing.xl,
+    justifyContent: 'center'
+  },
+  gridCard: {
+    width: (width - Spacing.lg * 2 - 12) / 2,
+    height: 180,
+    backgroundColor: '#1A1A20',
+    borderRadius: 32,
+    padding: Spacing.lg,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  marketCard: { backgroundColor: 'transparent' },
+  iconRow: {
+    position: 'absolute',
+    top: Spacing.lg,
+    left: Spacing.lg,
+    right: Spacing.lg,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  iconCircle: {
+    width: 44, height: 44, borderRadius: 16,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  ghostIcon: { position: 'absolute', right: -10, top: -5 },
+  notificationDot: {
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: Colors.tertiary,
+    position: 'absolute', right: 0, top: 4,
+    shadowColor: Colors.tertiary, shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8, shadowRadius: 8
+  },
+  gridCardTitle: { ...Typography.title, color: '#FFF', fontSize: 17, marginBottom: 4 },
+  gridCardSub: { ...Typography.caption, color: 'rgba(255,255,255,0.5)', fontSize: 11 },
+  newBadge: {
+    backgroundColor: 'rgba(164, 166, 255, 0.9)',
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: Roundness.md,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  newBadgeText: { ...Typography.label, color: '#22006d', fontSize: 9, letterSpacing: 0.5 },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.md,
+  },
+  sectionTitle: { ...Typography.title, color: '#FFF', fontSize: 20 },
+  viewAllText: { ...Typography.label, color: Colors.primary, fontSize: 13 },
+  filterScroll: { paddingHorizontal: 24, gap: 12, marginBottom: 24 },
+  filterChip: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 24, backgroundColor: '#1c1c1e' },
+  filterChipActive: { backgroundColor: '#5038a0' },
+  filterText: { ...Typography.body_medium, color: '#a1a1aa', fontSize: 14 },
+  filterTextActive: { color: '#FFF', fontWeight: 'bold' },
+  verticalFeed: { paddingHorizontal: 20, gap: 24 },
+  feedCardContainer: {
+    overflow: 'hidden',
+    borderRadius: 24,
+    backgroundColor: '#1A1A20',
+  },
+  feedImageWrap: { height: 260, width: '100%', backgroundColor: '#27272a' },
+  feedImageFull: { width: '100%', height: '100%', resizeMode: 'cover' },
+  pricePill: {
+    position: 'absolute', top: 16, right: 16,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6,
+  },
+  pricePillText: { ...Typography.title, color: '#FFF', fontSize: 14 },
+  feedCardBody: { padding: 20 },
+  feedCardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  tagBadge: { backgroundColor: 'rgba(164,166,255,0.15)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  tagText: { ...Typography.label, color: '#6B52FF', fontSize: 10, letterSpacing: 0.5 },
+  tagTime: { ...Typography.body_medium, color: '#8e8e93', fontSize: 11, marginLeft: 8 },
+  feedCardTitle: { ...Typography.title, color: '#FFF', fontSize: 20, marginBottom: 8, lineHeight: 26 },
+  feedCardDesc: { ...Typography.body, color: '#a1a1aa', fontSize: 14, lineHeight: 22, marginBottom: 20 },
+  feedCardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  feedAuthor: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  miniAvatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' },
+  feedAuthorName: { ...Typography.body_medium, color: '#e4e4e7', fontSize: 13 },
+  plusBadge: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: '#27272a', justifyContent: 'center', alignItems: 'center',
+    marginLeft: -12, borderWidth: 2, borderColor: '#1A1A20'
+  },
+  plusBadgeText: { ...Typography.label, color: '#a1a1aa', fontSize: 10 },
+  reserveBtn: {
+    backgroundColor: '#27272a',
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderRadius: 20,
+  },
+  reserveBtnText: { ...Typography.label, color: '#d4d4d8', fontSize: 12, letterSpacing: 0.5 },
+  feedLocationText: { ...Typography.label, color: '#e4e4e7', fontSize: 11, letterSpacing: 0.5, marginLeft: -2 },
+  emptySearch: { paddingVertical: 40, alignItems: 'center', justifyContent: 'center' },
+  emptySearchText: { ...Typography.title, color: '#FFF', fontSize: 16, marginTop: 16, marginBottom: 4 },
+  emptySearchSub: { ...Typography.body, color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center' },
+  topNotificationDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: Colors.tertiary,
+    position: 'absolute', right: 2, top: 2,
+    borderWidth: 1.5, borderColor: '#15151A'
+  },
 });
