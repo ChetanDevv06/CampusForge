@@ -60,7 +60,9 @@ export default function ProfileScreen() {
           sold: soldCount,
           skills: skillSnap.size,
         });
-      } catch {}
+      } catch (error) {
+        console.warn('📊 [Profile] Stats fetch error:', error);
+      }
     };
 
     fetch();
@@ -79,9 +81,9 @@ export default function ProfileScreen() {
 
       if (tab === 'posts') {
         const [mSnap, lSnap, sSnap] = await Promise.all([
-          getDocs(query(collection(db, 'marketplace'), where('userId', '==', uid), orderBy('createdAt', 'desc'))),
-          getDocs(query(collection(db, 'lost_found'), where('userId', '==', uid), orderBy('createdAt', 'desc'))),
-          getDocs(query(collection(db, 'skills'), where('userId', '==', uid), orderBy('createdAt', 'desc'))),
+          getDocs(query(collection(db, 'marketplace'), where('userId', '==', uid))),
+          getDocs(query(collection(db, 'lost_found'), where('userId', '==', uid))),
+          getDocs(query(collection(db, 'skills'), where('userId', '==', uid))),
         ]);
         mSnap.forEach(d => all.push({ id: d.id, ...d.data() as any, collection: 'marketplace' }));
         lSnap.forEach(d => all.push({ id: d.id, ...d.data() as any, collection: 'lost_found' }));
@@ -90,14 +92,22 @@ export default function ProfileScreen() {
 
       if (tab === 'archives') {
         const mSnap = await getDocs(
-          query(collection(db, 'marketplace'), where('userId', '==', uid), where('status', '==', 'sold'), orderBy('createdAt', 'desc'))
+          query(collection(db, 'marketplace'), where('userId', '==', uid), where('status', '==', 'sold'))
         );
         mSnap.forEach(d => all.push({ id: d.id, ...d.data() as any, collection: 'marketplace' }));
       }
 
+      // Sort all results by createdAt descending in memory to avoid Index requirements
+      all.sort((a: any, b: any) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
       // 'saved' would require a savedItems subcollection – show empty for now
       setPosts(all);
-    } catch {
+    } catch (error) {
+      console.warn('📊 [Profile] Post fetch error:', error);
       setPosts([]);
     } finally {
       setLoadingPosts(false);
@@ -267,7 +277,13 @@ export default function ProfileScreen() {
                 style={styles.gridCard}
                 activeOpacity={0.85}
                 onPress={() => {
-                  if (item.collection === 'marketplace') router.push({ pathname: '/market-details/[id]', params: { id: item.id } } as any);
+                  if (item.collection === 'marketplace') {
+                    router.push({ pathname: '/market-details/[id]', params: { id: item.id } } as any);
+                  } else if (item.collection === 'lost_found') {
+                    router.push({ pathname: '/item-details/[id]', params: { id: item.id } } as any);
+                  } else if (item.collection === 'skills') {
+                    router.push({ pathname: '/skill-details/[id]', params: { id: item.id } } as any);
+                  }
                 }}
               >
                 {item.imageUrl ? (

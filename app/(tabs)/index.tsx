@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, TextInput, Dimensions, Image, Platform, ActivityIndicator
+  StatusBar, TextInput, Dimensions, Image, Platform, ActivityIndicator,
+  Pressable, Animated
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,34 +28,82 @@ export default function HomeScreen() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  // Animation Values
+  const featureAnim = useRef(new Animated.Value(1)).current; // Opacity & Scale
+  const feedMoveAnim = useRef(new Animated.Value(0)).current; // TranslateY
+  const [showFeatures, setShowFeatures] = useState(true);
+
+  const lastQueryLength = useRef(0);
+
+  // Auto-scroll to results only on the FIRST character to avoid stuttering
+  useEffect(() => {
+    const currentLength = searchQuery.length;
+    const wasEmpty = lastQueryLength.current === 0;
+    const isNowEmpty = currentLength === 0;
+
+    lastQueryLength.current = currentLength;
+
+    // --- Search Animation Logic ---
+    const isSearching = currentLength > 0;
+
+    Animated.parallel([
+      Animated.timing(featureAnim, {
+        toValue: isSearching ? 0 : 1,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.spring(feedMoveAnim, {
+        toValue: isSearching ? -490 : 0, // Final nudge for perfect proximity
+        friction: 9,
+        tension: 50,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, [searchQuery, isSearchFocused]);
 
   const username = profile?.name?.split(' ')[0] || (user?.email as string)?.split('@')[0] || 'Sam';
   const initials = username.charAt(0).toUpperCase();
 
+  const focusSearch = () => searchInputRef.current?.focus();
+
   useEffect(() => {
     if (!profile?.collegeId) return;
 
-    // 1. Items Found Today (Fallback to memory filtering to avoid index errors)
+    // 1. Items Found (Total Active in College)
     const lostQuery = query(collection(db, 'lost_found'));
     const unsubLost = onSnapshot(lostQuery, (snap) => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const collegeId = profile?.collegeId;
       const count = snap.docs.filter(doc => {
         const d = doc.data();
-        return d.collegeId === profile.collegeId && parseMillis(d.createdAt) >= today.getTime();
+        if (!collegeId) return true; // Show all if profile not loaded
+        return d.collegeId === collegeId && d.status !== 'resolved';
       }).length;
+      console.log(`📊 [Debug] Active Lost/Found: ${count} for College: ${collegeId}`);
       setTodayFoundCount(count);
     });
 
-    // 2. Market New Arrivals (Last 24h)
+    // 2. Market & Skills (Total active listings)
     const marketQuery = query(collection(db, 'marketplace'));
-    const unsubMarket = onSnapshot(marketQuery, (snap) => {
-      const last24h = Date.now() - 24 * 60 * 60 * 1000;
-      const count = snap.docs.filter(doc => {
+    const unsubMarket = onSnapshot(marketQuery, (mSnap) => {
+      const collegeId = profile?.collegeId;
+      const mCount = mSnap.docs.filter(doc => {
         const d = doc.data();
-        return d.collegeId === profile.collegeId && parseMillis(d.createdAt) >= last24h;
+        if (!collegeId) return true;
+        return d.collegeId === collegeId && d.status !== 'sold';
       }).length;
-      setNewMarketCount(count);
+      
+      getDocs(query(collection(db, 'skills'))).then(sSnap => {
+        const sCount = sSnap.docs.filter(doc => {
+          const d = doc.data();
+          if (!collegeId) return true;
+          return d.collegeId === collegeId;
+        }).length;
+        console.log(`📊 [Debug] Total Market: ${mCount}, Skills: ${sCount}`);
+        setNewMarketCount(mCount + sCount);
+      });
     });
 
     // 3. Unread Messages
@@ -112,7 +161,6 @@ export default function HomeScreen() {
     return isNaN(asDate.getTime()) ? 0 : asDate.getTime();
   };
 
-  // 1. Memoize the filtered list to prevent re-renders from triggering focus loss
   const filteredFeed = useMemo(() => {
     let feed = [...marketItems, ...lostItems, ...skillItems]
       .sort((a, b) => parseMillis(b.createdAt) - parseMillis(a.createdAt));
@@ -124,8 +172,8 @@ export default function HomeScreen() {
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       feed = feed.filter(i => 
-        (i.title?.toLowerCase().includes(q)) || 
-        (i.description?.toLowerCase().includes(q))
+        (i.title?.toLowerCase() || '').includes(q) || 
+        (i.description?.toLowerCase() || '').includes(q)
       );
     }
     return feed;
@@ -135,53 +183,68 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       
+      <View style={styles.headerWrapper}>
+        <View style={styles.topNav}>
+          <View style={styles.navLeft}>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.avatarWrap}>
+              {profile?.avatarUrl ? (
+                <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} />
+              ) : (
+                <LinearGradient colors={Gradients.primary} style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarText}>{initials}</Text>
+                </LinearGradient>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.campusLogo}>
+              {profile?.collegeShortName || profile?.collegeName || 'Campus'}
+            </Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.searchIconBtn}
+            onPress={() => router.push('/notifications')}
+          >
+            <Ionicons name="notifications-outline" size={24} color="#FFF" />
+            {unreadCount > 0 && <View style={styles.topNotificationDot} />}
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <ScrollView 
+        ref={scrollViewRef}
         showsVerticalScrollIndicator={false} 
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
-        <View style={styles.headerWrapper}>
-          <View style={styles.topNav}>
-            <View style={styles.navLeft}>
-              <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.avatarWrap}>
-                {profile?.avatarUrl ? (
-                  <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} />
-                ) : (
-                  <LinearGradient colors={Gradients.primary} style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarText}>{initials}</Text>
-                  </LinearGradient>
-                )}
-              </TouchableOpacity>
-              <Text style={styles.campusLogo}>
-                {profile?.collegeShortName || profile?.collegeName || 'Campus'}
-              </Text>
-            </View>
-            <TouchableOpacity 
-              style={styles.searchIconBtn}
-              onPress={() => router.push('/notifications')}
-            >
-              <Ionicons name="notifications-outline" size={24} color="#FFF" />
-              {unreadCount > 0 && <View style={styles.topNotificationDot} />}
-            </TouchableOpacity>
-          </View>
-
+        <Animated.View style={{ 
+          opacity: featureAnim,
+          transform: [{ translateY: featureAnim.interpolate({ inputRange: [0, 1], outputRange: [-100, 0] }) }]
+        }}>
           <View style={styles.greetingSection}>
             <Text style={styles.greetingHeading}>Hey, {username}!</Text>
             <Text style={styles.greetingSub}>There are {todayFoundCount + newMarketCount} new listings in your circle today.</Text>
           </View>
+        </Animated.View>
 
-          <View style={[
-            styles.searchBarContainer,
-            isSearchFocused && styles.searchBarContainerFocused,
-            searchQuery.length > 0 && styles.searchBarContainerActive
-          ]}>
+        <Animated.View style={{
+          transform: [{ translateY: featureAnim.interpolate({ inputRange: [0, 1], outputRange: [-80, 0] }) }]
+        }}>
+          <Pressable 
+            onPress={focusSearch}
+            style={[
+              styles.searchBarContainer,
+              isSearchFocused && styles.searchBarContainerFocused,
+              searchQuery.length > 0 && styles.searchBarContainerActive
+            ]}
+          >
             <Ionicons 
               name={isSearchFocused ? "search" : "search-outline"} 
               size={20} 
               color={isSearchFocused ? Colors.primary : Colors.on_surface_variant} 
             />
             <TextInput 
+              ref={searchInputRef}
+              key="home-search-input"
               style={styles.searchInput}
               placeholder="Find books, clubs, or skills..."
               placeholderTextColor={Colors.on_surface_variant}
@@ -189,6 +252,8 @@ export default function HomeScreen() {
               onChangeText={setSearchQuery}
               onFocus={() => setIsSearchFocused(true)}
               onBlur={() => setIsSearchFocused(false)}
+              keyboardType="default"
+              autoCapitalize="none"
             />
             {searchQuery.length > 0 && (
               <View style={styles.searchSideActions}>
@@ -203,11 +268,16 @@ export default function HomeScreen() {
                  </TouchableOpacity>
               </View>
             )}
-          </View>
-        </View>
+          </Pressable>
+        </Animated.View>
 
-
-        <View style={styles.featureGrid}>
+        <Animated.View style={[
+          styles.featureGrid,
+          { 
+            opacity: featureAnim,
+            transform: [{ scale: featureAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }]
+          }
+        ]}>
           <TouchableOpacity 
             style={styles.gridCard} 
             activeOpacity={0.9}
@@ -219,8 +289,8 @@ export default function HomeScreen() {
               </View>
               <Ionicons name="search-outline" size={48} color="rgba(255,255,255,0.05)" style={styles.ghostIcon} />
             </View>
-            <Text style={styles.gridCardTitle}>Lost & Found</Text>
-            <Text style={styles.gridCardSub}>{todayFoundCount} items found today</Text>
+            <Text style={styles.gridCardTitle} numberOfLines={1} adjustsFontSizeToFit>Lost & Found</Text>
+            <Text style={styles.gridCardSub}>{todayFoundCount} active reports</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -239,7 +309,7 @@ export default function HomeScreen() {
                 </View>
                 <Ionicons name="storefront-outline" size={48} color="rgba(255,255,255,0.1)" style={styles.ghostIcon} />
               </View>
-              <Text style={styles.gridCardTitle}>Marketplace</Text>
+              <Text style={styles.gridCardTitle} numberOfLines={1} adjustsFontSizeToFit>Marketplace</Text>
               <View style={styles.newBadge}>
                 <Text style={styles.newBadgeText}>{newMarketCount > 0 ? `${newMarketCount} NEW ARRIVALS` : 'VIEW MARKET'}</Text>
               </View>
@@ -257,7 +327,7 @@ export default function HomeScreen() {
               </View>
               <Ionicons name="school-outline" size={48} color="rgba(255,255,255,0.05)" style={styles.ghostIcon} />
             </View>
-            <Text style={styles.gridCardTitle}>Skill Share</Text>
+            <Text style={styles.gridCardTitle} numberOfLines={1} adjustsFontSizeToFit>Skill Share</Text>
             <Text style={styles.gridCardSub}>Learn from peers</Text>
           </TouchableOpacity>
 
@@ -272,138 +342,144 @@ export default function HomeScreen() {
               </View>
               {unreadCount > 0 && <View style={styles.notificationDot} />}
             </View>
-            <Text style={styles.gridCardTitle}>Messages</Text>
+            <Text style={styles.gridCardTitle} numberOfLines={1} adjustsFontSizeToFit>Messages</Text>
             <Text style={styles.gridCardSub}>{unreadCount} unread chats</Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/market')}>
-            <Text style={styles.viewAllText}>View All</Text>
-          </TouchableOpacity>
-        </View>
+        <Animated.View style={{ transform: [{ translateY: feedMoveAnim }] }}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>
+              {searchQuery.length > 0 ? 'Search Results' : 'Recent Activity'}
+            </Text>
+            {searchQuery.length === 0 && (
+              <TouchableOpacity onPress={() => router.push('/(tabs)/market')}>
+                <Text style={styles.viewAllText}>View All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-          {['All', 'Found', 'Sale', 'Skills'].map(f => (
-            <TouchableOpacity 
-              key={f} 
-              style={[styles.filterChip, activeFilter === f && styles.filterChipActive]}
-              onPress={() => setActiveFilter(f)}
-            >
-              <Text style={[styles.filterText, activeFilter === f && styles.filterTextActive]}>{f}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+            {['All', 'Found', 'Sale', 'Skills'].map(f => (
+              <TouchableOpacity 
+                key={f} 
+                style={[styles.filterChip, activeFilter === f && styles.filterChipActive]}
+                onPress={() => setActiveFilter(f)}
+              >
+                <Text style={[styles.filterText, activeFilter === f && styles.filterTextActive]}>{f}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
 
-        <View style={styles.verticalFeed}>
-          {loadingFeed ? (
-             <LinearGradient colors={['#1f1f22', '#1A1A20']} style={[styles.feedCardContainer, { height: 160, justifyContent: 'center', alignItems: 'center' }]}>
-                <ActivityIndicator color={Colors.primary} />
-             </LinearGradient>
-          ) : filteredFeed.length > 0 ? (
-            filteredFeed.map((item) => {
-              const formatAgo = (timestamp: any) => {
-                if (!timestamp) return 'JUST NOW';
-                let targetTime = 0;
-                if (typeof timestamp.toMillis === 'function') targetTime = timestamp.toMillis();
-                else if (timestamp instanceof Date) targetTime = timestamp.getTime();
-                else if (typeof timestamp === 'number') targetTime = timestamp;
-                else if (timestamp.seconds) targetTime = timestamp.seconds * 1000;
-                else targetTime = new Date(timestamp).getTime();
-                
-                if (!targetTime || isNaN(targetTime)) return 'JUST NOW';
-                const hours = Math.floor((Date.now() - targetTime) / (1000 * 60 * 60));
-                if (hours < 1) return 'JUST NOW';
-                if (hours < 24) return `${hours}H AGO`;
-                return `${Math.floor(hours/24)}D AGO`;
-              };
+          <View style={styles.verticalFeed}>
+            {loadingFeed ? (
+               <LinearGradient colors={['#1f1f22', '#1A1A20']} style={[styles.feedCardContainer, { height: 160, justifyContent: 'center', alignItems: 'center' }]}>
+                  <ActivityIndicator color={Colors.primary} />
+               </LinearGradient>
+            ) : filteredFeed.length > 0 ? (
+              filteredFeed.map((item) => {
+                const formatAgo = (timestamp: any) => {
+                  if (!timestamp) return 'JUST NOW';
+                  let targetTime = 0;
+                  if (typeof timestamp.toMillis === 'function') targetTime = timestamp.toMillis();
+                  else if (timestamp instanceof Date) targetTime = timestamp.getTime();
+                  else if (typeof timestamp === 'number') targetTime = timestamp;
+                  else if (timestamp.seconds) targetTime = timestamp.seconds * 1000;
+                  else targetTime = new Date(timestamp).getTime();
+                  
+                  if (!targetTime || isNaN(targetTime)) return 'JUST NOW';
+                  const hours = Math.floor((Date.now() - targetTime) / (1000 * 60 * 60));
+                  if (hours < 1) return 'JUST NOW';
+                  if (hours < 24) return `${hours}H AGO`;
+                  return `${Math.floor(hours/24)}D AGO`;
+                };
 
-              if (item._feedType === 'market') {
-                return (
-                  <TouchableOpacity key={item.id} style={styles.feedCardContainer} onPress={() => router.push({ pathname: '/market-details/[id]', params: { id: item.id } } as any)}>
-                    {item.imageUrl ? (
-                      <View style={styles.feedImageWrap}>
-                        <Image source={{ uri: item.imageUrl }} style={styles.feedImageFull} />
-                        <View style={styles.pricePill}><Text style={styles.pricePillText}>${item.price || '0.00'}</Text></View>
-                      </View>
-                    ) : null}
-                    <View style={styles.feedCardBody}>
-                      <View style={styles.feedCardTop}>
-                         <View style={styles.tagBadge}><Text style={styles.tagText}>MARKETPLACE</Text></View>
-                         <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
-                      </View>
-                      <Text style={styles.feedCardTitle}>{item.title}</Text>
-                      <Text style={styles.feedCardDesc} numberOfLines={2}>{item.description}</Text>
-                      <View style={styles.feedCardBottom}>
-                        <View style={styles.feedAuthor}>
-                          <View style={styles.miniAvatar}><Ionicons name="person" size={14} color="#FFF"/></View>
-                          <Text style={styles.feedAuthorName}>Alex Rivera</Text>
+                if (item._feedType === 'market') {
+                  return (
+                    <TouchableOpacity key={item.id} style={styles.feedCardContainer} onPress={() => router.push({ pathname: '/market-details/[id]', params: { id: item.id } } as any)}>
+                      {item.imageUrl ? (
+                        <View style={styles.feedImageWrap}>
+                          <Image source={{ uri: item.imageUrl }} style={styles.feedImageFull} />
+                          <View style={styles.pricePill}><Text style={styles.pricePillText}>${item.price || '0.00'}</Text></View>
                         </View>
-                        <Ionicons name="heart-outline" size={24} color="#6B52FF" />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              }
-
-              if (item._feedType === 'skill') {
-                return (
-                  <TouchableOpacity key={item.id} style={[styles.feedCardContainer, {borderLeftWidth: 4, borderLeftColor: '#ff8fb3'}]} onPress={() => router.push({ pathname: '/skill-details/[id]', params: { id: item.id } } as any)}>
-                    <View style={styles.feedCardBody}>
-                      <View style={styles.feedCardTop}>
-                         <View style={[styles.tagBadge, {backgroundColor: 'rgba(255, 143, 179, 0.15)'}]}><Text style={[styles.tagText, {color: '#ff8fb3'}]}>SKILL SHARE</Text></View>
-                         <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
-                      </View>
-                      <Text style={styles.feedCardTitle}>{item.title}</Text>
-                      <Text style={styles.feedCardDesc} numberOfLines={3}>{item.description}</Text>
-                      <View style={styles.feedCardBottom}>
-                        <View style={styles.feedAuthor}>
-                          <View style={styles.miniAvatar}><Ionicons name="person" size={14} color="#FFF"/></View>
-                          <View style={styles.plusBadge}><Text style={styles.plusBadgeText}>+5</Text></View>
+                      ) : null}
+                      <View style={styles.feedCardBody}>
+                        <View style={styles.feedCardTop}>
+                           <View style={styles.tagBadge}><Text style={styles.tagText}>MARKETPLACE</Text></View>
+                           <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
                         </View>
-                        <TouchableOpacity style={styles.reserveBtn}><Text style={styles.reserveBtnText}>RESERVE SPOT</Text></TouchableOpacity>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              }
-
-              if (item._feedType === 'lost') {
-                return (
-                  <TouchableOpacity key={item.id} style={styles.feedCardContainer} onPress={() => router.push({ pathname: '/item-details/[id]', params: { id: item.id } } as any)}>
-                    {item.imageUrl ? (
-                      <View style={styles.feedImageWrap}>
-                        <Image source={{ uri: item.imageUrl }} style={styles.feedImageFull} />
-                      </View>
-                    ) : null}
-                    <View style={styles.feedCardBody}>
-                      <View style={styles.feedCardTop}>
-                         <View style={[styles.tagBadge, {backgroundColor: 'rgba(255, 87, 87, 0.15)'}]}><Text style={[styles.tagText, {color: '#ff5757'}]}>{item.type?.toUpperCase() || 'FOUND'}</Text></View>
-                         <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
-                      </View>
-                      <Text style={styles.feedCardTitle}>{item.title}</Text>
-                      <Text style={styles.feedCardDesc} numberOfLines={2}>{item.description}</Text>
-                      <View style={styles.feedCardBottom}>
-                        <View style={styles.feedAuthor}>
-                          <Ionicons name="location-outline" size={16} color="#6B52FF" />
-                          <Text style={styles.feedLocationText}>{item.location?.toUpperCase() || 'MAIN CAMPUS HUB'}</Text>
+                        <Text style={styles.feedCardTitle}>{item.title}</Text>
+                        <Text style={styles.feedCardDesc} numberOfLines={2}>{item.description}</Text>
+                        <View style={styles.feedCardBottom}>
+                          <View style={styles.feedAuthor}>
+                            <View style={styles.miniAvatar}><Ionicons name="person" size={14} color="#FFF"/></View>
+                            <Text style={styles.feedAuthorName}>Alex Rivera</Text>
+                          </View>
+                          <Ionicons name="heart-outline" size={24} color="#6B52FF" />
                         </View>
                       </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              }
-              return null;
-            })
-          ) : (
-            <View style={styles.emptySearch}>
-              <Ionicons name="search-outline" size={48} color="rgba(255,255,255,0.1)" />
-              <Text style={styles.emptySearchText}>No results found</Text>
-              <Text style={styles.emptySearchSub}>Try searching for something else or browse all categories.</Text>
-            </View>
-          )}
-        </View>
+                    </TouchableOpacity>
+                  );
+                }
+
+                if (item._feedType === 'skill') {
+                  return (
+                    <TouchableOpacity key={item.id} style={[styles.feedCardContainer, {borderLeftWidth: 4, borderLeftColor: '#ff8fb3'}]} onPress={() => router.push({ pathname: '/skill-details/[id]', params: { id: item.id } } as any)}>
+                      <View style={styles.feedCardBody}>
+                        <View style={styles.feedCardTop}>
+                           <View style={[styles.tagBadge, {backgroundColor: 'rgba(255, 143, 179, 0.15)'}]}><Text style={[styles.tagText, {color: '#ff8fb3'}]}>SKILL SHARE</Text></View>
+                           <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
+                        </View>
+                        <Text style={styles.feedCardTitle}>{item.title}</Text>
+                        <Text style={styles.feedCardDesc} numberOfLines={3}>{item.description}</Text>
+                        <View style={styles.feedCardBottom}>
+                          <View style={styles.feedAuthor}>
+                            <View style={styles.miniAvatar}><Ionicons name="person" size={14} color="#FFF"/></View>
+                            <View style={styles.plusBadge}><Text style={styles.plusBadgeText}>+5</Text></View>
+                          </View>
+                          <TouchableOpacity style={styles.reserveBtn}><Text style={styles.reserveBtnText}>RESERVE SPOT</Text></TouchableOpacity>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }
+
+                if (item._feedType === 'lost') {
+                  return (
+                    <TouchableOpacity key={item.id} style={styles.feedCardContainer} onPress={() => router.push({ pathname: '/item-details/[id]', params: { id: item.id } } as any)}>
+                      {item.imageUrl ? (
+                        <View style={styles.feedImageWrap}>
+                          <Image source={{ uri: item.imageUrl }} style={styles.feedImageFull} />
+                        </View>
+                      ) : null}
+                      <View style={styles.feedCardBody}>
+                        <View style={styles.feedCardTop}>
+                           <View style={[styles.tagBadge, {backgroundColor: 'rgba(255, 87, 87, 0.15)'}]}><Text style={[styles.tagText, {color: '#ff5757'}]}>{item.type?.toUpperCase() || 'FOUND'}</Text></View>
+                           <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
+                        </View>
+                        <Text style={styles.feedCardTitle}>{item.title}</Text>
+                        <Text style={styles.feedCardDesc} numberOfLines={2}>{item.description}</Text>
+                        <View style={styles.feedCardBottom}>
+                          <View style={styles.feedAuthor}>
+                            <Ionicons name="location-outline" size={16} color="#6B52FF" />
+                            <Text style={styles.feedLocationText}>{item.location?.toUpperCase() || 'MAIN CAMPUS HUB'}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }
+                return null;
+              })
+            ) : (
+              <View style={styles.emptySearch}>
+                <Ionicons name="search-outline" size={48} color="rgba(255,255,255,0.1)" />
+                <Text style={styles.emptySearchText}>No results found</Text>
+                <Text style={styles.emptySearchSub}>Try searching for something else or browse all categories.</Text>
+              </View>
+            )}
+          </View>
+        </Animated.View>
 
       </ScrollView>
     </View>
@@ -460,7 +536,6 @@ const styles = StyleSheet.create({
   searchBarContainerFocused: {
     borderColor: 'rgba(107, 82, 255, 0.4)',
     backgroundColor: '#15151A',
-    transform: [{ scale: 1.02 }],
     shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,

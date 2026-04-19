@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   View, Text, TextInput, TouchableOpacity, StyleSheet, 
   ActivityIndicator, ScrollView, StatusBar, Image, 
-  KeyboardAvoidingView, Platform, Dimensions 
+  KeyboardAvoidingView, Platform, Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -81,27 +81,47 @@ export default function PostItemScreen() {
   }, [profile?.collegeId]);
 
   const pickImage = async (useCamera: boolean) => {
-    const { status } = useCamera 
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    // 1. Close Modal immediately to prevent UI collisions
+    setShowModal(false);
     
-    if (status !== 'granted') {
-      showFeedback('Permission Denied', 'We need access to your gallery or camera to upload item photos.');
-      return;
-    }
+    // 2. Longer delay to ensure the screen is clear for the picker
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-    const options: ImagePicker.ImagePickerOptions = {
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.8,
-    };
+    try {
+      if (useCamera) {
+          console.log('📸 [Item] Requesting Camera permissions...');
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          showFeedback('Permission Required', 'CampusLoop needs camera access to capture visual proof of the item.');
+          return;
+        }
+      } else {
+          console.log('🖼️ [Item] Requesting Media Library permissions...');
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          showFeedback('Permission Required', 'CampusLoop needs gallery access to retrieve item imagery.');
+          return;
+        }
+      }
 
-    const result = useCamera 
-      ? await ImagePicker.launchCameraAsync(options)
-      : await ImagePicker.launchImageLibraryAsync(options);
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ['images'],
+        allowsEditing: Platform.OS === 'ios',
+        aspect: [4, 3],
+        quality: 0.7,
+      };
 
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
+      console.log(`🚀 [Item] Launching ${useCamera ? 'Camera' : 'Gallery'}...`);
+      const result = useCamera 
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setImage(result.assets[0].uri);
+      }
+    } catch (error: any) {
+      console.error('❌ [Item] Capture error:', error);
+      showFeedback('Capture Failed', `An error occurred: ${error.message || 'Unknown error'}`);
     }
   };
 
@@ -195,8 +215,11 @@ export default function PostItemScreen() {
 
           {/* Image Upload Area */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Visual Proof</Text>
-            <TouchableOpacity style={styles.imageZone} onPress={() => setShowModal(true)}>
+            <Text style={styles.label}>Add Photo</Text>
+            <TouchableOpacity 
+              style={styles.imageZone} 
+              onPress={() => setShowModal(true)}
+            >
               {image ? (
                 <View style={styles.imagePreviewWrap}>
                   <Image source={{ uri: image }} style={styles.previewImage} />
@@ -216,8 +239,8 @@ export default function PostItemScreen() {
           </View>
 
           {renderInput('Item Name', 'pricetag', title, setTitle, 'What was lost or found?')}
-          {renderInput('Spot', 'location', location, setLocation, 'Where was it last seen or found?')}
-          {renderInput('Description', 'document-text', description, setDescription, 'Any distinguishing features (scratches, stickers, etc)?', true)}
+          {renderInput('Location', 'location', location, setLocation, 'Where did you see it?')}
+          {renderInput('Details', 'document-text', description, setDescription, 'Any distinguishing features (scratches, stickers, etc)?', true)}
 
           {/* Social Reach Insight */}
           {memberCount !== null && (
@@ -259,99 +282,31 @@ export default function PostItemScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   scroll: { paddingHorizontal: Spacing.margin, paddingTop: 60, paddingBottom: 40 },
-  
-  title: {
-    ...Typography.display,
-    fontSize: 42,
-    color: Colors.on_background,
-    marginBottom: Spacing.xl,
-  },
-
-  // Toggle Styles
-  typeToggle: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface_container_low,
-    borderRadius: Roundness.md,
-    padding: 6,
-    marginBottom: Spacing.xl,
-  },
-  typeBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: Roundness.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
+  title: { ...Typography.display, fontSize: 42, color: Colors.on_background, marginBottom: Spacing.xl },
+  typeToggle: { flexDirection: 'row', backgroundColor: Colors.surface_container_low, borderRadius: Roundness.md, padding: 6, marginBottom: Spacing.xl },
+  typeBtn: { flex: 1, height: 48, borderRadius: Roundness.md, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   btnFill: { ...StyleSheet.absoluteFillObject },
   typeBtnActive: { ...Shadows.ambient },
   typeBtnText: { ...Typography.label, color: Colors.on_surface_variant },
   typeBtnTextActive: { color: Colors.on_primary },
-
-  // Image Area
-  imageZone: {
-    width: '100%',
-    height: 220,
-    backgroundColor: Colors.surface_container_low,
-    borderRadius: Roundness.lg,
-    overflow: 'hidden',
-  },
+  imageZone: { width: '100%', height: 220, backgroundColor: Colors.surface_container_low, borderRadius: Roundness.lg, overflow: 'hidden' },
   imageEmpty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: Spacing.md },
-  cameraCircle: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: Colors.surface_container_high,
-    justifyContent: 'center', alignItems: 'center',
-  },
+  cameraCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: Colors.surface_container_high, justifyContent: 'center', alignItems: 'center' },
   imageInstruction: { ...Typography.caption, color: Colors.on_surface_variant, fontSize: 13 },
   imagePreviewWrap: { flex: 1 },
   previewImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  removeBtn: {
-    position: 'absolute', top: 12, right: 12,
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center', alignItems: 'center',
-  },
-
-  // Field Groups
+  removeBtn: { position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   fieldGroup: { marginBottom: Spacing.xl },
   label: { ...Typography.label, color: Colors.primary, marginBottom: Spacing.sm, textTransform: 'uppercase', letterSpacing: 1 },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface_container_low,
-    borderRadius: Roundness.md,
-    paddingHorizontal: Spacing.lg,
-    height: 64,
-    gap: Spacing.md,
-  },
-  inputFocused: {
-    borderWidth: 1.5,
-    borderColor: `${Colors.primary}40`, // 30% opacity primary
-  },
+  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface_container_low, borderRadius: Roundness.md, paddingHorizontal: Spacing.lg, height: 64, gap: Spacing.md },
+  inputFocused: { borderWidth: 1.5, borderColor: `${Colors.primary}40` },
   input: { flex: 1, ...Typography.body_medium, color: Colors.on_background },
   textAreaWrapper: { height: 160, alignItems: 'flex-start' },
   textArea: { textAlignVertical: 'top', paddingTop: 18, height: '100%' },
-
   postBtnContainer: { marginTop: Spacing.xl, ...Shadows.ambient },
-  postBtn: {
-    height: 64,
-    borderRadius: Roundness.full,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  postBtn: { height: 64, borderRadius: Roundness.full, justifyContent: 'center', alignItems: 'center' },
   postBtnText: { ...Typography.title, color: Colors.on_primary, fontSize: 18 },
-
-  reachInsight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(107,82,255,0.08)',
-    padding: 16,
-    borderRadius: 20,
-    marginTop: Spacing.xl,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(107,82,255,0.15)',
-  },
-  reachText: { ...Typography.caption, color: Colors.on_surface_variant, fontSize: 13, flex: 1 },
+  reachInsight: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(107,82,255,0.08)', padding: 16, borderRadius: 20, marginTop: Spacing.xl, gap: 12, borderWidth: 1, borderColor: 'rgba(107,82,255,0.15)' },
+   reachText: { ...Typography.caption, color: Colors.on_surface_variant, fontSize: 13, flex: 1 },
   reachHighlight: { color: Colors.secondary, fontWeight: '700' },
 });

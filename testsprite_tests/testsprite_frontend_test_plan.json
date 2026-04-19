@@ -1,0 +1,567 @@
+[
+  {
+    "id": "TC001",
+    "title": "Send a message from item details and verify history loads when reopening the thread",
+    "description": "Verifies a student can send a message about an item, return to the messages inbox, reopen the conversation, and see the previously sent message in the thread.",
+    "category": "Peer Messaging",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation entry to create a marketplace listing"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the title field with Messaging History Item TC"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the price field with 10"
+      },
+      {
+        "type": "action",
+        "description": "Select a valid category"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the item details field with Used to validate chat thread persistence"
+      },
+      {
+        "type": "action",
+        "description": "Submit the listing"
+      },
+      {
+        "type": "action",
+        "description": "Click the market tab"
+      },
+      {
+        "type": "action",
+        "description": "Open the listing titled Messaging History Item TC from the list"
+      },
+      {
+        "type": "action",
+        "description": "Click the message action from the item details view"
+      },
+      {
+        "type": "action",
+        "description": "Fill a message into the chat input with Thread persistence check message"
+      },
+      {
+        "type": "action",
+        "description": "Send the message"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation control to return to the messages inbox"
+      },
+      {
+        "type": "action",
+        "description": "Open the most recent conversation from the inbox"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the previously sent message is displayed in the conversation thread"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "Navigate across core tabs from dashboard while staying authenticated",
+    "description": "Verifies an authenticated student can land on the dashboard and move between lost-found, market, skills, and messages tabs without losing session or navigation state.",
+    "category": "Auth-gated App Entry & Navigation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the lost-found tab"
+      },
+      {
+        "type": "action",
+        "description": "Click the market tab"
+      },
+      {
+        "type": "action",
+        "description": "Click the skills tab"
+      },
+      {
+        "type": "action",
+        "description": "Click the messages tab"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user remains in an authenticated experience while switching tabs"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Open a conversation from inbox and send a new message",
+    "description": "Verifies a student can open a conversation from the messages inbox and send a new message that appears in the thread.",
+    "category": "Peer Messaging",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation entry to create a lost/found report"
+      },
+      {
+        "type": "action",
+        "description": "Select the Found report type"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the item name field with Chat Seed Item TC"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the location field with Student Center"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the description field with Used to seed a conversation for inbox testing"
+      },
+      {
+        "type": "action",
+        "description": "Submit the report"
+      },
+      {
+        "type": "action",
+        "description": "Click the lost-found tab"
+      },
+      {
+        "type": "action",
+        "description": "Open the report titled Chat Seed Item TC from the list"
+      },
+      {
+        "type": "action",
+        "description": "Click the message action from the item details view"
+      },
+      {
+        "type": "action",
+        "description": "Fill a message into the chat input with Seeding conversation for inbox open test"
+      },
+      {
+        "type": "action",
+        "description": "Send the message"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation control to return to the messages inbox"
+      },
+      {
+        "type": "action",
+        "description": "Open the most recent conversation from the inbox"
+      },
+      {
+        "type": "action",
+        "description": "Fill a message into the chat input with Follow-up message from inbox thread"
+      },
+      {
+        "type": "action",
+        "description": "Send the message"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the latest sent message appears in the conversation thread"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC004",
+    "title": "Lost & Found browse to details and start a message thread",
+    "description": "Verifies a student can browse lost/found reports, open a report detail view, start a message thread from the item detail, and see the conversation in the messages inbox.",
+    "category": "Lost & Found Reporting",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation entry to create a lost/found report"
+      },
+      {
+        "type": "action",
+        "description": "Select the Lost report type"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the item name field with Lost Umbrella TC"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the location field with Engineering Building"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the description field with Compact umbrella with a wooden handle"
+      },
+      {
+        "type": "action",
+        "description": "Submit the report"
+      },
+      {
+        "type": "action",
+        "description": "Click the lost-found tab"
+      },
+      {
+        "type": "action",
+        "description": "Open the report titled Lost Umbrella TC from the list"
+      },
+      {
+        "type": "action",
+        "description": "Click the message action from the item details view"
+      },
+      {
+        "type": "action",
+        "description": "Fill a message into the chat input with Hi, I saw your report about the umbrella"
+      },
+      {
+        "type": "action",
+        "description": "Send the message"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the conversation is visible in the messages inbox"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC005",
+    "title": "Marketplace browse to details and start a message thread",
+    "description": "Verifies a buyer can browse marketplace listings, open a listing detail view, start a message thread from the item detail, and see the conversation in the messages inbox.",
+    "category": "Marketplace Listing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation entry to create a marketplace listing"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the title field with Desk Lamp TC"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the price field with 15"
+      },
+      {
+        "type": "action",
+        "description": "Select a valid category"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the item details field with LED desk lamp with adjustable brightness"
+      },
+      {
+        "type": "action",
+        "description": "Submit the listing"
+      },
+      {
+        "type": "action",
+        "description": "Click the market tab"
+      },
+      {
+        "type": "action",
+        "description": "Open the listing titled Desk Lamp TC from the list"
+      },
+      {
+        "type": "action",
+        "description": "Click the message action from the item details view"
+      },
+      {
+        "type": "action",
+        "description": "Fill a message into the chat input with Is this still available?"
+      },
+      {
+        "type": "action",
+        "description": "Send the message"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the conversation is visible in the messages inbox"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC006",
+    "title": "Post a lost item report and see it appear in Lost & Found list",
+    "description": "Verifies a student can create a LOST report with required details and it becomes discoverable in the lost-found list.",
+    "category": "Lost & Found Reporting",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation entry to create a lost/found report"
+      },
+      {
+        "type": "action",
+        "description": "Select the Lost report type"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the item name field with Lost Wallet TC"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the location field with Library Entrance"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the description field with Black wallet with student ID inside"
+      },
+      {
+        "type": "action",
+        "description": "Submit the report"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new report appears in the lost-found list"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC007",
+    "title": "Create a marketplace listing and see it appear in Market list",
+    "description": "Verifies a seller can create a marketplace listing with required details and it becomes discoverable in the market list.",
+    "category": "Marketplace Listing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation entry to create a marketplace listing"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the title field with Calculator TC"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the price field with 25"
+      },
+      {
+        "type": "action",
+        "description": "Select a valid category"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the item details field with Lightly used calculator, works well"
+      },
+      {
+        "type": "action",
+        "description": "Submit the listing"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new listing appears in the market list"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC008",
+    "title": "Marketplace price field rejects invalid format",
+    "description": "Verifies the app blocks marketplace listing creation when the price input is not a valid number and shows a validation error.",
+    "category": "Marketplace Listing",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation entry to create a marketplace listing"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the title field with Invalid Price TC"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the price field with twenty"
+      },
+      {
+        "type": "action",
+        "description": "Select a valid category"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the item details field with Listing should not be created with invalid price"
+      },
+      {
+        "type": "action",
+        "description": "Submit the listing"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a price validation error is visible"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC009",
+    "title": "Lost & Found required fields validation blocks posting",
+    "description": "Verifies the app prevents submitting a lost/found report when required fields are missing and keeps the user on the form with a validation error.",
+    "category": "Lost & Found Reporting",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation entry to create a lost/found report"
+      },
+      {
+        "type": "action",
+        "description": "Select the Lost report type"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the item name field with Incomplete Report TC"
+      },
+      {
+        "type": "action",
+        "description": "Submit the report"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a required-field validation error is visible"
+      }
+    ],
+    "priority": "Low"
+  }
+]

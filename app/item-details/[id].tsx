@@ -6,8 +6,9 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
-import { Colors, Typography, Spacing, Roundness } from '../../constants/theme';
+import { Colors, Typography, Spacing, Roundness, Shadows, Gradients } from '../../constants/theme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { startChat } from '../../utils/chat';
 import ModernAlert from '../../components/ModernAlert';
 
@@ -106,36 +107,41 @@ export default function ItemDetails() {
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBackBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color="#A0A0A5" />
-          <Text style={styles.headerBackText}>Campus</Text>
+          <Ionicons name="arrow-back" size={22} color="#FFF" />
         </TouchableOpacity>
-        
-        <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.headerIconBtn}>
-             <Ionicons name="search" size={20} color="#6B52FF" />
-          </TouchableOpacity>
-          <View style={styles.miniAvatar}>
-             <Ionicons name="person" size={12} color="#FFF" />
-          </View>
-        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
-        {/* Main Image Block */}
-        <View style={styles.heroWrap}>
-          {item.imageUrl ? (
-             <Image source={{ uri: item.imageUrl }} style={styles.heroImg} />
-          ) : (
-             <View style={[styles.heroImg, { backgroundColor: '#1E1E24', justifyContent: 'center', alignItems: 'center' }]}>
-                <Ionicons name="image-outline" size={48} color="#1A1C23" />
-             </View>
-          )}
-
-          <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>{item.type.toUpperCase()}</Text>
+        {/* Main Image or Compact Status Header */}
+        {item.imageUrl ? (
+          <View style={styles.heroWrap}>
+            <Image source={{ uri: item.imageUrl }} style={styles.heroImg} />
+            <View style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>{item.type.toUpperCase()}</Text>
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.compactHero}>
+            <LinearGradient 
+              colors={['#1F1F27', '#15151A']} 
+              style={styles.compactHeroFill}
+              start={{x: 0, y: 0}}
+              end={{x: 0, y: 1}}
+            >
+              <View style={[styles.typePill, { backgroundColor: item.type === 'lost' ? 'rgba(255, 100, 124, 0.15)' : 'rgba(107, 82, 255, 0.15)' }]}>
+                <Ionicons 
+                  name={item.type === 'lost' ? 'alert-circle' : 'checkmark-circle'} 
+                  size={14} 
+                  color={item.type === 'lost' ? '#FF647C' : '#6B52FF'} 
+                />
+                <Text style={[styles.typePillText, { color: item.type === 'lost' ? '#FF647C' : '#6B52FF' }]}>
+                  {item.type.toUpperCase()} REPORT
+                </Text>
+              </View>
+            </LinearGradient>
+          </View>
+        )}
 
         {/* Title Block */}
         <View style={styles.titleBlock}>
@@ -195,20 +201,37 @@ export default function ItemDetails() {
            </TouchableOpacity>
         </View>
 
-        {/* Optional Map Visual Container */}
+        {/* Premium Location Radar Card */}
         {item.location && (
           <View style={styles.mapCard}>
-             <View style={styles.mapInner}>
-                <Ionicons name="map-outline" size={80} color="rgba(255,255,255,0.02)" style={{position: 'absolute', opacity: 0.5}} />
-                
-                <View style={styles.mapMarkerPulse}>
-                  <View style={styles.mapMarkerCore} />
+             <LinearGradient 
+                colors={['#1E1E24', '#15151A']} 
+                style={styles.mapInner}
+              >
+                {/* Stylized Map Grid Overlay */}
+                <View style={styles.mapGridOverlay}>
+                  {[...Array(6)].map((_, i) => (
+                    <View key={i} style={[styles.mapGridLine, { top: (i + 1) * 20 }]} />
+                  ))}
+                  {[...Array(10)].map((_, i) => (
+                    <View key={i} style={[styles.mapGridLineVertical, { left: (i + 1) * 35 }]} />
+                  ))}
                 </View>
 
-                <View style={styles.mapOverlayLabel}>
-                   <Text style={styles.mapOverlayLabelText}>Found near {item.location}</Text>
+                {/* Pulsating Radar Visual */}
+                <View style={styles.radarContainer}>
+                  <View style={styles.radarAura} />
+                  <View style={styles.radarAura2} />
+                  <View style={styles.radarCore}>
+                    <Ionicons name="location" size={24} color="#FFF" />
+                  </View>
                 </View>
-             </View>
+
+                <View style={styles.mapInfo}>
+                  <Text style={styles.mapInfoTitle}>Last Seen In Area</Text>
+                  <Text style={styles.mapInfoText}>{item.location}</Text>
+                </View>
+             </LinearGradient>
           </View>
         )}
 
@@ -227,21 +250,46 @@ export default function ItemDetails() {
 
       {/* Floating Action Footer */}
       <View style={styles.footerWrap}>
-         <TouchableOpacity style={styles.footerIconBtn}>
-            <Ionicons name="bookmark" size={20} color="#A0A0A5" />
-         </TouchableOpacity>
+         {isOwner ? (
+           <>
+             <TouchableOpacity 
+                style={styles.footerIconBtn}
+                onPress={() => setShowDeleteAlert(true)}
+             >
+                <Ionicons name="trash-outline" size={20} color="#FF647C" />
+             </TouchableOpacity>
 
-         <TouchableOpacity 
-            style={styles.footerPrimaryBtn}
-            onPress={() => isOwner ? setShowDeleteAlert(true) : startChat(item.userId, authorNameObj, router, { type: item.type, title: item.title, image: item.imageUrl, itemId: item.id })}
-         >
-            <Ionicons name={isOwner ? "trash" : "chatbubble"} size={18} color="#FFF" />
-            <Text style={styles.footerPrimaryText}>{isOwner ? 'Delete Post' : `Message ${firstName}`}</Text>
-         </TouchableOpacity>
+             <TouchableOpacity 
+                style={styles.footerPrimaryBtn}
+                onPress={() => router.push(`/edit-item/${item.id}`)}
+             >
+                <Ionicons name="create" size={18} color="#FFF" />
+                <Text style={styles.footerPrimaryText}>Edit Listing</Text>
+             </TouchableOpacity>
 
-         <TouchableOpacity style={styles.footerIconBtn}>
-            <Ionicons name="share-social" size={20} color="#A0A0A5" />
-         </TouchableOpacity>
+             <TouchableOpacity style={styles.footerIconBtn}>
+                <Ionicons name="share-social" size={20} color="#A0A0A5" />
+             </TouchableOpacity>
+           </>
+         ) : (
+           <>
+             <TouchableOpacity style={styles.footerIconBtn}>
+                <Ionicons name="bookmark" size={20} color="#A0A0A5" />
+             </TouchableOpacity>
+
+             <TouchableOpacity 
+                style={styles.footerPrimaryBtn}
+                onPress={() => startChat(item.userId, authorNameObj, router, { type: item.type, title: item.title, image: item.imageUrl, itemId: item.id })}
+             >
+                <Ionicons name="chatbubble" size={18} color="#FFF" />
+                <Text style={styles.footerPrimaryText}>Message {firstName}</Text>
+             </TouchableOpacity>
+
+             <TouchableOpacity style={styles.footerIconBtn}>
+                <Ionicons name="share-social" size={20} color="#A0A0A5" />
+             </TouchableOpacity>
+           </>
+         )}
       </View>
 
       <ModernAlert 
@@ -294,11 +342,38 @@ const styles = StyleSheet.create({
   heroImg: { width: '100%', height: '100%', resizeMode: 'cover' },
   heroBadge: {
     position: 'absolute', top: 16, left: 16,
-    backgroundColor: '#6B52FF', // Found violet matching image
+    backgroundColor: '#6B52FF',
     paddingHorizontal: 16, paddingVertical: 8,
     borderRadius: Roundness.full,
   },
   heroBadgeText: { color: '#FFF', fontSize: 11, fontWeight: 'bold', letterSpacing: 1 },
+
+  compactHero: {
+    width: '100%',
+    height: 100,
+    borderRadius: 24,
+    overflow: 'hidden',
+    marginBottom: Spacing.xl,
+  },
+  compactHeroFill: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  typePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
+  typePillText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
 
   titleBlock: { marginBottom: Spacing.xl, paddingHorizontal: 4 },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: Spacing.sm },
@@ -349,24 +424,79 @@ const styles = StyleSheet.create({
 
   mapCard: {
     backgroundColor: '#1E1E24',
-    height: 160, borderRadius: 24, padding: 2, marginBottom: Spacing.lg,
-    overflow: 'hidden'
+    height: 180, borderRadius: 32, marginBottom: Spacing.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
   mapInner: {
-    flex: 1, backgroundColor: '#15151A', borderRadius: 22,
-    justifyContent: 'center', alignItems: 'center',
-    position: 'relative'
+    flex: 1,
+    position: 'relative',
+    padding: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
   },
-  mapMarkerPulse: {
-    width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(140, 124, 255, 0.1)',
-    justifyContent: 'center', alignItems: 'center',
+  mapGridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.1,
   },
-  mapMarkerCore: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#6B52FF' },
-  mapOverlayLabel: {
-    position: 'absolute', bottom: 16,
-    backgroundColor: 'rgba(26, 28, 35, 0.8)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: Roundness.full
+  mapGridLine: {
+    position: 'absolute',
+    left: 0, right: 0,
+    height: 1,
+    backgroundColor: '#FFF',
   },
-  mapOverlayLabelText: { color: '#FFF', fontSize: 11 },
+  mapGridLineVertical: {
+    position: 'absolute',
+    top: 0, bottom: 0,
+    width: 1,
+    backgroundColor: '#FFF',
+  },
+  radarContainer: {
+    width: 80, height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  radarCore: {
+    width: 48, height: 48,
+    borderRadius: 24,
+    backgroundColor: '#6B52FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.ambient,
+  },
+  radarAura: {
+    position: 'absolute',
+    width: '100%', height: '100%',
+    borderRadius: 40,
+    backgroundColor: 'rgba(107, 82, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(107, 82, 255, 0.3)',
+  },
+  radarAura2: {
+    position: 'absolute',
+    width: '70%', height: '70%',
+    borderRadius: 30,
+    backgroundColor: 'rgba(107, 82, 255, 0.2)',
+  },
+  mapInfo: {
+    flex: 1,
+  },
+  mapInfoTitle: {
+    color: '#A0A0A5',
+    fontSize: 11,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  mapInfoText: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
 
   safetyCard: {
     backgroundColor: '#261118',
