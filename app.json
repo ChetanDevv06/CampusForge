@@ -8,15 +8,18 @@
     "scheme": "campusforge",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow CampusForge to use your camera so you can take photos of items you found or want to sell.",
+        "NSPhotoLibraryUsageDescription": "Allow CampusForge to access your gallery to upload photos of items."
+      }
     },
     "android": {
       "package": "com.campusforge.app",
+      "newArchEnabled": true,
       "adaptiveIcon": {
-        "backgroundColor": "#882fe5",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#15151A",
+        "foregroundImage": "./assets/images/Logo.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -29,28 +32,39 @@
       "expo-router",
       "expo-notifications",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow CampusForge to access your gallery to upload photos.",
+          "cameraPermission": "Allow CampusForge to use your camera to take photos of items."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
-          "image": "./assets/images/Logo_CampusForge.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "image": "./assets/images/Logo.png",
+          "resizeMode": "cover",
+          "backgroundColor": "#15151A",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#15151A"
           }
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true,
-      "newArchEnabled": true
+      "reactCompiler": true
     },
     "extra": {
       "router": {},
       "eas": {
         "projectId": "ad3db6fb-f915-4b77-859a-0c7782ab11d6"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ad3db6fb-f915-4b77-859a-0c7782ab11d6"
     }
   }
 }

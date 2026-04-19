@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Switch, StatusBar, Linking, Platform, Image
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Roundness, Gradients } from '../constants/theme';
 import { auth, db } from '../firebaseConfig';
@@ -52,18 +53,19 @@ export default function SettingsScreen() {
   };
 
   const initials = profile?.name?.split(' ').map((w: any) => w[0]).join('').toUpperCase() || 'U';
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top || 40, height: (insets.top || 40) + 60 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
-        <Text style={styles.headerRightText}>{initials}</Text>
+        <View style={{ width: 44 }} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -162,24 +164,22 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#09090B' },
+  container: { flex: 1, backgroundColor: '#15151A' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    backgroundColor: '#15151A',
   },
-  backBtn: { padding: 5 },
+  backBtn: { width: 44, height: 44, justifyContent: 'center' },
   headerTitle: { color: '#FFF', fontSize: 20, fontWeight: '700', fontFamily: 'PlusJakartaSans_700Bold' },
-  headerRightText: { color: '#FFF', fontSize: 18, fontWeight: '600', opacity: 0.9 },
 
   scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
   
   // Profile Card
   profileCard: {
-    backgroundColor: '#15151A',
+    backgroundColor: '#1C1C23',
     borderRadius: 32,
     padding: 24,
     flexDirection: 'row',
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   sectionCard: {
-    backgroundColor: '#15151A',
+    backgroundColor: '#1C1C23',
     borderRadius: 24,
     overflow: 'hidden',
     borderWidth: 1,

@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   Image, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, StatusBar, Dimensions, Modal
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -111,17 +112,19 @@ export default function EditProfileScreen() {
     }
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: '#15151A' }]}>
       <StatusBar barStyle="light-content" />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top || 40, height: (insets.top || 40) + 60 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
-        <TouchableOpacity onPress={handleUpdate} disabled={loading}>
+        <TouchableOpacity onPress={handleUpdate} disabled={loading} style={styles.headerBtnRight}>
           {loading ? (
             <ActivityIndicator size="small" color={Colors.primary} />
           ) : (
@@ -335,16 +338,16 @@ export default function EditProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#09090B' },
+  container: { flex: 1, backgroundColor: '#15151A' },
   header: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     justifyContent: 'space-between', 
-    paddingHorizontal: 20, 
-    height: 60,
-    marginTop: Platform.OS === 'ios' ? 44 : 0
+    paddingHorizontal: 20,
+    backgroundColor: '#15151A',
   },
-  headerBtn: { width: 40, height: 40, justifyContent: 'center' },
+  headerBtn: { width: 44, height: 44, justifyContent: 'center' },
+  headerBtnRight: { minWidth: 44, height: 44, justifyContent: 'center', alignItems: 'flex-end' },
   headerTitle: { color: '#FFF', fontSize: 18, fontWeight: '700', fontFamily: 'PlusJakartaSans_700Bold' },
   saveBtnText: { color: '#6B52FF', fontSize: 16, fontWeight: '700' },
 
@@ -369,7 +372,7 @@ const styles = StyleSheet.create({
   avatarOverlayText: { color: '#FFF', fontSize: 8, fontWeight: '600' },
 
   formGroup: { 
-    backgroundColor: '#111116', 
+    backgroundColor: '#1C1C23', 
     borderRadius: 24, 
     padding: 20, 
     marginBottom: 20,
@@ -380,14 +383,14 @@ const styles = StyleSheet.create({
   inputItemLast: { marginBottom: 0 },
   inputLabel: { color: '#8A8D93', fontSize: 13, fontWeight: '500', marginBottom: 12, marginLeft: 4 },
   inputBox: { 
-    backgroundColor: '#000', 
+    backgroundColor: '#0F0F12', 
     borderRadius: 16, 
     height: 56, 
     paddingHorizontal: 16, 
     justifyContent: 'center' 
   },
   selectBox: {
-    backgroundColor: '#000', 
+    backgroundColor: '#0F0F12', 
     borderRadius: 16, 
     height: 56, 
     paddingHorizontal: 16, 
@@ -404,7 +407,7 @@ const styles = StyleSheet.create({
   campusHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 4 },
   campusLabel: { color: '#8A8D93', fontSize: 14, fontWeight: '500' },
   campusSelect: {
-    backgroundColor: '#000', 
+    backgroundColor: '#0F0F12', 
     borderRadius: 16, 
     height: 56, 
     paddingHorizontal: 16, 
@@ -415,7 +418,7 @@ const styles = StyleSheet.create({
   campusName: { color: '#FFF', fontSize: 15, fontFamily: 'Manrope_500Medium', flex: 1 },
 
   socialLink: {
-    backgroundColor: '#111116',
+    backgroundColor: '#1C1C23',
     borderRadius: 20,
     height: 70,
     paddingHorizontal: 16,
@@ -429,7 +432,7 @@ const styles = StyleSheet.create({
   socialInput: { color: '#FFF', fontSize: 15, fontFamily: 'Manrope_500Medium', flex: 1 },
 
   securityButton: {
-    backgroundColor: '#111116',
+    backgroundColor: '#1C1C23',
     borderRadius: 24,
     padding: 16,
     flexDirection: 'row',
@@ -438,7 +441,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.03)',
     marginTop: 10
   },
-  securityIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(255, 75, 125, 0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  securityIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(107, 82, 255, 0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   securityTextContent: { flex: 1 },
   securityTitle: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   securitySub: { color: '#8A8D93', fontSize: 12, marginTop: 2 },

@@ -5,17 +5,20 @@ import {
   Image, ActivityIndicator, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Roundness } from '../../constants/theme';
+import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { collection, addDoc } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import { uploadImage } from '../../utils/storage';
 import { useAuth } from '../../contexts/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import ImageSourceModal from '../../components/ImageSourceModal';
 
 export default function CreatePostScreen() {
   const router = useRouter();
   const [category, setCategory] = useState('Lost/Found');
+  const [itemType, setItemType] = useState<'lost' | 'found'>('lost');
 
   // Urgency toggle
   const [urgencyOn, setUrgencyOn] = useState(true);
@@ -37,22 +40,54 @@ export default function CreatePostScreen() {
   const [videoUri, setVideoUri] = useState<string | null>(null);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  const [showModal, setShowModal] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const { profile } = useAuth();
 
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow photo access to upload images.');
-      return;
+  const pickImage = async (useCamera: boolean) => {
+    // 1. Close Modal
+    setShowModal(false);
+    
+    // 2. Buffer
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    try {
+      if (useCamera) {
+          console.log('📸 [Unified] Requesting Camera permissions...');
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Forge Denied', 'Camera access is required to capture live proof for your post.');
+          return;
+        }
+      } else {
+          console.log('🖼️ [Unified] Requesting Media Library permissions...');
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Forge Denied', 'Gallery access is required to upload your post imagery.');
+          return;
+        }
+      }
+
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ['images'],
+        allowsEditing: Platform.OS === 'ios',
+        aspect: [4, 3],
+        quality: 0.7,
+      };
+
+      console.log(`🚀 [Unified] Launching ${useCamera ? 'Camera' : 'Gallery'}...`);
+      const result = useCamera 
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setImage(result.assets[0].uri);
+      }
+    } catch (error: any) {
+      console.error('❌ [Unified] Capture error:', error);
+      Alert.alert('Forge Error', `Issue during capture: ${error.message || 'Unknown'}`);
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled) setImage(result.assets[0].uri);
   };
 
   const pickVideo = async () => {
@@ -117,7 +152,7 @@ export default function CreatePostScreen() {
 
       let colName = 'lost_found';
       if (category === 'Lost/Found') {
-        payload.type = 'lost';
+        payload.type = itemType;
         payload.urgency = urgencyOn ? 'High' : 'Normal';
         payload.tags = selectedTags;
       } else if (category === 'Sell') {
@@ -149,7 +184,7 @@ export default function CreatePostScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#15151A" />
 
-      {/* ── Header ── */}
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.closeBtn} onPress={() => router.push('/(tabs)')}>
           <Ionicons name="close" size={24} color="#FFF" />
@@ -175,7 +210,7 @@ export default function CreatePostScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ── Category Toggle ── */}
+          {/* Category Toggle */}
           <View style={styles.categoryContainer}>
             {['Lost/Found', 'Sell', 'Skill'].map(cat => (
               <TouchableOpacity
@@ -190,12 +225,56 @@ export default function CreatePostScreen() {
             ))}
           </View>
 
-          {/* ── Media Grid ── */}
+          {/* Sub-type Selector for Lost/Found */}
+          {category === 'Lost/Found' && (
+            <View style={styles.typeSelectorWrap}>
+              <TouchableOpacity 
+                style={styles.typeBtnContainer}
+                onPress={() => setItemType('lost')}
+                activeOpacity={0.9}
+              >
+                <LinearGradient
+                  colors={itemType === 'lost' ? ['#FF647C', '#D04E64'] : ['#1E1E24', '#1E1E24']}
+                  style={[styles.typeBtn, itemType === 'lost' && styles.typeBtnActiveShadow]}
+                  start={{x: 0, y: 0}}
+                  end={{x: 1, y: 1}}
+                >
+                  <Ionicons 
+                    name="search-outline" 
+                    size={18} 
+                    color={itemType === 'lost' ? '#FFF' : '#A0A0A5'} 
+                  />
+                  <Text style={[styles.typeBtnText, itemType === 'lost' && styles.typeBtnTextActive]}>LOST</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.typeBtnContainer}
+                onPress={() => setItemType('found')}
+                activeOpacity={0.9}
+              >
+                <LinearGradient
+                  colors={itemType === 'found' ? ['#6B52FF', '#5038E0'] : ['#1E1E24', '#1E1E24']}
+                  style={[styles.typeBtn, itemType === 'found' && styles.typeBtnActiveShadow]}
+                  start={{x: 0, y: 0}}
+                  end={{x: 1, y: 1}}
+                >
+                  <Ionicons 
+                    name="gift-outline" 
+                    size={18} 
+                    color={itemType === 'found' ? '#FFF' : '#A0A0A5'} 
+                  />
+                  <Text style={[styles.typeBtnText, itemType === 'found' && styles.typeBtnTextActive]}>FOUND</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Media Grid */}
           <View style={styles.mediaGrid}>
-            {/* Big photo panel */}
             <TouchableOpacity
               style={[styles.mediaBig, image ? { borderWidth: 0 } : {}]}
-              onPress={pickImage}
+              onPress={() => setShowModal(true)}
               activeOpacity={0.8}
             >
               {image ? (
@@ -217,7 +296,6 @@ export default function CreatePostScreen() {
               )}
             </TouchableOpacity>
 
-            {/* Right mini panels */}
             <View style={styles.mediaRightCol}>
               <TouchableOpacity
                 style={[styles.mediaSmall, videoUri && styles.mediaSmallActive]}
@@ -241,7 +319,6 @@ export default function CreatePostScreen() {
             </View>
           </View>
 
-          {/* Link input (shown when toggled) */}
           {showLinkInput && (
             <View style={[styles.locationBox, { marginBottom: Spacing.xl }]}>
               <Ionicons name="link" size={20} color="#6B52FF" style={{ marginRight: 12 }} />
@@ -264,7 +341,6 @@ export default function CreatePostScreen() {
             </View>
           )}
 
-          {/* ── Title ── */}
           <Text style={styles.sectionLabel}>
             {category === 'Sell' || category === 'Skill' ? 'TITLE' : 'WHAT HAPPENED?'}
           </Text>
@@ -285,7 +361,6 @@ export default function CreatePostScreen() {
             />
           </View>
 
-          {/* ── Price (Sell / Skill) ── */}
           {(category === 'Sell' || category === 'Skill') && (
             <>
               <Text style={styles.sectionLabel}>PRICE / RATE</Text>
@@ -304,7 +379,6 @@ export default function CreatePostScreen() {
             </>
           )}
 
-          {/* ── Description ── */}
           <Text style={styles.sectionLabel}>DESCRIPTION</Text>
           <View style={styles.textAreaBox}>
             <TextInput
@@ -317,7 +391,6 @@ export default function CreatePostScreen() {
             />
           </View>
 
-          {/* ── Location ── */}
           <Text style={styles.sectionLabel}>WHERE WAS IT?</Text>
           <View style={styles.locationBox}>
             <Ionicons name="location" size={20} color="#6B52FF" style={{ marginRight: 12 }} />
@@ -331,38 +404,39 @@ export default function CreatePostScreen() {
             />
           </View>
 
-          {/* ── Tags / Urgency ── */}
           <Text style={styles.sectionLabel}>
             {category === 'Lost/Found' ? 'URGENCY & CATEGORY' : 'TAGS & CATEGORY'}
           </Text>
           <View style={styles.tagsCloud}>
-            {/* Urgency pill (Lost/Found only) */}
             {category === 'Lost/Found' && (
-              <TouchableOpacity
-                style={[styles.tagPill, urgencyOn && styles.tagPillHighUrgency]}
-                onPress={() => setUrgencyOn(v => !v)}
-              >
-                <View style={[styles.urgencyDot, urgencyOn && { backgroundColor: '#FFA1B8' }]} />
-                <Text style={[styles.tagText, urgencyOn && { color: '#FFF' }]}>
-                  {urgencyOn ? 'High Urgency' : 'Normal Urgency'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.urgencySection}>
+                <View style={styles.urgencyTextWrap}>
+                  <Text style={styles.urgencyTitle}>Mark as Urgent</Text>
+                  <Text style={styles.urgencySub}>Sends a faster alert to students nearby</Text>
+                </View>
+                <TouchableOpacity 
+                  onPress={() => setUrgencyOn(v => !v)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.toggleTrack, urgencyOn && styles.toggleTrackActive]}>
+                    <View style={[styles.toggleThumb, urgencyOn && styles.toggleThumbActive]} />
+                  </View>
+                </TouchableOpacity>
+              </View>
             )}
 
-            {/* Static + custom tags */}
             {allTags.map((tag, idx) => (
               <TouchableOpacity
                 key={`${tag}-${idx}`}
                 style={[styles.tagPill, selectedTags.includes(tag) && styles.tagPillSelected]}
                 onPress={() => toggleTag(tag)}
               >
-                <Text style={[styles.tagText, selectedTags.includes(tag) && { color: '#FFF' }]}>
+                <Text style={[styles.tagText, selectedTags.includes(tag) && styles.tagTextSelected]}>
                   {tag}
                 </Text>
               </TouchableOpacity>
             ))}
 
-            {/* Add Tag */}
             {showTagInput ? (
               <View style={[styles.tagPill, { backgroundColor: '#040405', paddingVertical: 6, paddingHorizontal: 14 }]}>
                 <TextInput
@@ -387,7 +461,6 @@ export default function CreatePostScreen() {
             )}
           </View>
 
-          {/* ── Community Reach Card ── */}
           <View style={styles.reachCard}>
             <View style={styles.reachOverlay}>
               <View style={styles.reachIconWrap}>
@@ -403,140 +476,125 @@ export default function CreatePostScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ImageSourceModal 
+        isVisible={showModal} 
+        onClose={() => setShowModal(false)} 
+        onSelect={pickImage} 
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#15151A' },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingHorizontal: Spacing.margin,
-    paddingBottom: Spacing.md,
-    backgroundColor: '#15151A',
-  },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: Spacing.margin, paddingBottom: Spacing.md, backgroundColor: '#15151A' },
   closeBtn: { padding: Spacing.xs },
   headerTitle: { ...Typography.headline, color: '#FFF', fontSize: 18, letterSpacing: 0 },
-  postBtn: {
-    backgroundColor: '#6B52FF',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: Roundness.full,
-  },
+  postBtn: { backgroundColor: '#6B52FF', paddingHorizontal: 24, paddingVertical: 10, borderRadius: Roundness.full },
   postBtnText: { ...Typography.label, color: '#FFF', fontSize: 14, fontWeight: 'bold' },
-
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: Spacing.margin, paddingBottom: 120, paddingTop: Spacing.md },
-
-  // Category
-  categoryContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#121216',
-    borderRadius: Roundness.full,
-    padding: 6,
-    marginBottom: Spacing.xl,
-  },
-  catBtn: {
-    flex: 1, height: 40,
-    justifyContent: 'center', alignItems: 'center',
-    borderRadius: Roundness.full,
-  },
+  categoryContainer: { flexDirection: 'row', backgroundColor: '#121216', borderRadius: Roundness.full, padding: 6, marginBottom: Spacing.xl },
+  catBtn: { flex: 1, height: 40, justifyContent: 'center', alignItems: 'center', borderRadius: Roundness.full },
   catBtnActive: { backgroundColor: '#6B52FF' },
   catBtnText: { ...Typography.body_medium, color: '#8A8A8E', fontSize: 13, fontWeight: 'bold' },
   catBtnTextActive: { color: '#FFF' },
-
-  // Media
   mediaGrid: { flexDirection: 'row', gap: 16, marginBottom: Spacing.xl },
-  mediaBig: {
-    flex: 1, height: 220, borderRadius: 32,
-    borderWidth: 1.5, borderColor: '#2A2A30', borderStyle: 'dashed',
-    backgroundColor: 'rgba(255,255,255,0.01)',
-    justifyContent: 'center', alignItems: 'center',
-    overflow: 'hidden',
-  },
+  mediaBig: { flex: 1, height: 220, borderRadius: 32, borderWidth: 1.5, borderColor: '#2A2A30', borderStyle: 'dashed', backgroundColor: 'rgba(255,255,255,0.01)', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   mediaImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  removeMedia: {
-    position: 'absolute', top: 10, right: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12,
-  },
+  removeMedia: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12 },
   mediaEmptyCenter: { alignItems: 'center' },
   mediaBigText: { color: '#A0A0A5', fontSize: 13, marginBottom: 4 },
   mediaHint: { color: '#4A4A4E', fontSize: 10, fontWeight: 'bold', letterSpacing: 1 },
   mediaRightCol: { width: 90, gap: 16 },
-  mediaSmall: {
-    flex: 1, backgroundColor: '#1A1C23',
-    borderRadius: 32, justifyContent: 'center', alignItems: 'center',
-  },
+  mediaSmall: { flex: 1, backgroundColor: '#1A1C23', borderRadius: 32, justifyContent: 'center', alignItems: 'center' },
   mediaSmallActive: { borderWidth: 2, borderColor: '#6B52FF' },
-
-  // Labels
-  sectionLabel: {
-    ...Typography.label,
-    color: '#8E8E93',
-    fontSize: 11, letterSpacing: 1.5,
-    marginBottom: Spacing.sm,
-    textTransform: 'uppercase',
-    marginLeft: 4,
-  },
-
-  // Inputs
-  inputBox: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#040405',
-    borderRadius: Roundness.full,
-    height: 60, paddingHorizontal: Spacing.xl,
-    marginBottom: Spacing.xl,
-  },
+  sectionLabel: { ...Typography.label, color: '#8E8E93', fontSize: 11, letterSpacing: 1.5, marginBottom: Spacing.sm, textTransform: 'uppercase', marginLeft: 4 },
+  inputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#040405', borderRadius: Roundness.full, height: 60, paddingHorizontal: Spacing.xl, marginBottom: Spacing.xl },
   input: { flex: 1, ...Typography.body_medium, color: '#FFF', fontSize: 16 },
-
-  textAreaBox: {
-    backgroundColor: '#040405', borderRadius: 32,
-    height: 140, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.lg,
-    marginBottom: Spacing.xl,
-  },
+  textAreaBox: { backgroundColor: '#040405', borderRadius: 32, height: 140, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.lg, marginBottom: Spacing.xl },
   textArea: { ...Typography.body_medium, color: '#FFF', fontSize: 16, flex: 1, textAlignVertical: 'top' },
-
-  locationBox: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#040405', borderRadius: Roundness.full,
-    height: 60, paddingHorizontal: Spacing.xl,
-    marginBottom: Spacing.xl,
-  },
-
-  // Tags
+  locationBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#040405', borderRadius: Roundness.full, height: 60, paddingHorizontal: Spacing.xl, marginBottom: Spacing.xl },
   tagsCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: Spacing.xxl },
-  tagPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#1E1E24',
-    paddingHorizontal: 20, paddingVertical: 12,
-    borderRadius: Roundness.full,
-  },
+  tagPill: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#1E1E24', paddingHorizontal: 20, paddingVertical: 12, borderRadius: Roundness.full },
   tagPillHighUrgency: { backgroundColor: '#4F3A96', borderWidth: 1, borderColor: '#6B52FF' },
-  tagPillSelected: { backgroundColor: '#2C2C36' },
-  tagText: { color: '#D1D1D6', fontSize: 14, fontWeight: '600' },
+  tagPillSelected: { backgroundColor: '#6B52FF', borderWidth: 1, borderColor: '#8169FF' },
+  tagText: { color: '#8E8E93', fontSize: 13, fontWeight: '600' },
+  tagTextSelected: { color: '#FFF' },
   urgencyDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#8E8E93' },
-
-  // Community Reach
-  reachCard: {
-    height: 110, borderRadius: 32, backgroundColor: '#16161A',
-    overflow: 'hidden', marginBottom: Spacing.xxl,
-    borderWidth: 1, borderColor: '#2A2A30',
-  },
-  reachOverlay: {
-    flex: 1, padding: Spacing.xl,
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    backgroundColor: 'rgba(255,255,255,0.02)',
-  },
-  reachIconWrap: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(107, 82, 255, 0.2)',
-    justifyContent: 'center', alignItems: 'center',
-  },
+  reachCard: { height: 110, borderRadius: 32, backgroundColor: '#16161A', overflow: 'hidden', marginBottom: Spacing.xxl, borderWidth: 1, borderColor: '#2A2A30' },
+  reachOverlay: { flex: 1, padding: Spacing.xl, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, backgroundColor: 'rgba(255,255,255,0.02)' },
+  reachIconWrap: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(107, 82, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
   reachTexts: { flex: 1 },
   reachTitle: { color: '#FFF', fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
   reachSub: { color: '#8E8E93', fontSize: 11, lineHeight: 16 },
+
+  // Urgency Section
+  urgencySection: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    padding: 20,
+    borderRadius: 24,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  urgencyTextWrap: { flex: 1 },
+  urgencyTitle: { color: '#FFF', fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
+  urgencySub: { color: '#8E8E93', fontSize: 12 },
+  toggleTrack: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#2A2A30',
+    padding: 4,
+    justifyContent: 'center',
+  },
+  toggleTrackActive: { backgroundColor: '#6B52FF' },
+  toggleThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFF',
+  },
+  toggleThumbActive: { alignSelf: 'flex-end' },
+
+  // Sub-type Selector
+  typeSelectorWrap: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: Spacing.xl,
+  },
+  typeBtnContainer: {
+    flex: 1,
+  },
+  typeBtn: {
+    height: 56,
+    borderRadius: 20,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  typeBtnActiveShadow: {
+    borderWidth: 0,
+    ...Shadows.ambient,
+    shadowColor: '#6B52FF',
+    shadowOpacity: 0.3,
+  },
+  typeBtnText: {
+    color: '#A0A0A5',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  typeBtnTextActive: {
+    color: '#FFF',
+  },
 });
