@@ -1,24 +1,35 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, TextInput, Dimensions, Image, Platform, ActivityIndicator,
-  Pressable, Animated
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, orderBy, limit, getDocs, where, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebaseConfig';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
+import { collection, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  Dimensions, Image, Platform,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { Colors, Fonts, Gradients, Roundness, Spacing, Typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
+import { db } from '../../firebaseConfig';
+import { setMarketTab } from '../../utils/marketTabStore';
 
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
-  const { user, profile } = useAuth();
+  const { user, profile, isLoading: authLoading } = useAuth();
+  // Profile is considered loading if auth is done but profile hasn't arrived yet
+  const profileLoading = !authLoading && !!user && profile === null;
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState('All');
-  
+
   const [marketItems, setMarketItems] = useState<any[]>([]);
   const [lostItems, setLostItems] = useState<any[]>([]);
   const [skillItems, setSkillItems] = useState<any[]>([]);
@@ -26,6 +37,10 @@ export default function HomeScreen() {
   const [todayFoundCount, setTodayFoundCount] = useState(0);
   const [newMarketCount, setNewMarketCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
+  // Tracks when both count snapshots have fired at least once
+  const lostReady = useRef(false);
+  const marketReady = useRef(false);
+  const [countsReady, setCountsReady] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
@@ -35,6 +50,36 @@ export default function HomeScreen() {
   const featureAnim = useRef(new Animated.Value(1)).current; // Opacity & Scale
   const feedMoveAnim = useRef(new Animated.Value(0)).current; // TranslateY
   const [showFeatures, setShowFeatures] = useState(true);
+
+  // --- Cinematic Swipe Ticker Engine (Search) ---
+  const [suggestionIdx, setSuggestionIdx] = useState(0);
+  const tickerFade = useRef(new Animated.Value(1)).current;
+  const tickerSlide = useRef(new Animated.Value(0)).current;
+  const searchSuggestions = [
+    "Find Calculus Textbooks...",
+    "Looking for Lost Keys?",
+    "Basketball Teammates?",
+    "Used Dorm Furniture?",
+    "Study Group for Bio 101?",
+    "Nearby Food Deals?"
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      Animated.parallel([
+        Animated.timing(tickerFade, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(tickerSlide, { toValue: -20, duration: 400, useNativeDriver: true }),
+      ]).start(() => {
+        setSuggestionIdx(prev => (prev + 1) % searchSuggestions.length);
+        tickerSlide.setValue(20);
+        Animated.parallel([
+          Animated.timing(tickerFade, { toValue: 1, duration: 400, useNativeDriver: true }),
+          Animated.timing(tickerSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ]).start();
+      });
+    }, 4500);
+    return () => clearInterval(interval);
+  }, []);
 
   const lastQueryLength = useRef(0);
 
@@ -64,13 +109,37 @@ export default function HomeScreen() {
     ]).start();
   }, [searchQuery, isSearchFocused]);
 
-  const username = profile?.name?.split(' ')[0] || (user?.email as string)?.split('@')[0] || 'Sam';
-  const initials = username.charAt(0).toUpperCase();
+  // Only derive username from profile — never fall back to email to avoid flash of email-as-name
+  const username = profile?.name?.split(' ')[0] ?? null;
+  const initials = (username ?? '?').charAt(0).toUpperCase();
+
+  // Shimmer animation for skeleton loading
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(shimmerAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+  const shimmerOpacity = shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.7] });
 
   const focusSearch = () => searchInputRef.current?.focus();
 
   useEffect(() => {
     if (!profile?.collegeId) return;
+
+    // Reset readiness flags when collegeId changes
+    lostReady.current = false;
+    marketReady.current = false;
+    setCountsReady(false);
+
+    const checkReady = () => {
+      if (lostReady.current && marketReady.current) setCountsReady(true);
+    };
 
     // 1. Items Found (Total Active in College)
     const lostQuery = query(collection(db, 'lost_found'));
@@ -78,11 +147,12 @@ export default function HomeScreen() {
       const collegeId = profile?.collegeId;
       const count = snap.docs.filter(doc => {
         const d = doc.data();
-        if (!collegeId) return true; // Show all if profile not loaded
+        if (!collegeId) return true;
         return d.collegeId === collegeId && d.status !== 'resolved';
       }).length;
-      console.log(`📊 [Debug] Active Lost/Found: ${count} for College: ${collegeId}`);
       setTodayFoundCount(count);
+      lostReady.current = true;
+      checkReady();
     });
 
     // 2. Market & Skills (Total active listings)
@@ -94,61 +164,88 @@ export default function HomeScreen() {
         if (!collegeId) return true;
         return d.collegeId === collegeId && d.status !== 'sold';
       }).length;
-      
+
       getDocs(query(collection(db, 'skills'))).then(sSnap => {
         const sCount = sSnap.docs.filter(doc => {
           const d = doc.data();
           if (!collegeId) return true;
           return d.collegeId === collegeId;
         }).length;
-        console.log(`📊 [Debug] Total Market: ${mCount}, Skills: ${sCount}`);
         setNewMarketCount(mCount + sCount);
+        marketReady.current = true;
+        checkReady();
       });
     });
 
     // 3. Unread Messages
     if (user?.uid) {
-        const chatsQuery = query(
-            collection(db, 'chats'),
-            where('participants', 'array-contains', user.uid)
-        );
-        
-        const unsubChats = onSnapshot(chatsQuery, (snap) => {
-            let totalUnread = 0;
-            snap.docs.forEach(doc => {
-                const data = doc.data();
-                if (data.unreadCount && data.unreadCount[user.uid]) {
-                    totalUnread += data.unreadCount[user.uid];
-                }
-            });
-            setUnreadCount(totalUnread);
+      const chatsQuery = query(
+        collection(db, 'chats'),
+        where('participants', 'array-contains', user.uid)
+      );
+
+      const unsubChats = onSnapshot(chatsQuery, (snap) => {
+        let totalUnread = 0;
+        snap.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.unreadCount && data.unreadCount[user.uid]) {
+            totalUnread += data.unreadCount[user.uid];
+          }
         });
-        return () => { unsubLost(); unsubMarket(); unsubChats(); };
+        setUnreadCount(totalUnread);
+      });
+      return () => { unsubLost(); unsubMarket(); unsubChats(); };
     }
 
     return () => { unsubLost(); unsubMarket(); };
   }, [profile?.collegeId, user?.uid]);
 
   useEffect(() => {
-    const fetchFeeds = async () => {
-      try {
-        const collegeId = profile?.collegeId || '';
-        const [mSnap, lSnap, sSnap] = await Promise.all([
-          getDocs(query(collection(db, 'marketplace'), where('collegeId', '==', collegeId), orderBy('createdAt', 'desc'), limit(5))),
-          getDocs(query(collection(db, 'lost_found'), where('collegeId', '==', collegeId), orderBy('createdAt', 'desc'), limit(5))),
-          getDocs(query(collection(db, 'skills'), where('collegeId', '==', collegeId), orderBy('createdAt', 'desc'), limit(5))),
-        ]);
+    if (!profile?.collegeId) return;
+    const collegeId = profile.collegeId;
 
-        setMarketItems(mSnap.docs.map(d => ({ id: d.id, _feedType: 'market', ...d.data() })));
-        setLostItems(lSnap.docs.map(d => ({ id: d.id, _feedType: 'lost', ...d.data() })));
-        setSkillItems(sSnap.docs.map(d => ({ id: d.id, _feedType: 'skill', ...d.data() })));
-      } catch (error) {
-        console.warn("Feed fetch error", error);
-      } finally {
+    // Track when all three feed snapshots have fired at least once
+    const feedReady = { market: false, lost: false, skill: false };
+    const checkFeedReady = () => {
+      if (feedReady.market && feedReady.lost && feedReady.skill) {
         setLoadingFeed(false);
       }
     };
-    fetchFeeds();
+
+    // Real-time listener: Marketplace
+    const unsubMarketFeed = onSnapshot(
+      query(collection(db, 'marketplace'), where('collegeId', '==', collegeId), orderBy('createdAt', 'desc'), limit(5)),
+      (snap) => {
+        setMarketItems(snap.docs.map(d => ({ id: d.id, _feedType: 'market', ...d.data() })));
+        feedReady.market = true;
+        checkFeedReady();
+      },
+      (err) => { console.warn('Market feed error', err); feedReady.market = true; checkFeedReady(); }
+    );
+
+    // Real-time listener: Lost & Found
+    const unsubLostFeed = onSnapshot(
+      query(collection(db, 'lost_found'), where('collegeId', '==', collegeId), orderBy('createdAt', 'desc'), limit(5)),
+      (snap) => {
+        setLostItems(snap.docs.map(d => ({ id: d.id, _feedType: 'lost', ...d.data() })));
+        feedReady.lost = true;
+        checkFeedReady();
+      },
+      (err) => { console.warn('Lost feed error', err); feedReady.lost = true; checkFeedReady(); }
+    );
+
+    // Real-time listener: Skills
+    const unsubSkillFeed = onSnapshot(
+      query(collection(db, 'skills'), where('collegeId', '==', collegeId), orderBy('createdAt', 'desc'), limit(5)),
+      (snap) => {
+        setSkillItems(snap.docs.map(d => ({ id: d.id, _feedType: 'skill', ...d.data() })));
+        feedReady.skill = true;
+        checkFeedReady();
+      },
+      (err) => { console.warn('Skill feed error', err); feedReady.skill = true; checkFeedReady(); }
+    );
+
+    return () => { unsubMarketFeed(); unsubLostFeed(); unsubSkillFeed(); };
   }, [profile?.collegeId]);
 
   const parseMillis = (t: any) => {
@@ -171,8 +268,8 @@ export default function HomeScreen() {
 
     const q = searchQuery.trim().toLowerCase();
     if (q) {
-      feed = feed.filter(i => 
-        (i.title?.toLowerCase() || '').includes(q) || 
+      feed = feed.filter(i =>
+        (i.title?.toLowerCase() || '').includes(q) ||
         (i.description?.toLowerCase() || '').includes(q)
       );
     }
@@ -182,7 +279,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
+
       <View style={styles.headerWrapper}>
         <View style={styles.topNav}>
           <View style={styles.navLeft}>
@@ -199,7 +296,7 @@ export default function HomeScreen() {
               {profile?.collegeShortName || profile?.collegeName || 'Campus'}
             </Text>
           </View>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.searchIconBtn}
             onPress={() => router.push('/notifications')}
           >
@@ -209,27 +306,42 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <ScrollView 
+      <ScrollView
         ref={scrollViewRef}
-        showsVerticalScrollIndicator={false} 
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
-        <Animated.View style={{ 
+        <Animated.View style={{
           opacity: featureAnim,
           transform: [{ translateY: featureAnim.interpolate({ inputRange: [0, 1], outputRange: [-100, 0] }) }]
         }}>
           <View style={styles.greetingSection}>
-            <Text style={styles.greetingHeading}>Hey, {username}!</Text>
-            <Text style={styles.greetingSub}>There are {todayFoundCount + newMarketCount} new listings in your circle today.</Text>
+            {profileLoading || username === null ? (
+              // Skeleton shimmer — profile not yet loaded
+              <>
+                <Animated.View style={[styles.skeletonLine, styles.skeletonHeading, { opacity: shimmerOpacity }]} />
+                <Animated.View style={[styles.skeletonLine, styles.skeletonSub, { opacity: shimmerOpacity }]} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.greetingHeading}>Hey, {username}!</Text>
+                {!countsReady ? (
+                  // Skeleton shimmer — counts not yet fetched, avoids 0 → number flash
+                  <Animated.View style={[styles.skeletonLine, styles.skeletonSub, { opacity: shimmerOpacity }]} />
+                ) : (
+                  <Text style={styles.greetingSub}>There are {todayFoundCount + newMarketCount} new listings in your circle today.</Text>
+                )}
+              </>
+            )}
           </View>
         </Animated.View>
 
         <Animated.View style={{
           transform: [{ translateY: featureAnim.interpolate({ inputRange: [0, 1], outputRange: [-80, 0] }) }]
         }}>
-          <Pressable 
+          <Pressable
             onPress={focusSearch}
             style={[
               styles.searchBarContainer,
@@ -237,17 +349,15 @@ export default function HomeScreen() {
               searchQuery.length > 0 && styles.searchBarContainerActive
             ]}
           >
-            <Ionicons 
-              name={isSearchFocused ? "search" : "search-outline"} 
-              size={20} 
-              color={isSearchFocused ? Colors.primary : Colors.on_surface_variant} 
+            <Ionicons
+              name={isSearchFocused ? "search" : "search-outline"}
+              size={20}
+              color={isSearchFocused ? Colors.primary : Colors.on_surface_variant}
             />
-            <TextInput 
+            <TextInput
               ref={searchInputRef}
               key="home-search-input"
-              style={styles.searchInput}
-              placeholder="Find books, clubs, or skills..."
-              placeholderTextColor={Colors.on_surface_variant}
+              style={[styles.searchInput, { padding: 0 }]}
               value={searchQuery}
               onChangeText={setSearchQuery}
               onFocus={() => setIsSearchFocused(true)}
@@ -255,17 +365,33 @@ export default function HomeScreen() {
               keyboardType="default"
               autoCapitalize="none"
             />
+            {!searchQuery && (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.placeholderOverlay,
+                  {
+                    left: 60,
+                    top: 15,
+                    opacity: tickerFade,
+                    transform: [{ translateY: tickerSlide }]
+                  }
+                ]}
+              >
+                <Text style={styles.placeholderText}>{searchSuggestions[suggestionIdx]}</Text>
+              </Animated.View>
+            )}
             {searchQuery.length > 0 && (
               <View style={styles.searchSideActions}>
-                 <View style={styles.resultCountBadge}>
-                   <Text style={styles.resultCountText}>{filteredFeed.length}</Text>
-                 </View>
-                 <TouchableOpacity 
-                   onPress={() => setSearchQuery('')}
-                   style={styles.clearSearchBtn}
-                 >
-                   <Ionicons name="close-circle" size={20} color={Colors.on_surface_variant} />
-                 </TouchableOpacity>
+                <View style={styles.resultCountBadge}>
+                  <Text style={styles.resultCountText}>{filteredFeed.length}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setSearchQuery('')}
+                  style={styles.clearSearchBtn}
+                >
+                  <Ionicons name="close-circle" size={20} color={Colors.on_surface_variant} />
+                </TouchableOpacity>
               </View>
             )}
           </Pressable>
@@ -273,13 +399,13 @@ export default function HomeScreen() {
 
         <Animated.View style={[
           styles.featureGrid,
-          { 
+          {
             opacity: featureAnim,
             transform: [{ scale: featureAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }]
           }
         ]}>
-          <TouchableOpacity 
-            style={styles.gridCard} 
+          <TouchableOpacity
+            style={styles.gridCard}
             activeOpacity={0.9}
             onPress={() => router.push('/(tabs)/lost-found')}
           >
@@ -293,15 +419,15 @@ export default function HomeScreen() {
             <Text style={styles.gridCardSub}>{todayFoundCount} active reports</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             activeOpacity={0.9}
-            onPress={() => router.push('/(tabs)/market')}
+            onPress={() => { setMarketTab('Market'); router.push('/(tabs)/market'); }}
           >
-            <LinearGradient 
-              colors={['#4a339d', '#22006d']} 
+            <LinearGradient
+              colors={['#4a339d', '#22006d']}
               style={[styles.gridCard, styles.marketCard]}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 1}}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
             >
               <View style={styles.iconRow}>
                 <View style={[styles.iconCircle, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
@@ -316,12 +442,12 @@ export default function HomeScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.gridCard} 
+          <TouchableOpacity
+            style={styles.gridCard}
             activeOpacity={0.9}
-            onPress={() => router.push('/(tabs)/skills')}
+            onPress={() => { setMarketTab('Skills'); router.push('/(tabs)/market'); }}
           >
-             <View style={styles.iconRow}>
+            <View style={styles.iconRow}>
               <View style={[styles.iconCircle, { backgroundColor: 'rgba(255, 165, 216, 0.1)' }]}>
                 <Ionicons name="school" size={24} color={Colors.tertiary} />
               </View>
@@ -331,8 +457,8 @@ export default function HomeScreen() {
             <Text style={styles.gridCardSub}>Learn from peers</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.gridCard} 
+          <TouchableOpacity
+            style={styles.gridCard}
             activeOpacity={0.9}
             onPress={() => router.push('/messages')}
           >
@@ -361,8 +487,8 @@ export default function HomeScreen() {
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
             {['All', 'Found', 'Sale', 'Skills'].map(f => (
-              <TouchableOpacity 
-                key={f} 
+              <TouchableOpacity
+                key={f}
                 style={[styles.filterChip, activeFilter === f && styles.filterChipActive]}
                 onPress={() => setActiveFilter(f)}
               >
@@ -373,9 +499,9 @@ export default function HomeScreen() {
 
           <View style={styles.verticalFeed}>
             {loadingFeed ? (
-               <LinearGradient colors={['#1f1f22', '#1A1A20']} style={[styles.feedCardContainer, { height: 160, justifyContent: 'center', alignItems: 'center' }]}>
-                  <ActivityIndicator color={Colors.primary} />
-               </LinearGradient>
+              <LinearGradient colors={['#1f1f22', '#1A1A20']} style={[styles.feedCardContainer, { height: 160, justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator color={Colors.primary} />
+              </LinearGradient>
             ) : filteredFeed.length > 0 ? (
               filteredFeed.map((item) => {
                 const formatAgo = (timestamp: any) => {
@@ -386,12 +512,12 @@ export default function HomeScreen() {
                   else if (typeof timestamp === 'number') targetTime = timestamp;
                   else if (timestamp.seconds) targetTime = timestamp.seconds * 1000;
                   else targetTime = new Date(timestamp).getTime();
-                  
+
                   if (!targetTime || isNaN(targetTime)) return 'JUST NOW';
                   const hours = Math.floor((Date.now() - targetTime) / (1000 * 60 * 60));
                   if (hours < 1) return 'JUST NOW';
                   if (hours < 24) return `${hours}H AGO`;
-                  return `${Math.floor(hours/24)}D AGO`;
+                  return `${Math.floor(hours / 24)}D AGO`;
                 };
 
                 if (item._feedType === 'market') {
@@ -400,20 +526,20 @@ export default function HomeScreen() {
                       {item.imageUrl ? (
                         <View style={styles.feedImageWrap}>
                           <Image source={{ uri: item.imageUrl }} style={styles.feedImageFull} />
-                          <View style={styles.pricePill}><Text style={styles.pricePillText}>${item.price || '0.00'}</Text></View>
+                          <View style={styles.pricePill}><Text style={styles.pricePillText}>₹{item.price || '0.00'}</Text></View>
                         </View>
                       ) : null}
                       <View style={styles.feedCardBody}>
                         <View style={styles.feedCardTop}>
-                           <View style={styles.tagBadge}><Text style={styles.tagText}>MARKETPLACE</Text></View>
-                           <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
+                          <View style={styles.tagBadge}><Text style={styles.tagText}>MARKETPLACE</Text></View>
+                          <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
                         </View>
                         <Text style={styles.feedCardTitle}>{item.title}</Text>
                         <Text style={styles.feedCardDesc} numberOfLines={2}>{item.description}</Text>
                         <View style={styles.feedCardBottom}>
                           <View style={styles.feedAuthor}>
-                            <View style={styles.miniAvatar}><Ionicons name="person" size={14} color="#FFF"/></View>
-                            <Text style={styles.feedAuthorName}>Alex Rivera</Text>
+                            <View style={styles.miniAvatar}><Ionicons name="person" size={14} color="#FFF" /></View>
+                            <Text style={styles.feedAuthorName}>{item.userName || 'Campus Student'}</Text>
                           </View>
                           <Ionicons name="heart-outline" size={24} color="#6B52FF" />
                         </View>
@@ -424,17 +550,17 @@ export default function HomeScreen() {
 
                 if (item._feedType === 'skill') {
                   return (
-                    <TouchableOpacity key={item.id} style={[styles.feedCardContainer, {borderLeftWidth: 4, borderLeftColor: '#ff8fb3'}]} onPress={() => router.push({ pathname: '/skill-details/[id]', params: { id: item.id } } as any)}>
+                    <TouchableOpacity key={item.id} style={[styles.feedCardContainer, { borderLeftWidth: 4, borderLeftColor: '#ff8fb3' }]} onPress={() => router.push({ pathname: '/skill-details/[id]', params: { id: item.id } } as any)}>
                       <View style={styles.feedCardBody}>
                         <View style={styles.feedCardTop}>
-                           <View style={[styles.tagBadge, {backgroundColor: 'rgba(255, 143, 179, 0.15)'}]}><Text style={[styles.tagText, {color: '#ff8fb3'}]}>SKILL SHARE</Text></View>
-                           <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
+                          <View style={[styles.tagBadge, { backgroundColor: 'rgba(255, 143, 179, 0.15)' }]}><Text style={[styles.tagText, { color: '#ff8fb3' }]}>SKILL SHARE</Text></View>
+                          <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
                         </View>
                         <Text style={styles.feedCardTitle}>{item.title}</Text>
                         <Text style={styles.feedCardDesc} numberOfLines={3}>{item.description}</Text>
                         <View style={styles.feedCardBottom}>
                           <View style={styles.feedAuthor}>
-                            <View style={styles.miniAvatar}><Ionicons name="person" size={14} color="#FFF"/></View>
+                            <View style={styles.miniAvatar}><Ionicons name="person" size={14} color="#FFF" /></View>
                             <View style={styles.plusBadge}><Text style={styles.plusBadgeText}>+5</Text></View>
                           </View>
                           <TouchableOpacity style={styles.reserveBtn}><Text style={styles.reserveBtnText}>RESERVE SPOT</Text></TouchableOpacity>
@@ -454,8 +580,8 @@ export default function HomeScreen() {
                       ) : null}
                       <View style={styles.feedCardBody}>
                         <View style={styles.feedCardTop}>
-                           <View style={[styles.tagBadge, {backgroundColor: 'rgba(255, 87, 87, 0.15)'}]}><Text style={[styles.tagText, {color: '#ff5757'}]}>{item.type?.toUpperCase() || 'FOUND'}</Text></View>
-                           <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
+                          <View style={[styles.tagBadge, { backgroundColor: 'rgba(255, 87, 87, 0.15)' }]}><Text style={[styles.tagText, { color: '#ff5757' }]}>{item.type?.toUpperCase() || 'FOUND'}</Text></View>
+                          <Text style={styles.tagTime}> • {formatAgo(item.createdAt)}</Text>
                         </View>
                         <Text style={styles.feedCardTitle}>{item.title}</Text>
                         <Text style={styles.feedCardDesc} numberOfLines={2}>{item.description}</Text>
@@ -502,9 +628,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     marginBottom: Spacing.lg,
   },
-  navLeft: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+  navLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.sm,
     height: 44, // Match avatar height
   },
@@ -517,6 +643,20 @@ const styles = StyleSheet.create({
   greetingSection: { paddingHorizontal: Spacing.xl, marginBottom: Spacing.md },
   greetingHeading: { ...Typography.display, fontSize: 32, color: '#FFF', marginBottom: Spacing.xs },
   greetingSub: { ...Typography.body_medium, fontSize: 13, color: 'rgba(255,255,255,0.6)' },
+  // Skeleton shimmer styles
+  skeletonLine: {
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  skeletonHeading: {
+    height: 36,
+    width: '55%',
+    marginBottom: Spacing.xs + 2,
+  },
+  skeletonSub: {
+    height: 16,
+    width: '80%',
+  },
   searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -545,7 +685,14 @@ const styles = StyleSheet.create({
   searchBarContainerActive: {
     borderColor: 'rgba(107, 82, 255, 0.2)',
   },
-  searchInput: { flex: 1, ...Typography.body, color: '#FFF', fontSize: 15, marginTop: Platform.OS === 'ios' ? 0 : 2 },
+  searchInput: {
+    flex: 1,
+    ...Typography.body_medium,
+    color: '#FFF',
+    fontSize: 15,
+    marginTop: Platform.OS === 'ios' ? 0 : 2,
+    fontFamily: Fonts.medium
+  },
   searchSideActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   resultCountBadge: {
     backgroundColor: 'rgba(107, 82, 255, 0.15)',
@@ -670,4 +817,6 @@ const styles = StyleSheet.create({
     position: 'absolute', right: 2, top: 2,
     borderWidth: 1.5, borderColor: '#15151A'
   },
+  placeholderOverlay: { position: 'absolute', top: 0, right: 24 },
+  placeholderText: { ...Typography.body_medium, color: '#5A5A5E', fontSize: 16 },
 });

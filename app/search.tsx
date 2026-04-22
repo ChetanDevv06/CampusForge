@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, FlatList,
-  TouchableOpacity, ActivityIndicator, Image, Dimensions
+  TouchableOpacity, ActivityIndicator, Image, Dimensions, Platform
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
@@ -25,6 +26,7 @@ type SearchResult = {
 };
 
 export default function SearchScreen() {
+  const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [filteredResults, setFilteredResults] = useState<SearchResult[]>([]);
@@ -135,7 +137,10 @@ export default function SearchScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? insets.top : insets.top + 10 }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={28} color={Colors.textPrimary} />
+        </TouchableOpacity>
         <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={20} color={Colors.textSecondary} />
           <TextInput
@@ -191,37 +196,45 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
+  container: { flex: 1, backgroundColor: '#0a0a0c' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { padding: 16, paddingTop: 10, backgroundColor: Colors.bg },
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: Colors.bgCard, borderRadius: 16,
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderWidth: 1, borderColor: Colors.border,
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 16, 
+    backgroundColor: '#0a0a0c',
+    gap: 12
   },
-  searchInput: { flex: 1, color: Colors.textPrimary, fontSize: 16 },
+  backBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'flex-start' },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#1c1c22', borderRadius: 16,
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  searchInput: { flex: 1, color: '#fff', fontSize: 16 },
   filters: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 16 },
-  filterBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: Colors.border },
+  filterBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   filterBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  filterLabel: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  filterLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '600' },
   filterLabelActive: { color: '#FFF' },
   list: { padding: 16, paddingBottom: 40 },
   card: {
-    backgroundColor: Colors.bgCard, borderRadius: 18, marginBottom: 12,
-    borderWidth: 1, borderColor: Colors.border, overflow: 'hidden',
+    backgroundColor: '#1c1c22', borderRadius: 18, marginBottom: 12,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.03)', overflow: 'hidden',
   },
   cardInner: { flexDirection: 'row', padding: 12, gap: 14 },
-  thumbnail: { width: 80, height: 80, borderRadius: 12, backgroundColor: Colors.bgSurface },
-  thumbPlaceholder: { width: 80, height: 80, borderRadius: 12, backgroundColor: Colors.bgSurface, justifyContent: 'center', alignItems: 'center' },
+  thumbnail: { width: 80, height: 80, borderRadius: 12, backgroundColor: '#23232b' },
+  thumbPlaceholder: { width: 80, height: 80, borderRadius: 12, backgroundColor: '#23232b', justifyContent: 'center', alignItems: 'center' },
   info: { flex: 1, justifyContent: 'center' },
   badgeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   badgeText: { color: '#FFF', fontSize: 9, fontWeight: '800' },
   price: { color: Colors.success, fontSize: 14, fontWeight: '700' },
-  title: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4 },
-  desc: { fontSize: 13, color: Colors.textSecondary, lineHeight: 18 },
+  title: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  desc: { fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 18 },
   empty: { alignItems: 'center', marginTop: 100, paddingHorizontal: 40 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginTop: 20 },
-  emptyText: { fontSize: 14, color: Colors.textMuted, textAlign: 'center', marginTop: 8 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#fff', marginTop: 20 },
+  emptyText: { fontSize: 14, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: 8 },
 });

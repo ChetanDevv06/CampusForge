@@ -9,30 +9,38 @@ import { collection, getDocs, deleteDoc, doc, query, orderBy, limit, updateDoc, 
 import { db } from '../../firebaseConfig';
 import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import ModernAlert from '../../components/ModernAlert';
 import { createCollege } from '../../utils/colleges';
+import { moderateWithAI } from '../../utils/moderation';
 
 const { width } = Dimensions.get('window');
 
 export default function AdminDashboard() {
-  const { profile, user } = useAuth();
+  const { profile, user, isLoading } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ users: 0, posts: 0, reports: 0 });
+  const [stats, setStats] = useState({ 
+    users: 0, posts: 0, reports: 0, flagged: 0, marketVolume: 0,
+    categories: { lost: 0, market: 0, skills: 0 }
+  });
   const [recentPosts, setRecentPosts] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [collegeRequests, setCollegeRequests] = useState<any[]>([]);
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
-  const [activeTab, setActiveTab] = useState<'content' | 'colleges'>('content');
-
+  const [activeTab, setActiveTab] = useState<'analytics' | 'posts' | 'users' | 'colleges'>('analytics');
+  
   // Governance Security Check
   useEffect(() => {
-    if (!profile || profile.role !== 'admin') {
+    if (isLoading) return;
+    const isAuthorized = profile?.role === 'admin' || __DEV__;
+    if (!user || !isAuthorized) {
+      console.warn(`🔒 [Security] Protocol access denied for user: ${profile?.email || user?.email}`);
       router.replace('/(tabs)');
     }
-  }, [profile]);
+  }, [profile, user, isLoading]);
 
   useEffect(() => {
     fetchData();
@@ -51,10 +59,29 @@ export default function AdminDashboard() {
 
       setCollegeRequests(requestsSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((r: any) => r.status === 'pending'));
 
+      let volume = 0;
+      marketSnap.docs.forEach(d => {
+        const p = Number(d.data().price);
+        if (!isNaN(p)) volume += p;
+      });
+
+      const flaggedPosts = [
+        ...postSnap.docs.filter(d => d.data().isFlagged),
+        ...marketSnap.docs.filter(d => d.data().isFlagged),
+        ...skillSnap.docs.filter(d => d.data().isFlagged)
+      ].length;
+
       setStats({
         users: userSnap.size,
         posts: postSnap.size + marketSnap.size + skillSnap.size,
-        reports: 0 
+        reports: flaggedPosts,
+        flagged: flaggedPosts,
+        marketVolume: volume,
+        categories: {
+          lost: postSnap.size,
+          market: marketSnap.size,
+          skills: skillSnap.size
+        }
       });
 
       const all = [
@@ -68,7 +95,9 @@ export default function AdminDashboard() {
         const dateB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt).getTime();
         return dateB - dateA;
       });
-      setRecentPosts(all.slice(0, 15));
+      
+      setRecentPosts(all.slice(0, 20));
+      setAllUsers(userSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) {
       console.error(e);
     } finally {
@@ -93,7 +122,6 @@ export default function AdminDashboard() {
   const handleApproveCollege = async (req: any) => {
     try {
       setLoading(true);
-      // 1. Create the new college
       await createCollege({
         name: req.name,
         shortName: req.name.substring(0, 8).toUpperCase(),
@@ -102,7 +130,6 @@ export default function AdminDashboard() {
         location: req.location,
         verified: true,
       });
-      // 2. Mark request as approved
       await updateDoc(doc(db, 'college_requests', req.id), { status: 'approved', updatedAt: serverTimestamp() });
       Alert.alert("College Approved", `${req.name} has been added to the platform.`);
       fetchData();
@@ -125,14 +152,14 @@ export default function AdminDashboard() {
     }
   };
 
-  const StatTile = ({ label, value, icon, colors }: { label: string; value: number; icon: string; colors: [string, string] }) => (
+  const StatTile = ({ label, value, icon, colors }: { label: string; value: any; icon: string; colors: [string, string] }) => (
     <LinearGradient colors={colors} style={styles.statTile} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
       <View style={styles.statIconBox}>
-        <Ionicons name={icon as any} size={22} color={Colors.on_primary} />
+        <Ionicons name={icon as any} size={18} color="#fff" />
       </View>
-      <View>
+      <View style={styles.statTextArea}>
         <Text style={styles.statVal}>{value}</Text>
-        <Text style={styles.statLabel}>{label}</Text>
+        <Text style={styles.statLabel} numberOfLines={1}>{label}</Text>
       </View>
     </LinearGradient>
   );
@@ -143,6 +170,7 @@ export default function AdminDashboard() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="light-content" />
       
       <BlurView intensity={30} tint="dark" style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 60 : 40 }]}>
@@ -151,103 +179,151 @@ export default function AdminDashboard() {
             <Ionicons name="chevron-back" size={24} color={Colors.on_background} />
           </TouchableOpacity>
           <View style={styles.headerTitleArea}>
-            <Text style={styles.headerTitle}>Forge Governance</Text>
-            <Text style={styles.headerSub}>Administer platform protocol</Text>
+            <Text style={styles.headerTitle}>Admin Center</Text>
+            <Text style={styles.headerSub}>Campus Management</Text>
           </View>
         </View>
       </BlurView>
 
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent} 
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.statsGrid}>
-          <StatTile label="Agents" value={stats.users} icon="people" colors={['#6366F1', '#4F46E5']} />
-          <StatTile label="Artifacts" value={stats.posts} icon="layers" colors={['#EC4899', '#DB2777']} />
-        </View>
-
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.tabsContainer}>
-          <TouchableOpacity 
-            style={[styles.tabBtn, activeTab === 'content' && styles.tabBtnActive]} 
-            onPress={() => setActiveTab('content')}
-          >
-            <Text style={[styles.tabText, activeTab === 'content' && styles.tabTextActive]}>Content</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.tabBtn, activeTab === 'colleges' && styles.tabBtnActive]} 
-            onPress={() => setActiveTab('colleges')}
-          >
-            <Text style={[styles.tabText, activeTab === 'colleges' && styles.tabTextActive]}>Colleges ({collegeRequests.length})</Text>
-          </TouchableOpacity>
+          {['analytics', 'posts', 'users', 'colleges'].map((tab) => (
+            <TouchableOpacity 
+              key={tab}
+              style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]} 
+              onPress={() => setActiveTab(tab as any)}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        {activeTab === 'content' ? (
+        <View style={styles.statsGrid}>
+          <StatTile label="Total Posts" value={stats.posts} icon="layers" colors={['#6366F1', '#4F46E5']} />
+          <StatTile label="Active Users" value={stats.users} icon="people" colors={['#EC4899', '#DB2777']} />
+          <StatTile label="Market Vol" value={`₹${(stats.marketVolume / 1000).toFixed(1)}k`} icon="cash" colors={['#10B981', '#059669']} />
+          <StatTile label="New Reports" value={stats.reports} icon="warning" colors={['#F59E0B', '#D97706']} />
+        </View>
+
+        {activeTab === 'posts' && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recent Protocols</Text>
+              <Text style={styles.sectionTitle}>Manage Posts</Text>
               <TouchableOpacity onPress={fetchData} style={styles.refreshBtn}>
                 <Ionicons name="refresh" size={18} color={Colors.primary} />
               </TouchableOpacity>
             </View>
-            
-            {recentPosts.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="documents-outline" size={48} color={Colors.surface_container_high} />
-                <Text style={styles.emptyText}>No recent artifacts detected.</Text>
-              </View>
-            ) : (
-              recentPosts.map((post) => (
-                <View key={post.id} style={styles.protocolItem}>
-                  <View style={styles.protocolInfo}>
-                    <Text style={styles.protocolTitle} numberOfLines={1}>{post.title}</Text>
-                    <View style={styles.protocolMeta}>
-                      <Text style={styles.protocolUser}>{post.userName || 'Anonymous Agent'}</Text>
-                      <View style={styles.metaDot} />
-                      <Text style={styles.protocolType}>{post.type.replace('_', ' ')}</Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity 
-                    style={styles.strikeBtn}
-                    onPress={() => {
-                      setSelectedPost(post);
-                      setShowDeleteAlert(true);
-                    }}
-                  >
-                    <Ionicons name="trash" size={18} color={Colors.error} />
-                  </TouchableOpacity>
+            {recentPosts.map((post) => (
+              <View key={post.id} style={styles.protocolItem}>
+                <View style={styles.protocolInfo}>
+                  <Text style={styles.protocolTitle} numberOfLines={1}>{post.title}</Text>
+                  <Text style={styles.protocolMeta}>{post.userName || 'Anonymous'} • {post.type.replace('_', ' ')}</Text>
                 </View>
-              ))
-            )}
+                <TouchableOpacity onPress={() => { setSelectedPost(post); setShowDeleteAlert(true); }} style={styles.strikeBtn}>
+                  <Ionicons name="trash-outline" size={18} color={Colors.error} />
+                </TouchableOpacity>
+              </View>
+            ))}
           </View>
-        ) : (
+        )}
+
+        {activeTab === 'users' && (
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Pending Requests</Text>
-              <TouchableOpacity onPress={() => router.push('/admin/seed-colleges')} style={styles.seedBtn}>
-                 <Text style={styles.seedText}>Seed</Text>
-              </TouchableOpacity>
+            <Text style={styles.sectionTitle}>User Directory</Text>
+            {allUsers.map((u) => (
+              <View key={u.id} style={styles.protocolItem}>
+                <View style={styles.protocolInfo}>
+                  <Text style={styles.protocolTitle}>{u.name || 'Anonymous'}</Text>
+                  <Text style={styles.protocolMeta}>{u.email} • {u.college || 'No College'}</Text>
+                </View>
+                <View style={[styles.roleBadge, u.role === 'admin' && styles.roleAdmin]}>
+                  <Text style={styles.roleText}>{u.role?.toUpperCase() || 'USER'}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {activeTab === 'analytics' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Ecosystem Analytics</Text>
+            
+            <View style={styles.analyticsCard}>
+              <Text style={styles.chartTitle}>Activity Distribution</Text>
+              
+              <View style={styles.chartRow}>
+                <View style={styles.chartLabelArea}>
+                  <Text style={styles.chartLabel}>Marketplace</Text>
+                  <Text style={styles.chartValue}>{stats.categories.market}</Text>
+                </View>
+                <View style={styles.barContainer}>
+                  <LinearGradient 
+                    colors={['#10B981', '#059669']} 
+                    start={{x:0, y:0}} end={{x:1, y:0}}
+                    style={[styles.barFill, { width: `${(stats.categories.market / (stats.posts || 1)) * 100}%` }]} 
+                  />
+                </View>
+              </View>
+
+              <View style={styles.chartRow}>
+                <View style={styles.chartLabelArea}>
+                  <Text style={styles.chartLabel}>Lost & Found</Text>
+                  <Text style={styles.chartValue}>{stats.categories.lost}</Text>
+                </View>
+                <View style={styles.barContainer}>
+                  <LinearGradient 
+                    colors={['#6366F1', '#4F46E5']} 
+                    start={{x:0, y:0}} end={{x:1, y:0}}
+                    style={[styles.barFill, { width: `${(stats.categories.lost / (stats.posts || 1)) * 100}%` }]} 
+                  />
+                </View>
+              </View>
+
+              <View style={styles.chartRow}>
+                <View style={styles.chartLabelArea}>
+                  <Text style={styles.chartLabel}>Skill Share</Text>
+                  <Text style={styles.chartValue}>{stats.categories.skills}</Text>
+                </View>
+                <View style={styles.barContainer}>
+                  <LinearGradient 
+                    colors={['#EC4899', '#DB2777']} 
+                    start={{x:0, y:0}} end={{x:1, y:0}}
+                    style={[styles.barFill, { width: `${(stats.categories.skills / (stats.posts || 1)) * 100}%` }]} 
+                  />
+                </View>
+              </View>
             </View>
 
-            {collegeRequests.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="school-outline" size={48} color={Colors.surface_container_high} />
-                <Text style={styles.emptyText}>No pending college requests.</Text>
+            <View style={styles.metricsRow}>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricVal}>₹{(stats.marketVolume / (stats.categories.market || 1)).toFixed(0)}</Text>
+                <Text style={styles.metricLabel}>Avg. Item Price</Text>
               </View>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricVal}>{(stats.posts / (stats.users || 1)).toFixed(1)}</Text>
+                <Text style={styles.metricLabel}>Posts per User</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {activeTab === 'colleges' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>College Requests</Text>
+            {collegeRequests.length === 0 ? (
+              <Text style={styles.emptyText}>No pending requests.</Text>
             ) : (
               collegeRequests.map((req) => (
-                <View key={req.id} style={styles.requestItem}>
-                  <View style={styles.requestInfo}>
-                    <Text style={styles.protocolTitle} numberOfLines={1}>{req.name}</Text>
-                    <Text style={styles.protocolUser}>@{req.domain} • {req.location}</Text>
-                    <Text style={styles.protocolType}>Requested by: {req.requestedByEmail}</Text>
+                <View key={req.id} style={styles.protocolItem}>
+                  <View style={styles.protocolInfo}>
+                    <Text style={styles.protocolTitle}>{req.name}</Text>
+                    <Text style={styles.protocolMeta}>{req.domain}</Text>
                   </View>
-                  <View style={styles.requestActions}>
-                    <TouchableOpacity style={[styles.reqBtn, { backgroundColor: Colors.success }]} onPress={() => handleApproveCollege(req)}>
-                      <Ionicons name="checkmark" size={20} color="#fff" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.reqBtn, { backgroundColor: Colors.error }]} onPress={() => handleRejectCollege(req.id)}>
-                      <Ionicons name="close" size={20} color="#fff" />
-                    </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity onPress={() => handleApproveCollege(req)}><Ionicons name="checkmark-circle" size={24} color={Colors.success} /></TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleRejectCollege(req.id)}><Ionicons name="close-circle" size={24} color={Colors.error} /></TouchableOpacity>
                   </View>
                 </View>
               ))
@@ -259,7 +335,7 @@ export default function AdminDashboard() {
       <ModernAlert 
         visible={showDeleteAlert}
         title="Strike Artifact?"
-        message="As an administrator, you are removing this content from the CampusForge archives permanently."
+        message="Permanently remove this content from the archives?"
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteAlert(false)}
         confirmText="Strike"
@@ -280,64 +356,107 @@ const styles = StyleSheet.create({
   headerSub: { ...Typography.caption, color: Colors.on_surface_variant, marginTop: 2 },
 
   scrollContent: { paddingTop: Spacing.lg, paddingBottom: 60 },
-  statsGrid: { flexDirection: 'row', gap: Spacing.md, paddingHorizontal: Spacing.margin, marginBottom: Spacing.xxl },
+  tabsContainer: { 
+    flexDirection: 'row', 
+    backgroundColor: 'rgba(255,255,255,0.05)', 
+    marginHorizontal: Spacing.margin, 
+    borderRadius: Roundness.lg, 
+    padding: 4, 
+    marginBottom: Spacing.xl 
+  },
+  tabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: Roundness.md },
+  tabBtnActive: { backgroundColor: Colors.surface_container_highest },
+  tabText: { ...Typography.caption, color: 'rgba(255,255,255,0.5)', fontWeight: '600' },
+  tabTextActive: { color: '#fff' },
+
+  statsGrid: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap',
+    gap: Spacing.sm, 
+    paddingHorizontal: Spacing.margin, 
+    marginBottom: Spacing.xl 
+  },
   statTile: { 
-    flex: 1, borderRadius: Roundness.lg, padding: Spacing.lg, 
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    width: (width - Spacing.margin * 2 - Spacing.sm) / 2,
+    borderRadius: Roundness.lg, 
+    padding: 12, 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    minHeight: 90,
     ...Shadows.ambient
   },
   statIconBox: { 
-    width: 44, height: 44, borderRadius: 14, 
+    width: 32, height: 32, borderRadius: 10, 
     backgroundColor: 'rgba(255,255,255,0.2)', 
-    justifyContent: 'center', alignItems: 'center' 
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 6
   },
-  statVal: { ...Typography.title, color: Colors.on_primary, fontSize: 22 },
-  statLabel: { ...Typography.caption, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
+  statTextArea: { alignItems: 'center' },
+  statVal: { ...Typography.title, color: '#fff', fontSize: 18, lineHeight: 22 },
+  statLabel: { ...Typography.caption, color: 'rgba(255,255,255,0.8)', fontSize: 9, fontWeight: '700', textTransform: 'uppercase' },
 
   section: { paddingHorizontal: Spacing.margin },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg },
-  sectionTitle: { ...Typography.label, color: Colors.primary, fontSize: 13, textTransform: 'uppercase', letterSpacing: 1.5 },
-  refreshBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface_container_low, justifyContent: 'center', alignItems: 'center' },
-
-  protocolItem: {
-    flexDirection: 'row', alignItems: 'center', 
-    backgroundColor: Colors.surface_container_low,
-    padding: Spacing.md, borderRadius: Roundness.md, marginBottom: Spacing.sm,
-    gap: Spacing.md,
+  sectionTitle: { ...Typography.title, color: Colors.on_background, fontSize: 18 },
+  
+  protocolItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: Colors.surface_container_low, 
+    padding: 16, 
+    borderRadius: Roundness.md, 
+    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.03)'
   },
   protocolInfo: { flex: 1 },
-  protocolTitle: { ...Typography.body_medium, color: Colors.on_background, fontSize: 16 },
-  protocolMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 },
-  protocolUser: { ...Typography.caption, color: Colors.on_surface_variant },
-  metaDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: Colors.on_surface_variant, opacity: 0.5 },
-  protocolType: { ...Typography.caption, color: Colors.primary, textTransform: 'capitalize' },
-  strikeBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,107,107,0.1)', justifyContent: 'center', alignItems: 'center' },
-
-  emptyState: { alignItems: 'center', marginTop: 60, gap: Spacing.md },
-  emptyText: { ...Typography.body, color: Colors.on_surface_variant, fontSize: 14 },
-
-  tabsContainer: {
-    flexDirection: 'row', paddingHorizontal: Spacing.margin,
-    marginBottom: Spacing.xl, gap: Spacing.md
+  protocolTitle: { ...Typography.body, color: Colors.on_surface, fontWeight: '600' },
+  protocolMeta: { ...Typography.caption, color: Colors.on_surface_variant, marginTop: 2 },
+  
+  strikeBtn: { padding: 8 },
+  roleBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.05)' },
+  roleAdmin: { backgroundColor: 'rgba(164, 166, 255, 0.1)' },
+  roleText: { ...Typography.caption, fontSize: 10, fontWeight: 'bold', color: Colors.primary },
+  
+  chartPlaceholder: { 
+    height: 180, 
+    backgroundColor: Colors.surface_container_low, 
+    borderRadius: Roundness.lg, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)'
   },
-  tabBtn: {
-    flex: 1, paddingVertical: 12, borderRadius: Roundness.full,
+  analyticsCard: {
     backgroundColor: Colors.surface_container_low,
-    justifyContent: 'center', alignItems: 'center'
+    padding: 20,
+    borderRadius: Roundness.xl,
+    marginTop: Spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    ...Shadows.ambient
   },
-  tabBtnActive: { backgroundColor: Colors.primary },
-  tabText: { ...Typography.label, color: Colors.on_surface_variant },
-  tabTextActive: { color: Colors.on_primary },
+  chartTitle: { ...Typography.label, color: Colors.on_surface_variant, marginBottom: 20, fontSize: 12, letterSpacing: 1 },
+  chartRow: { marginBottom: 16 },
+  chartLabelArea: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  chartLabel: { ...Typography.caption, color: Colors.on_surface_variant, fontWeight: '600' },
+  chartValue: { ...Typography.caption, color: Colors.on_surface, fontWeight: '700' },
+  barContainer: { height: 8, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 4, overflow: 'hidden' },
+  barFill: { height: '100%', borderRadius: 4 },
+  
+  metricsRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
+  metricCard: { 
+    flex: 1, 
+    backgroundColor: Colors.surface_container_low, 
+    padding: 16, 
+    borderRadius: Roundness.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.03)'
+  },
+  metricVal: { ...Typography.title, color: Colors.on_background, fontSize: 20 },
+  metricLabel: { ...Typography.caption, color: Colors.on_surface_variant, marginTop: 2 },
 
-  requestItem: {
-    flexDirection: 'row', alignItems: 'center', 
-    backgroundColor: Colors.surface_container_low,
-    padding: Spacing.md, borderRadius: Roundness.md, marginBottom: Spacing.sm,
-    gap: Spacing.md,
-  },
-  requestInfo: { flex: 1, gap: 2 },
-  requestActions: { flexDirection: 'row', gap: Spacing.sm },
-  reqBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  seedBtn: { backgroundColor: Colors.surface_container_high, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 },
-  seedText: { ...Typography.label, color: Colors.on_surface_variant },
+  emptyText: { ...Typography.body, color: Colors.on_surface_variant, marginTop: 12, textAlign: 'center', fontSize: 14, paddingHorizontal: 40 },
+  refreshBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface_container_low, justifyContent: 'center', alignItems: 'center' },
 });

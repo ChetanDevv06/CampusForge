@@ -146,6 +146,7 @@ export default function ProfileScreen() {
   const settingsItems = [
     { icon: 'chatbubbles', label: 'My Messages', route: '/messages' },
     { icon: 'shield-half', label: 'Privacy & Safety', route: '/settings' },
+    ...(__DEV__ ? [{ icon: 'hammer', label: 'Admin Dashboard', route: '/admin' }] : []),
   ];
 
   const TABS: { key: TabKey; label: string }[] = [

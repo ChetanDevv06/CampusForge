@@ -76,6 +76,9 @@ export default function CollegeEmailScreen() {
 
       // Send Firebase email verification (to the user's primary auth email)
       await sendEmailVerification(currentUser);
+      
+      // Increment college member count early to show activity
+      await incrementCollegeMemberCount(college.id);
 
       setStep('check-inbox');
     } catch (e: any) {
@@ -96,8 +99,6 @@ export default function CollegeEmailScreen() {
         await updateDoc(doc(db, 'users', currentUser.uid), {
           collegeEmailVerified: true,
         });
-        // Increment college member count
-        await incrementCollegeMemberCount(college.id);
         router.replace('/(tabs)');
       } else {
         showAlert(

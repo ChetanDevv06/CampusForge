@@ -5,6 +5,8 @@ import { auth, db } from '../firebaseConfig';
 import { collection, query, where, onSnapshot as onSnapshotColl, limit, orderBy } from 'firebase/firestore';
 import { registerForPushNotificationsAsync, sendLocalNotification } from '../utils/notifications';
 import { useRef } from 'react';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 interface UserProfile {
   uid: string;
@@ -31,6 +33,9 @@ interface UserProfile {
     instagram?: string;
     linkedin?: string;
   };
+  quietMode?: boolean;
+  dataSaver?: boolean;
+  blockedUsers?: string[];
 }
 
 interface AuthContextType {
@@ -55,6 +60,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const convsRef = useRef<Record<string, number>>({}); // Track lastMessageAt as millis for each chatId
   const isFirstRun = useRef(true);
+  
+  useEffect(() => {
+    if (Platform.OS === 'web' || Constants.appOwnership === 'expo') return;
+    try {
+      const crashlytics = require('@react-native-firebase/crashlytics').default;
+      if (user) {
+        crashlytics().setUserId(user.uid);
+        if (user.email) crashlytics().setAttribute('email', user.email);
+        if (profile?.name) crashlytics().setAttribute('name', profile.name);
+      } else {
+        crashlytics().setUserId('anonymous');
+      }
+    } catch (e) {
+      console.warn("Crashlytics not available:", e);
+    }
+  }, [user, profile]);
 
   useEffect(() => {
     // Listen for authentication state changes

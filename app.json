@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "CampusForge",
-    "slug": "CampusForge",
+    "slug": "CampusLoop",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/Logo.png",
@@ -11,7 +11,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Allow CampusForge to use your camera so you can take photos of items you found or want to sell.",
-        "NSPhotoLibraryUsageDescription": "Allow CampusForge to access your gallery to upload photos of items."
+        "NSPhotoLibraryUsageDescription": "Allow CampusForge to access your gallery to upload photos of items.",
+        "NSLocationWhenInUseUsageDescription": "Allow CampusForge to access your location to help pinpoint items on the map."
       }
     },
     "android": {
@@ -31,6 +32,7 @@
     "plugins": [
       "expo-router",
       "expo-notifications",
+      "expo-location",
       [
         "expo-image-picker",
         {
@@ -46,6 +48,16 @@
           "backgroundColor": "#15151A",
           "dark": {
             "backgroundColor": "#15151A"
+          }
+        }
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableCrashlytics": true
           }
         }
       ]

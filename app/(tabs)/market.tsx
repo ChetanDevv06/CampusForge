@@ -1,44 +1,67 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Image, ActivityIndicator, StatusBar, Platform, Dimensions, ScrollView, TextInput
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, where } from 'firebase/firestore';
-import { db, auth } from '../../firebaseConfig';
-import { useAuth } from '../../contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
-import { startChat } from '../../utils/chat';
-import { BlurView } from 'expo-blur';
+import { collection, doc, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Image,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { Colors, Fonts, Gradients, Roundness, Shadows, Typography } from '../../constants/theme';
+import { useAuth } from '../../contexts/AuthContext';
+import { auth, db } from '../../firebaseConfig';
+import { consumeMarketTab } from '../../utils/marketTabStore';
 
 const { width } = Dimensions.get('window');
 
 export default function MarketScreen() {
   const [products, setProducts] = useState<any[]>([]);
+  const [skills, setSkills] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'Market' | 'Skills'>('Market');
   const [category, setCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const router = useRouter();
+
+  useFocusEffect(
+    useCallback(() => {
+      const tab = consumeMarketTab();
+      if (tab) setActiveTab(tab);
+    }, [])
+  );
   const uid = auth.currentUser?.uid;
   const { profile } = useAuth();
-  
-  const categories = ['All', 'Textbooks', 'Electronics', 'Furniture', 'Apparel', 'Services'];
+
+  const categories = activeTab === 'Market'
+    ? ['All', 'Textbooks', 'Electronics', 'Furniture', 'Apparel', 'Services']
+    : ['All', 'Tutoring', 'Tech', 'Arts', 'Fitness'];
 
   useEffect(() => {
     if (!profile?.collegeId) return;
-    const q = query(
-      collection(db, 'marketplace'), 
-      where('collegeId', '==', profile.collegeId),
-      orderBy('createdAt', 'desc')
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    setLoading(true);
+
+    const marketQ = query(collection(db, 'marketplace'), where('collegeId', '==', profile.collegeId), orderBy('createdAt', 'desc'));
+    const unsubMarket = onSnapshot(marketQ, (snap) => setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+
+    const skillsQ = query(collection(db, 'skills'), where('collegeId', '==', profile.collegeId), orderBy('createdAt', 'desc'));
+    const unsubSkills = onSnapshot(skillsQ, (snap) => {
+      setSkills(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
-    }, () => setLoading(false));
-    return unsub;
+    });
+
+    return () => { unsubMarket(); unsubSkills(); };
   }, [profile?.collegeId]);
 
   const handleToggleStatus = async (id: string, currentStatus: string) => {
@@ -52,35 +75,37 @@ export default function MarketScreen() {
   };
 
   const filtered = useMemo(() => {
-    return products.filter(p => {
-      const matchCat = category === 'All' || p.category === category || (category === 'Textbooks' && p.category === 'Books');
-      const matchSearch = p.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          p.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    const source = activeTab === 'Market' ? products : skills;
+    return source.filter(p => {
+      const matchCat = category === 'All' || p.category === category || (activeTab === 'Market' && category === 'Textbooks' && p.category === 'Books');
+      const matchSearch = p.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.description?.toLowerCase().includes(searchQuery.toLowerCase());
       return matchCat && matchSearch;
     });
-  }, [products, category, searchQuery]);
+  }, [products, skills, activeTab, category, searchQuery]);
 
   const renderItem = ({ item }: { item: any }) => {
     const isSold = item.status === 'sold';
-    
+    const isSkill = activeTab === 'Skills';
+
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         activeOpacity={0.9}
-        onPress={() => router.push({ pathname: '/market-details/[id]', params: { id: item.id } } as any)}
+        onPress={() => router.push({ pathname: isSkill ? '/skill-details/[id]' : '/market-details/[id]', params: { id: item.id } } as any)}
         style={[styles.card, isSold && styles.cardSold]}
       >
         <View style={styles.imageBox}>
-          {item.imageUrl ? (
-            <Image source={{ uri: item.imageUrl }} style={[styles.image, isSold && { opacity: 0.4 }]} />
+          {item.imageUrl || item.videoUrl || (item.imageUrls && item.imageUrls.length > 0) ? (
+            <Image source={{ uri: item.imageUrl || item.videoUrl || item.imageUrls[0] }} style={[styles.image, isSold && { opacity: 0.4 }]} />
           ) : (
-            <LinearGradient colors={Gradients.primary} style={styles.imagePlaceholder}>
-              <Ionicons name="cart" size={32} color={Colors.on_primary} />
+            <LinearGradient colors={isSkill ? Gradients.secondary : Gradients.primary} style={styles.imagePlaceholder}>
+              <Ionicons name={isSkill ? "school" : "cart"} size={32} color={Colors.on_primary} />
             </LinearGradient>
           )}
-          
+
           <View style={styles.priceContainer}>
             <View style={styles.priceBadge}>
-              <Text style={styles.priceText}>${item.price}</Text>
+              <Text style={styles.priceText}>{isSkill && item.type === 'offer' ? '₹' : isSkill ? 'LF' : '₹'}{isSkill && item.type === 'request' ? 'Request' : item.price}</Text>
             </View>
           </View>
 
@@ -90,7 +115,7 @@ export default function MarketScreen() {
           }}>
             <Ionicons name="heart" size={18} color="#FFF" />
           </TouchableOpacity>
-          
+
           {isSold && (
             <View style={styles.soldOverlay}>
               <Text style={styles.soldText}>SOLD</Text>
@@ -102,7 +127,7 @@ export default function MarketScreen() {
           <Text style={[styles.cardTitle, isSold && { color: Colors.on_surface_variant }]} numberOfLines={1}>
             {item.title}
           </Text>
-          
+
           <View style={styles.authorRow}>
             <View style={styles.authorAvatar}>
               <Ionicons name="person" size={12} color="#FFF" />
@@ -117,7 +142,7 @@ export default function MarketScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
+
       <View style={styles.header}>
         <View style={{ width: 40 }} />
         <Text style={styles.headerTitle}>Marketplace</Text>
@@ -129,9 +154,9 @@ export default function MarketScreen() {
       <View style={styles.searchWrapper}>
         <View style={[styles.searchInputRow, isSearchFocused && styles.searchFocused]}>
           <Ionicons name="search" size={20} color="#666" style={{ marginLeft: 16 }} />
-          <TextInput 
+          <TextInput
             style={styles.globalSearch}
-            placeholder="Search textbooks, electronics, furniture..."
+            placeholder={activeTab === 'Market' ? "Search textbooks, electronics..." : "Search tutoring, coding..."}
             placeholderTextColor="#666"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -141,11 +166,28 @@ export default function MarketScreen() {
         </View>
       </View>
 
+      <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
+        <View style={styles.segmentedControl}>
+          <TouchableOpacity
+            style={[styles.segmentBtn, activeTab === 'Market' && styles.segmentBtnActive]}
+            onPress={() => { setActiveTab('Market'); setCategory('All'); }}
+          >
+            <Text style={[styles.segmentText, activeTab === 'Market' && styles.segmentTextActive]}>Products</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.segmentBtn, activeTab === 'Skills' && styles.segmentBtnActive]}
+            onPress={() => { setActiveTab('Skills'); setCategory('All'); }}
+          >
+            <Text style={[styles.segmentText, activeTab === 'Skills' && styles.segmentTextActive]}>Skills</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <View style={styles.categoryWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
           {categories.map(c => (
-            <TouchableOpacity 
-              key={c} 
+            <TouchableOpacity
+              key={c}
               onPress={() => setCategory(c)}
               style={[styles.catPill, category === c && styles.catPillActive]}
             >
@@ -206,7 +248,18 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.05)',
   },
   searchFocused: { borderColor: '#4C3BC9', backgroundColor: '#1A1A20' },
-  globalSearch: { flex: 1, color: '#FFF', fontSize: 16, paddingHorizontal: 12 },
+  globalSearch: {
+    flex: 1,
+    color: '#FFF',
+    fontSize: 16,
+    paddingHorizontal: 12,
+    fontFamily: Fonts.medium
+  },
+  segmentedControl: { flexDirection: 'row', backgroundColor: '#1C1C1E', borderRadius: Roundness.full, padding: 4 },
+  segmentBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: Roundness.full },
+  segmentBtnActive: { backgroundColor: '#4C3BC9' },
+  segmentText: { ...Typography.label, color: '#888', fontWeight: '600' },
+  segmentTextActive: { color: '#FFF' },
   categoryWrapper: { marginBottom: 20 },
   catRow: { paddingHorizontal: 16, gap: 10 },
   catPill: {
@@ -231,10 +284,10 @@ const styles = StyleSheet.create({
   image: { width: '100%', height: '100%', resizeMode: 'cover' },
   imagePlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
   priceContainer: { position: 'absolute', top: 16, left: 16 },
-  priceBadge: { 
-    backgroundColor: '#6B52FF', 
-    paddingHorizontal: 14, 
-    paddingVertical: 6, 
+  priceBadge: {
+    backgroundColor: '#6B52FF',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: 14,
   },
   priceText: { ...Typography.title, color: '#FFF', fontSize: 14, fontWeight: '700' },
@@ -244,14 +297,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center', alignItems: 'center'
   },
-  soldOverlay: { 
-    ...StyleSheet.absoluteFillObject, 
-    backgroundColor: 'rgba(0,0,0,0.5)', 
-    justifyContent: 'center', alignItems: 'center' 
+  soldOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center', alignItems: 'center'
   },
-  soldText: { ...Typography.headline, color: '#FFF', fontSize: 20, letterSpacing: 2 },
+  soldText: { fontFamily: Fonts.bold, color: '#FFF', fontSize: 20, letterSpacing: 2 },
   cardContent: { padding: 16 },
-  cardTitle: { ...Typography.title, color: '#FFF', fontSize: 18, marginBottom: 8, fontWeight: '600' },
+  cardTitle: { ...Typography.title, color: '#FFF', fontSize: 18, marginBottom: 8, fontWeight: '600', fontFamily: Fonts.medium },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   authorAvatar: {
     width: 24,
@@ -263,6 +316,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden'
   },
   authorName: { ...Typography.body, color: '#888', fontSize: 13 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   empty: { flex: 1, padding: 40, alignItems: 'center', marginTop: 40 },
   emptyIconBox: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
   emptyTitle: { ...Typography.headline, color: '#FFF', marginBottom: 8 },
