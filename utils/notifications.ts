@@ -148,3 +148,13 @@ export async function sendRemoteNotification(to: string, title: string, body: st
     return null;
   }
 }
+/**
+ * Broadcasts a notification for a new post.
+ */
+export async function broadcastNewPostNotification(collegeId: string, title: string, category: string, userId: string) {
+  const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
+  await sendLocalNotification(
+    "CampusLoop Update 🚀",
+    `A new ${categoryName} post just landed: "${title}"`
+  );
+}

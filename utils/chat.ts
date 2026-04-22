@@ -24,58 +24,56 @@ export const startChat = async (
   if (!currentUserId || currentUserId === otherUserId) return;
 
   try {
-    // Check if conversation already exists for this specific item (if provided)
+    // Check if conversation already exists between these two users for this specific item
     const q = query(
       collection(db, 'conversations'),
-      where('participants', 'array-contains', currentUserId),
-      ...(reference?.itemId ? [where('itemId', '==', reference.itemId)] : [where('itemId', '==', null)])
+      where('participants', 'array-contains', currentUserId)
     );
 
     const querySnapshot = await getDocs(q);
     let conversationId: string | null = null;
+    let existingConvData: any = null;
 
     querySnapshot.forEach((doc) => {
       const data = doc.data();
-      if (data.participants.includes(otherUserId)) {
+      // Check if both users are in this chat AND it's for the same item (or same lack of item)
+      const isSamePair = data.participants.includes(otherUserId);
+      const isSameItem = reference?.itemId ? data.itemId === reference.itemId : !data.itemId;
+      
+      if (isSamePair && isSameItem) {
         conversationId = doc.id;
+        existingConvData = data;
       }
     });
 
     if (!conversationId) {
-      // Navigate to 'new' chat without creating doc yet
+      // Navigate to 'new' chat
       router.push({
         pathname: '/chat/[id]',
         params: {
           id: 'new',
           name: otherUserName,
-          itemMetadata: reference ? JSON.stringify({
-          type: reference.type,
-          title: reference.title,
-          image: reference.image || null,
-          ownerId: otherUserId // Since startChat is called by the prospective buyer
-        }) : null,
+          otherUserId: otherUserId, // CRITICAL: Pass the recipient ID
+          refType: reference?.type,
+          refTitle: reference?.title,
+          refImage: reference?.image,
           refId: reference?.itemId
         }
       } as any);
       return;
     }
 
-    // Existing conversation: Find the name from the existing doc for accurate display
-    const snap = querySnapshot.docs.find(d => d.id === conversationId);
-    const data = snap?.data();
-    const displayOtherName = data?.participantNames?.[otherUserId] || otherUserName;
-
-    // Navigate to the existing chat
+    // Navigate to existing chat
     router.push({
       pathname: '/chat/[id]',
       params: {
         id: conversationId,
-        name: displayOtherName,
+        name: existingConvData?.participantNames?.[otherUserId] || otherUserName,
         otherUserId,
-        refType: reference?.type,
-        refTitle: reference?.title,
-        refImage: reference?.image,
-        refId: reference?.itemId
+        refType: reference?.type || existingConvData?.itemMetadata?.type,
+        refTitle: reference?.title || existingConvData?.itemMetadata?.title,
+        refImage: reference?.image || existingConvData?.itemMetadata?.image,
+        refId: reference?.itemId || existingConvData?.itemId
       }
     } as any);
 

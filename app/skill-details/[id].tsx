@@ -4,6 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { deleteDoc, doc, getDoc } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
+import { Video, ResizeMode } from 'expo-av';
+import ImageViewing from 'react-native-image-viewing';
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +23,7 @@ import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../.
 import { auth, db } from '../../firebaseConfig';
 import { startChat } from '../../utils/chat';
 import ModernAlert from '../../components/ModernAlert';
+import LocationPreview from '../../components/LocationPreview';
 
 const { width } = Dimensions.get('window');
 
@@ -30,6 +33,8 @@ export default function SkillDetails() {
   const [authorProfile, setAuthorProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
   const router = useRouter();
   const uid = auth.currentUser?.uid;
 
@@ -104,11 +109,42 @@ export default function SkillDetails() {
         contentContainerStyle={styles.scrollContent}
       >
         {/* Expertise Pedestal */}
-        <LinearGradient 
-          colors={isOffer ? Gradients.primary : [Colors.tertiary, Colors.tertiary_container]} 
-          style={styles.hero}
-          start={{x:0, y:0}} end={{x:1, y:1}}
-        >
+        <View style={styles.hero}>
+          {skill.videoUrl ? (
+            <Video
+              source={{ uri: skill.videoUrl }}
+              style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000' }]}
+              useNativeControls
+              resizeMode={ResizeMode.COVER}
+              isLooping
+            />
+          ) : (skill.imageUrls && skill.imageUrls.length > 0) ? (
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={StyleSheet.absoluteFillObject}>
+              {skill.imageUrls.map((url: string, idx: number) => (
+                <TouchableOpacity 
+                  key={idx} 
+                  activeOpacity={0.9} 
+                  onPress={() => { setViewerIndex(idx); setViewerVisible(true); }}
+                >
+                  <Image source={{ uri: url }} style={{ width, height: 400 }} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : skill.imageUrl ? (
+            <TouchableOpacity 
+              activeOpacity={0.9} 
+              onPress={() => { setViewerIndex(0); setViewerVisible(true); }}
+              style={StyleSheet.absoluteFillObject}
+            >
+              <Image source={{ uri: skill.imageUrl }} style={StyleSheet.absoluteFillObject} />
+            </TouchableOpacity>
+          ) : (
+            <LinearGradient 
+              colors={isOffer ? Gradients.primary : [Colors.tertiary, Colors.tertiary_container]} 
+              style={StyleSheet.absoluteFillObject}
+              start={{x:0, y:0}} end={{x:1, y:1}}
+            />
+          )}
           <TouchableOpacity style={styles.absBack} onPress={() => router.back()}>
             <BlurView intensity={30} tint="dark" style={styles.backBlur}>
               <Ionicons name="chevron-back" size={24} color={Colors.on_primary} />
@@ -131,10 +167,10 @@ export default function SkillDetails() {
           </View>
           
           <LinearGradient 
-            colors={['transparent', 'rgba(10,10,18,0.4)', Colors.background]} 
+            colors={['transparent', 'rgba(10,10,18,0.7)', Colors.background]} 
             style={styles.heroOverlay} 
           />
-        </LinearGradient>
+        </View>
 
         <View style={styles.content}>
           <View style={styles.infoBlock}>
@@ -181,6 +217,13 @@ export default function SkillDetails() {
               <Text style={styles.collabLabel}>Peer Mastered</Text>
             </View>
           </View>
+
+          {/* Premium Location Preview */}
+          <LocationPreview 
+            location={skill.location} 
+            locationCoords={skill.locationCoords} 
+            title="Meeting Spot" 
+          />
         </View>
       </ScrollView>
 
@@ -240,6 +283,14 @@ export default function SkillDetails() {
         onCancel={() => setShowDeleteAlert(false)}
         confirmText="Strike"
         isDestructive
+      />
+
+      <ImageViewing
+        images={(skill.imageUrls || (skill.imageUrl ? [skill.imageUrl] : [])).map((url: string) => ({ uri: url }))}
+        imageIndex={viewerIndex}
+        visible={viewerVisible}
+        onRequestClose={() => setViewerVisible(false)}
+        animationType="fade"
       />
     </View>
   );

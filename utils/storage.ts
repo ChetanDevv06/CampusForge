@@ -1,39 +1,37 @@
 import * as ImageManipulator from 'expo-image-manipulator';
-
-/**
- * Converts a local image URI to a compressed Base64 string for direct Firestore storage.
- * This bypasses Firebase Storage (Standard/Premium plans) by embedding image data
- * directly in document fields.
- * 
- * @param uri - The local URI of the image to process.
- * @returns A promise that resolves to a data-uri string (base64).
- */
-export const uploadImage = async (uri: string, path: string): Promise<string> => {
-  console.log(`Starting Local Base64 Conversion: URI=${uri.substring(0, 50)}...`);
-  
+import { storage } from '../firebaseConfig';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';export const uploadImage = async (uri: string, path: string): Promise<string> => {
+  console.log(`Starting Image Upload to Firebase Storage: URI=${uri.substring(0, 50)}...`);
   try {
-    // 1. COMPRESS HEAVILY (Firestore has a 1MB per document limit)
-    // We resize to a small thumbnail size to ensure we stay well under the 1MB limit
-    const processed = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 300 } }], // Small size for Firestore storage
-      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-    );
-
-    const base64Data = `data:image/jpeg;base64,${processed.base64}`;
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+    const storageRef = ref(storage, `${path}/${filename}`);
     
-    // Check approximate size (Base64 is ~33% larger than binary)
-    const sizeInBytes = base64Data.length;
-    console.log(`Image converted to Base64. Size: ${(sizeInBytes / 1024).toFixed(2)} KB`);
-
-    if (sizeInBytes > 800000) {
-       throw new Error("Image too large for local storage workaround. Try a smaller photo.");
-    }
-
-    return base64Data;
-
+    await uploadBytes(storageRef, blob);
+    const downloadURL = await getDownloadURL(storageRef);
+    console.log(`Image uploaded successfully. URL: ${downloadURL}`);
+    return downloadURL;
   } catch (error: any) {
-    console.error("Base64 Conversion Error: ", error);
-    throw new Error(`Failed to process photo: ${error.message}`);
+    console.error("Image Upload Error: ", error);
+    throw new Error(`Failed to upload photo: ${error.message}`);
+  }
+};
+
+export const uploadVideoToStorage = async (uri: string, path: string): Promise<string> => {
+  console.log(`Starting Video Upload to Firebase Storage: URI=${uri.substring(0, 50)}...`);
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
+    const storageRef = ref(storage, `${path}/${filename}`);
+    
+    await uploadBytes(storageRef, blob);
+    const downloadURL = await getDownloadURL(storageRef);
+    console.log(`Video uploaded successfully. URL: ${downloadURL}`);
+    return downloadURL;
+  } catch (error: any) {
+    console.error("Video Upload Error: ", error);
+    throw new Error(`Failed to upload video: ${error.message}`);
   }
 };

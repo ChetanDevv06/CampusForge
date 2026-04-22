@@ -11,7 +11,7 @@ import { searchColleges, College, requestCollege, SEED_COLLEGES } from '../../ut
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { auth, db } from '../../firebaseConfig';
-import { writeBatch, doc, serverTimestamp, collection } from 'firebase/firestore';
+import { writeBatch, doc, serverTimestamp, collection, onSnapshot, query, where, limit, getCountFromServer } from 'firebase/firestore';
 import FeedbackModal, { FeedbackType } from '../../components/FeedbackModal';
 
 const { width } = Dimensions.get('window');
@@ -36,20 +36,31 @@ export default function CollegeSelectScreen() {
     setFeedbackVisible(true);
   };
 
-  const fetchColleges = useCallback(async (term: string) => {
+  useEffect(() => {
     setLoading(true);
-    const results = await searchColleges(term);
-    setColleges(results);
-    setLoading(false);
-  }, []);
+    const collegesRef = collection(db, 'colleges');
+    const q = query(collegesRef, where('verified', '==', true), limit(50));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const allColleges = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as College));
+      
+      if (search.trim()) {
+        const lower = search.toLowerCase();
+        setColleges(allColleges.filter(
+          c => c.name.toLowerCase().includes(lower) ||
+               c.shortName.toLowerCase().includes(lower) ||
+               c.location.toLowerCase().includes(lower)
+        ));
+      } else {
+        setColleges(allColleges);
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching colleges:", error);
+      setLoading(false);
+    });
 
-  useEffect(() => {
-    fetchColleges('');
-  }, []);
-
-  useEffect(() => {
-    const t = setTimeout(() => fetchColleges(search), 300);
-    return () => clearTimeout(t);
+    return () => unsubscribe();
   }, [search]);
 
   const handleSelect = (college: College) => {
@@ -93,7 +104,6 @@ export default function CollegeSelectScreen() {
       });
       await batch.commit();
       showAlert('Database Ready', 'Initial campuses have been seeded for you!', 'success');
-      fetchColleges(search);
     } catch (e: any) {
       showAlert('Seed Error', e.message);
     } finally {
@@ -133,7 +143,9 @@ export default function CollegeSelectScreen() {
         </View>
 
         <Text style={styles.collegeName}>{item.name}</Text>
-        <Text style={styles.collegeDetails}>{item.location} • {item.memberCount}+ students active</Text>
+        <Text style={styles.collegeDetails}>
+          {item.location} • {item.memberCount > 0 ? `${item.memberCount}+ students active` : 'Be the first to join!'}
+        </Text>
 
         <TouchableOpacity 
           activeOpacity={0.7}

@@ -1,16 +1,28 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, Image,
-  TouchableOpacity, ActivityIndicator, StatusBar, Platform, Dimensions
-} from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, getDoc, deleteDoc } from 'firebase/firestore';
-import { db, auth } from '../../firebaseConfig';
-import { Colors, Typography, Spacing, Roundness, Shadows, Gradients } from '../../constants/theme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { startChat } from '../../utils/chat';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { deleteDoc, doc, getDoc, setDoc } from 'firebase/firestore';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Image,
+  Platform,
+  ScrollView,
+  Share,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import ImageViewing from 'react-native-image-viewing';
+import LocationPreview from '../../components/LocationPreview';
 import ModernAlert from '../../components/ModernAlert';
+import { Roundness, Shadows, Spacing, Typography } from '../../constants/theme';
+import { auth, db } from '../../firebaseConfig';
+import { startChat } from '../../utils/chat';
 
 const { width } = Dimensions.get('window');
 
@@ -21,10 +33,10 @@ const formatTimeAgo = (dateString: string) => {
   const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
   const intervals: { [key: string]: number } = { year: 31536000, month: 2592000, week: 604800, day: 86400, hour: 3600, minute: 60 };
   for (const [unit, secondsInUnit] of Object.entries(intervals)) {
-      const interval = Math.floor(seconds / secondsInUnit);
-      if (interval > 0) {
-          return `${interval} ${unit}${interval === 1 ? '' : 's'} ago`;
-      }
+    const interval = Math.floor(seconds / secondsInUnit);
+    if (interval > 0) {
+      return `${interval} ${unit}${interval === 1 ? '' : 's'} ago`;
+    }
   }
   return 'Just now';
 };
@@ -35,6 +47,10 @@ export default function ItemDetails() {
   const [authorProfile, setAuthorProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const [isSaved, setIsSaved] = useState(false);
+  const saveScaleAnim = useRef(new Animated.Value(1)).current;
   const router = useRouter();
   const uid = auth.currentUser?.uid;
 
@@ -52,6 +68,12 @@ export default function ItemDetails() {
             if (authorSnap.exists()) {
               setAuthorProfile(authorSnap.data());
             }
+          }
+
+          // Check if this item is already saved by current user
+          if (uid) {
+            const savedSnap = await getDoc(doc(db, 'users', uid, 'savedItems', snap.id));
+            setIsSaved(savedSnap.exists());
           }
         }
       } catch (e) {
@@ -71,6 +93,48 @@ export default function ItemDetails() {
     } catch (e) {
       console.error(e);
       setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!uid || !item) return;
+    // Animate the button
+    Animated.sequence([
+      Animated.timing(saveScaleAnim, { toValue: 1.4, duration: 120, useNativeDriver: true }),
+      Animated.timing(saveScaleAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
+    ]).start();
+
+    const savedRef = doc(db, 'users', uid, 'savedItems', item.id);
+    try {
+      if (isSaved) {
+        await deleteDoc(savedRef);
+        setIsSaved(false);
+      } else {
+        await setDoc(savedRef, {
+          itemId: item.id,
+          type: item.type,
+          title: item.title,
+          imageUrl: item.imageUrl || null,
+          location: item.location || null,
+          savedAt: new Date().toISOString(),
+          collection: 'lost_found',
+        });
+        setIsSaved(true);
+      }
+    } catch (e) {
+      console.error('Save error:', e);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!item) return;
+    try {
+      await Share.share({
+        title: item.title,
+        message: `🔍 ${item.type === 'lost' ? 'Lost' : 'Found'}: ${item.title}\n📍 ${item.location || 'Campus'}\n\nPosted on CampusLoop — the campus exchange app.`,
+      });
+    } catch (e) {
+      console.error('Share error:', e);
     }
   };
 
@@ -103,7 +167,7 @@ export default function ItemDetails() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="light-content" backgroundColor="#15151A" />
-      
+
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBackBtn} onPress={() => router.back()}>
@@ -112,32 +176,77 @@ export default function ItemDetails() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
+
         {/* Main Image or Compact Status Header */}
-        {item.imageUrl ? (
+        {(item.imageUrl || (item.imageUrls && item.imageUrls.length > 0)) ? (
           <View style={styles.heroWrap}>
-            <Image source={{ uri: item.imageUrl }} style={styles.heroImg} />
+            {item.imageUrls && item.imageUrls.length > 0 ? (
+              <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.heroImg}>
+                {item.imageUrls.map((url: string, idx: number) => (
+                  <TouchableOpacity 
+                    key={idx} 
+                    activeOpacity={0.9} 
+                    onPress={() => { setViewerIndex(idx); setViewerVisible(true); }}
+                  >
+                    <Image source={{ uri: url }} style={{ width: width - (Spacing.margin * 2), height: 380, borderRadius: 24 }} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <TouchableOpacity 
+                activeOpacity={0.9} 
+                onPress={() => { setViewerIndex(0); setViewerVisible(true); }}
+              >
+                <Image source={{ uri: item.imageUrl }} style={styles.heroImg} />
+              </TouchableOpacity>
+            )}
             <View style={styles.heroBadge}>
               <Text style={styles.heroBadgeText}>{item.type.toUpperCase()}</Text>
             </View>
           </View>
         ) : (
           <View style={styles.compactHero}>
-            <LinearGradient 
-              colors={['#1F1F27', '#15151A']} 
+            <LinearGradient
+              colors={isLost ? ['#2A1020', '#1A1020', '#15151A'] : ['#1A1535', '#17153A', '#15151A']}
               style={styles.compactHeroFill}
-              start={{x: 0, y: 0}}
-              end={{x: 0, y: 1}}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
             >
-              <View style={[styles.typePill, { backgroundColor: item.type === 'lost' ? 'rgba(255, 100, 124, 0.15)' : 'rgba(107, 82, 255, 0.15)' }]}>
-                <Ionicons 
-                  name={item.type === 'lost' ? 'alert-circle' : 'checkmark-circle'} 
-                  size={14} 
-                  color={item.type === 'lost' ? '#FF647C' : '#6B52FF'} 
-                />
-                <Text style={[styles.typePillText, { color: item.type === 'lost' ? '#FF647C' : '#6B52FF' }]}>
-                  {item.type.toUpperCase()} REPORT
-                </Text>
+              {/* Ghost decorative icon in background */}
+              <Ionicons
+                name={isLost ? 'alert-circle' : 'checkmark-circle'}
+                size={140}
+                color={isLost ? 'rgba(255, 100, 124, 0.05)' : 'rgba(107, 82, 255, 0.05)'}
+                style={styles.noImageGhostIcon}
+              />
+
+              <View style={styles.noImageContent}>
+                {/* Icon circle */}
+                <View style={[styles.noImageIconCircle, {
+                  backgroundColor: isLost ? 'rgba(255, 100, 124, 0.15)' : 'rgba(107, 82, 255, 0.15)'
+                }]}>
+                  <Ionicons
+                    name={isLost ? 'alert-circle' : 'checkmark-circle'}
+                    size={30}
+                    color={isLost ? '#FF647C' : '#6B52FF'}
+                  />
+                </View>
+
+                <View>
+                  <View style={[styles.typePill, {
+                    backgroundColor: isLost ? 'rgba(255, 100, 124, 0.15)' : 'rgba(107, 82, 255, 0.15)'
+                  }]}>
+                    <Ionicons
+                      name={isLost ? 'alert-circle' : 'checkmark-circle'}
+                      size={13}
+                      color={isLost ? '#FF647C' : '#6B52FF'}
+                    />
+                    <Text style={[styles.typePillText, { color: isLost ? '#FF647C' : '#6B52FF' }]}>
+                      {item.type.toUpperCase()} REPORT
+                    </Text>
+                  </View>
+                  <Text style={styles.noImageLabel}>No photo attached</Text>
+                </View>
               </View>
             </LinearGradient>
           </View>
@@ -146,153 +255,133 @@ export default function ItemDetails() {
         {/* Title Block */}
         <View style={styles.titleBlock}>
           <View style={styles.titleRow}>
-             <Text style={styles.titleText}>{item.title}</Text>
-             {item.price && <Text style={styles.priceText}>${item.price}</Text>}
+            <Text style={styles.titleText}>{item.title}</Text>
+            {item.price && <Text style={styles.priceText}>₹{item.price}</Text>}
           </View>
           <View style={styles.metaRow}>
-             <View style={styles.metaItem}>
-                <Ionicons name="location-outline" size={14} color="#A0A0A5" />
-                <Text style={styles.metaText}>{item.location}</Text>
-             </View>
-             <Text style={styles.metaDot}>•</Text>
-             <View style={styles.metaItem}>
-                <Ionicons name="time-outline" size={14} color="#A0A0A5" />
-                <Text style={styles.metaText}>{formatTimeAgo(item.createdAt)}</Text>
-             </View>
+            <View style={styles.metaItem}>
+              <Ionicons name="location-outline" size={14} color="#A0A0A5" />
+              <Text style={styles.metaText}>{item.location}</Text>
+            </View>
+            <Text style={styles.metaDot}>•</Text>
+            <View style={styles.metaItem}>
+              <Ionicons name="time-outline" size={14} color="#A0A0A5" />
+              <Text style={styles.metaText}>{formatTimeAgo(item.createdAt)}</Text>
+            </View>
           </View>
         </View>
 
         {/* Details Card */}
         <View style={styles.detailsCard}>
-           <Text style={styles.cardHeader}>Details</Text>
-           <Text style={styles.descriptionText}>
-             {item.description || "No specific details provided for this entry. Reach out for more information."}
-           </Text>
-           
-           <View style={styles.tagsContainer}>
-              <View style={styles.tagPill}><Text style={styles.tagText}>#{item.type === 'lost' ? 'LostItem' : 'FoundItem'}</Text></View>
-              <View style={styles.tagPill}><Text style={styles.tagText}>#CampusAlert</Text></View>
-              {item.category && <View style={styles.tagPill}><Text style={styles.tagText}>#{item.category}</Text></View>}
-           </View>
+          <Text style={styles.cardHeader}>Details</Text>
+          <Text style={styles.descriptionText}>
+            {item.description || "No specific details provided for this entry. Reach out for more information."}
+          </Text>
+
+          <View style={styles.tagsContainer}>
+            <View style={styles.tagPill}><Text style={styles.tagText}>#{item.type === 'lost' ? 'LostItem' : 'FoundItem'}</Text></View>
+            <View style={styles.tagPill}><Text style={styles.tagText}>#CampusAlert</Text></View>
+            {item.category && <View style={styles.tagPill}><Text style={styles.tagText}>#{item.category}</Text></View>}
+          </View>
         </View>
 
         {/* Centered Profile Card */}
         <View style={styles.profileCard}>
-           <View style={styles.profileAvatarWrap}>
-              {authorProfile?.avatarUrl ? (
-                 <Image source={{ uri: authorProfile.avatarUrl }} style={styles.profileAvatar} />
-              ) : (
-                 <View style={[styles.profileAvatar, { backgroundColor: '#6B52FF', justifyContent: 'center', alignItems: 'center' }]}>
-                    <Text style={{color: '#FFF', fontSize: 24, fontWeight: 'bold'}}>{authorNameObj[0]?.toUpperCase()}</Text>
-                 </View>
-              )}
-              {/* Fake trusted badge */}
-              <View style={styles.profileBadgePink}>
-                 <MaterialCommunityIcons name="star-circle" size={16} color="#FFF" />
+          <View style={styles.profileAvatarWrap}>
+            {authorProfile?.avatarUrl ? (
+              <Image source={{ uri: authorProfile.avatarUrl }} style={styles.profileAvatar} />
+            ) : (
+              <View style={[styles.profileAvatar, { backgroundColor: '#6B52FF', justifyContent: 'center', alignItems: 'center' }]}>
+                <Text style={{ color: '#FFF', fontSize: 24, fontWeight: 'bold' }}>{authorNameObj[0]?.toUpperCase()}</Text>
               </View>
-           </View>
+            )}
+            {/* Fake trusted badge */}
+            <View style={styles.profileBadgePink}>
+              <MaterialCommunityIcons name="star-circle" size={16} color="#FFF" />
+            </View>
+          </View>
 
-           <Text style={styles.profileName}>{authorNameObj}</Text>
-           <Text style={styles.profileDept}>{authorProfile?.department || 'STUDENT COMMONS'}</Text>
-           <Text style={styles.profileRating}>★ 4.9 <Text style={{color: '#8A8D93'}}>(123 Reviews)</Text></Text>
+          <Text style={styles.profileName}>{authorNameObj}</Text>
+          <Text style={styles.profileDept}>{authorProfile?.department || 'STUDENT COMMONS'}</Text>
+          <Text style={styles.profileRating}>★ {authorProfile?.rating ? Number(authorProfile.rating).toFixed(1) : '5.0'} <Text style={{ color: '#8A8D93' }}>({authorProfile?.reviewCount || 0} Reviews)</Text></Text>
 
-           <TouchableOpacity style={styles.viewProfileBtn}>
-              <Text style={styles.viewProfileText}>View Profile</Text>
-           </TouchableOpacity>
+          <TouchableOpacity style={styles.viewProfileBtn}>
+            <Text style={styles.viewProfileText}>View Profile</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Premium Location Radar Card */}
-        {item.location && (
-          <View style={styles.mapCard}>
-             <LinearGradient 
-                colors={['#1E1E24', '#15151A']} 
-                style={styles.mapInner}
-              >
-                {/* Stylized Map Grid Overlay */}
-                <View style={styles.mapGridOverlay}>
-                  {[...Array(6)].map((_, i) => (
-                    <View key={i} style={[styles.mapGridLine, { top: (i + 1) * 20 }]} />
-                  ))}
-                  {[...Array(10)].map((_, i) => (
-                    <View key={i} style={[styles.mapGridLineVertical, { left: (i + 1) * 35 }]} />
-                  ))}
-                </View>
-
-                {/* Pulsating Radar Visual */}
-                <View style={styles.radarContainer}>
-                  <View style={styles.radarAura} />
-                  <View style={styles.radarAura2} />
-                  <View style={styles.radarCore}>
-                    <Ionicons name="location" size={24} color="#FFF" />
-                  </View>
-                </View>
-
-                <View style={styles.mapInfo}>
-                  <Text style={styles.mapInfoTitle}>Last Seen In Area</Text>
-                  <Text style={styles.mapInfoText}>{item.location}</Text>
-                </View>
-             </LinearGradient>
-          </View>
-        )}
+        {/* Premium Location Preview */}
+        <LocationPreview
+          location={item.location}
+          locationCoords={item.locationCoords}
+          title="Last Seen In Area"
+        />
 
         {/* Safety Tip */}
         <View style={styles.safetyCard}>
-           <View style={styles.safetyHeader}>
-              <MaterialCommunityIcons name="shield-alert" size={18} color="#FF647C" />
-              <Text style={styles.safetyTitle}>Campus Safety Tip</Text>
-           </View>
-           <Text style={styles.safetyDesc}>
-              Always meet in public campus areas and verify high-value items through campus security or serial numbers.
-           </Text>
+          <View style={styles.safetyHeader}>
+            <MaterialCommunityIcons name="shield-alert" size={18} color="#FF647C" />
+            <Text style={styles.safetyTitle}>Campus Safety Tip</Text>
+          </View>
+          <Text style={styles.safetyDesc}>
+            Always meet in public campus areas and verify high-value items through campus security or serial numbers.
+          </Text>
         </View>
 
       </ScrollView>
 
       {/* Floating Action Footer */}
       <View style={styles.footerWrap}>
-         {isOwner ? (
-           <>
-             <TouchableOpacity 
-                style={styles.footerIconBtn}
-                onPress={() => setShowDeleteAlert(true)}
-             >
-                <Ionicons name="trash-outline" size={20} color="#FF647C" />
-             </TouchableOpacity>
+        {isOwner ? (
+          <>
+            <TouchableOpacity
+              style={styles.footerIconBtn}
+              onPress={() => setShowDeleteAlert(true)}
+            >
+              <Ionicons name="trash-outline" size={20} color="#FF647C" />
+            </TouchableOpacity>
 
-             <TouchableOpacity 
-                style={styles.footerPrimaryBtn}
-                onPress={() => router.push(`/edit-item/${item.id}`)}
-             >
-                <Ionicons name="create" size={18} color="#FFF" />
-                <Text style={styles.footerPrimaryText}>Edit Listing</Text>
-             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.footerPrimaryBtn}
+              onPress={() => router.push(`/edit-item/${item.id}`)}
+            >
+              <Ionicons name="create" size={18} color="#FFF" />
+              <Text style={styles.footerPrimaryText}>Edit Listing</Text>
+            </TouchableOpacity>
 
-             <TouchableOpacity style={styles.footerIconBtn}>
-                <Ionicons name="share-social" size={20} color="#A0A0A5" />
-             </TouchableOpacity>
-           </>
-         ) : (
-           <>
-             <TouchableOpacity style={styles.footerIconBtn}>
-                <Ionicons name="bookmark" size={20} color="#A0A0A5" />
-             </TouchableOpacity>
+            <TouchableOpacity style={styles.footerIconBtn} onPress={handleShare}>
+              <Ionicons name="share-social" size={20} color="#A0A0A5" />
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity style={styles.footerIconBtn} onPress={handleSave}>
+              <Animated.View style={{ transform: [{ scale: saveScaleAnim }] }}>
+                <Ionicons
+                  name={isSaved ? 'bookmark' : 'bookmark-outline'}
+                  size={20}
+                  color={isSaved ? '#6B52FF' : '#A0A0A5'}
+                />
+              </Animated.View>
+            </TouchableOpacity>
 
-             <TouchableOpacity 
-                style={styles.footerPrimaryBtn}
-                onPress={() => startChat(item.userId, authorNameObj, router, { type: item.type, title: item.title, image: item.imageUrl, itemId: item.id })}
-             >
-                <Ionicons name="chatbubble" size={18} color="#FFF" />
-                <Text style={styles.footerPrimaryText}>Message {firstName}</Text>
-             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.footerPrimaryBtn}
+              onPress={() => startChat(item.userId, authorNameObj, router, { type: item.type, title: item.title, image: item.imageUrl, itemId: item.id })}
+            >
+              <Ionicons name="chatbubble" size={18} color="#FFF" />
+              <Text style={styles.footerPrimaryText}>Message {firstName}</Text>
+            </TouchableOpacity>
 
-             <TouchableOpacity style={styles.footerIconBtn}>
-                <Ionicons name="share-social" size={20} color="#A0A0A5" />
-             </TouchableOpacity>
-           </>
-         )}
+            <TouchableOpacity style={styles.footerIconBtn} onPress={handleShare}>
+              <Ionicons name="share-social" size={20} color="#A0A0A5" />
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
-      <ModernAlert 
+      <ModernAlert
         visible={showDeleteAlert}
         title="Remove Post?"
         message="This will permanently delete your campus report."
@@ -300,6 +389,14 @@ export default function ItemDetails() {
         onCancel={() => setShowDeleteAlert(false)}
         confirmText="Remove"
         isDestructive
+      />
+
+      <ImageViewing
+        images={(item.imageUrls || (item.imageUrl ? [item.imageUrl] : [])).map((url: string) => ({ uri: url }))}
+        imageIndex={viewerIndex}
+        visible={viewerVisible}
+        onRequestClose={() => setViewerVisible(false)}
+        animationType="fade"
       />
     </View>
   );
@@ -350,7 +447,7 @@ const styles = StyleSheet.create({
 
   compactHero: {
     width: '100%',
-    height: 100,
+    height: 160,
     borderRadius: 24,
     overflow: 'hidden',
     marginBottom: Spacing.xl,
@@ -359,6 +456,30 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: Spacing.xl,
+    overflow: 'hidden',
+  },
+  noImageGhostIcon: {
+    position: 'absolute',
+    right: -30,
+    bottom: -30,
+  },
+  noImageContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  noImageIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noImageLabel: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 11,
+    marginTop: 5,
+    letterSpacing: 0.5,
   },
   typePill: {
     flexDirection: 'row',
@@ -379,7 +500,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: Spacing.sm },
   titleText: { ...Typography.headline, color: '#FFF', fontSize: 24, flex: 1, paddingRight: Spacing.lg },
   priceText: { ...Typography.headline, color: '#6B52FF', fontSize: 18, marginTop: 4 },
-  
+
   metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaDot: { color: '#8A8D93', marginHorizontal: 8, fontSize: 10 },
@@ -496,6 +617,15 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  mapInfoFloating: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 12,
+    borderRadius: 16,
   },
 
   safetyCard: {

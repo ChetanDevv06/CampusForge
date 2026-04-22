@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { initializeAuth, getAuth, getReactNativePersistence } from "firebase/auth";
+import { initializeAuth, getAuth, getReactNativePersistence, Auth } from "firebase/auth";
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
@@ -19,7 +19,7 @@ const isNew = !getApps().length;
 const app = isNew ? initializeApp(firebaseConfig) : getApp();
 
 // Guard against double-init on hot-reload and platform errors during local export
-let auth;
+let auth: Auth;
 if (isNew) {
   if (Platform.OS === 'web') {
     auth = getAuth(app);

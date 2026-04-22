@@ -146,9 +146,6 @@ function RootLayoutNav() {
         <Stack screenOptions={darkHeader}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="post-item" options={{ presentation: 'modal', title: 'Report Item', ...darkHeader }} />
-          <Stack.Screen name="post-skill" options={{ presentation: 'modal', headerShown: false }} />
-          <Stack.Screen name="post-market" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="messages" options={{ headerShown: false, ...darkHeader }} />
           <Stack.Screen name="chat/[id]" options={{ headerShown: false, ...darkHeader }} />
           <Stack.Screen name="saved-items" options={{ title: 'Saved Items', ...darkHeader }} />
@@ -160,6 +157,15 @@ function RootLayoutNav() {
           <Stack.Screen name="notifications" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal', ...darkHeader }} />
           <Stack.Screen name="admin/seed-colleges" options={{ title: 'Seed Colleges', ...darkHeader }} />
+          {/* Detail screens — headerShown: false; each screen renders its own header */}
+          <Stack.Screen name="skill-details/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="market-details/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="item-details/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="edit-item/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="post-item" options={{ headerShown: false }} />
+          <Stack.Screen name="post-market" options={{ headerShown: false }} />
+          <Stack.Screen name="post-skill" options={{ headerShown: false }} />
+          <Stack.Screen name="review/[id]" options={{ headerShown: false }} />
         </Stack>
       </ThemeProvider>
     </>

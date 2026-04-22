@@ -8,13 +8,15 @@ import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { Alert } from 'react-native';
 import { db, auth } from '../../firebaseConfig';
 import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
+import { Video, ResizeMode } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import ImageViewing from 'react-native-image-viewing';
+
 import { startChat } from '../../utils/chat';
 import ModernAlert from '../../components/ModernAlert';
-
-const { width } = Dimensions.get('window');
+import LocationPreview from '../../components/LocationPreview';
 
 export default function MarketDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -22,6 +24,8 @@ export default function MarketDetails() {
   const [authorProfile, setAuthorProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
   const router = useRouter();
   const uid = auth.currentUser?.uid;
 
@@ -96,8 +100,33 @@ export default function MarketDetails() {
       >
         {/* Visual Showcase */}
         <View style={styles.hero}>
-          {product.imageUrl ? (
-            <Image source={{ uri: product.imageUrl }} style={styles.heroImage} />
+          {product.videoUrl ? (
+            <Video
+              source={{ uri: product.videoUrl }}
+              style={[styles.heroImage, { backgroundColor: '#000' }]}
+              useNativeControls
+              resizeMode={ResizeMode.CONTAIN}
+              isLooping
+            />
+          ) : (product.imageUrls && product.imageUrls.length > 0) ? (
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.heroImage}>
+              {product.imageUrls.map((url: string, idx: number) => (
+                <TouchableOpacity 
+                  key={idx} 
+                  activeOpacity={0.9} 
+                  onPress={() => { setViewerIndex(idx); setViewerVisible(true); }}
+                >
+                  <Image source={{ uri: url }} style={{ width, height: 400 }} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : product.imageUrl ? (
+            <TouchableOpacity 
+              activeOpacity={0.9} 
+              onPress={() => { setViewerIndex(0); setViewerVisible(true); }}
+            >
+              <Image source={{ uri: product.imageUrl }} style={styles.heroImage} />
+            </TouchableOpacity>
           ) : (
             <LinearGradient colors={Gradients.primary} style={styles.heroPlaceholder}>
               <Ionicons name="cart" size={80} color={Colors.on_primary} />
@@ -177,6 +206,13 @@ export default function MarketDetails() {
               <Text style={styles.trustLabel}>Same-day Exchange</Text>
             </View>
           </View>
+
+          {/* Premium Location Preview */}
+          <LocationPreview 
+            location={product.location} 
+            locationCoords={product.locationCoords} 
+            title="Meeting Spot" 
+          />
         </View>
       </ScrollView>
 
