@@ -5,7 +5,6 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
 import { useRouter } from 'expo-router';
@@ -15,42 +14,72 @@ import { BlurView } from 'expo-blur';
 
 const { width } = Dimensions.get('window');
 
-const StatusDot = ({ userId }: { userId: string }) => {
-  const [online, setOnline] = useState(false);
-  useEffect(() => {
-    if (!userId) return;
-    return onSnapshot(doc(db, 'users', userId), (snap) => {
-      if (snap.exists()) setOnline(!!snap.data().online);
-    });
-  }, [userId]);
-
-  return (
-    <View style={[styles.statusDot, { backgroundColor: online ? '#4ade80' : '#ef4444' }]} />
-  );
-};
-
 export default function MessagesScreen() {
   const { user, profile } = useAuth();
-  const insets = useSafeAreaInsets();
   const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [avatarCache, setAvatarCache] = useState<Record<string, string | null>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
   const router = useRouter();
   const uid = user?.uid;
 
   const getOtherUserId = (conv: any) => conv.participants.find((p: string) => p !== uid);
-  const getOtherName = (conv: any) => conv.participantNames?.[getOtherUserId(conv)] || 'Campus Student';
 
-  const filteredConversations = conversations.filter(conv => 
-    getOtherName(conv).toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const getOtherName = (conv: any) => {
+    if (!uid) return 'Unknown';
+    const otherId = conv.participants.find((p: string) => p !== uid);
+    return conv.participantNames?.[otherId] || 'Campus Student';
+  };
+
+  const filteredConversations = conversations.filter(conv => {
+    const otherName = getOtherName(conv).toLowerCase();
+    return otherName.includes(searchQuery.toLowerCase());
+  });
+
+  const UserAvatar = ({ userId, otherName, cachedAvatar }: { userId: string, otherName: string, cachedAvatar?: string }) => {
+    const [localAvatar, setLocalAvatar] = useState<string | null>(cachedAvatar || avatarCache[userId] || null);
+
+    useEffect(() => {
+      if (!userId || localAvatar) return;
+      const fetchAvatar = async () => {
+        try {
+          const snap = await getDoc(doc(db, 'users', userId));
+          if (snap.exists()) {
+            const url = snap.data().avatarUrl || null;
+            setLocalAvatar(url);
+            setAvatarCache(prev => ({ ...prev, [userId]: url }));
+          }
+        } catch (e) {}
+      };
+      fetchAvatar();
+    }, [userId]);
+
+    if (localAvatar) {
+      return <Image source={{ uri: localAvatar }} style={styles.avatarImg} />;
+    }
+
+    return (
+      <LinearGradient colors={Gradients.primary} style={styles.avatarPlaceholder} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <Text style={styles.avatarText}>{otherName.charAt(0).toUpperCase()}</Text>
+      </LinearGradient>
+    );
+  };
 
   useEffect(() => {
     if (!uid) { setLoading(false); return; }
-    const q = query(collection(db, 'conversations'), where('participants', 'array-contains', uid));
+    const q = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', uid),
+      where('collegeId', '==', profile?.collegeId || '')
+    );
     const unsub = onSnapshot(q, (snap) => {
       const convs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      convs.sort((a: any, b: any) => (b.lastMessageAt?.toMillis?.() || 0) - (a.lastMessageAt?.toMillis?.() || 0));
+      convs.sort((a: any, b: any) => {
+        const tA = a.lastMessageAt?.toMillis?.() || a.lastMessageAt || 0;
+        const tB = b.lastMessageAt?.toMillis?.() || b.lastMessageAt || 0;
+        return tB - tA;
+      });
       setConversations(convs);
       setLoading(false);
     }, () => setLoading(false));
@@ -62,50 +91,51 @@ export default function MessagesScreen() {
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
-    if (diff < 86400000) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (diff < 172800000) return 'Yesterday';
+    const diffDays = Math.floor(diff / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (diffDays === 1) return 'Yesterday';
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
-  const renderItem = ({ item }: { item: any }) => {
+  const renderItem = ({ item, index }: { item: any, index: number }) => {
     const otherUserId = getOtherUserId(item);
     const otherName = getOtherName(item);
-    const unreadCount = item.unreadCount?.[uid!] || 0;
-    const isMe = item.lastSenderId === uid;
+    const unread = item.unreadCount?.[uid!] > 0;
 
     return (
       <TouchableOpacity
-        activeOpacity={0.9}
-        style={styles.chatPill}
-        onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id, name: otherName, otherUserId } } as any)}
+        activeOpacity={0.8}
+        style={[
+          styles.card, 
+          { backgroundColor: unread ? Colors.surface_container_high : Colors.surface_container_low }
+        ]}
+        onPress={() => {
+          router.push({ 
+            pathname: '/chat/[id]', 
+            params: { id: item.id, name: otherName, otherUserId } 
+          } as any);
+        }}
       >
-        <View style={styles.avatarWrapper}>
-          {item.participantAvatars?.[otherUserId] ? (
-            <Image source={{ uri: item.participantAvatars[otherUserId] }} style={styles.avatar} />
-          ) : (
-            <LinearGradient colors={Gradients.primary} style={styles.avatar}>
-              <Text style={styles.avatarText}>{otherName[0].toUpperCase()}</Text>
-            </LinearGradient>
-          )}
-          <StatusDot userId={otherUserId} />
+        <View style={styles.avatarContainer}>
+          <UserAvatar userId={otherUserId} otherName={otherName} cachedAvatar={item.participantAvatars?.[otherUserId]} />
+          {unread && <View style={styles.unreadPulse} />}
         </View>
 
-        <View style={styles.chatInfo}>
-          <View style={styles.chatTop}>
-            <Text style={styles.chatName} numberOfLines={1}>{otherName}</Text>
-            <Text style={styles.chatTime}>{formatTime(item.lastMessageAt)}</Text>
+        <View style={styles.info}>
+          <View style={styles.infoTop}>
+            <Text style={[styles.name, unread && styles.nameUnread]} numberOfLines={1}>{otherName}</Text>
+            <Text style={[styles.time, unread && styles.timeUnread]}>{formatTime(item.lastMessageAt)}</Text>
           </View>
-          <View style={styles.chatBottom}>
-            <Text style={styles.chatPreview} numberOfLines={1}>
-              {isMe ? 'You: ' : ''}{item.lastMessage || 'Sent an attachment'}
-            </Text>
-            {unreadCount > 0 ? (
-              <View style={styles.unreadIndicator} />
-            ) : isMe && (
-              <Ionicons name="checkmark-done" size={16} color="rgba(255,255,255,0.2)" />
-            )}
-          </View>
+          <Text style={[styles.preview, unread && styles.previewUnread]} numberOfLines={1}>
+            {item.lastSenderId === uid ? 'You: ' : ''}{item.lastMessage || 'Sent a photo'}
+          </Text>
         </View>
+
+        {unread && (
+          <View style={styles.unreadCount}>
+            <Text style={styles.unreadCountText}>{item.unreadCount[uid!]}</Text>
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -114,44 +144,67 @@ export default function MessagesScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       
-      {/* Header with Back & Compose */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity 
-          onPress={() => router.back()}
-          style={styles.headerBtn}
-        >
-          <Ionicons name="chevron-back" size={28} color="#fff" />
-        </TouchableOpacity>
-        
-        <Text style={styles.topTitle}>Messages</Text>
-        
-        <TouchableOpacity 
-          onPress={() => router.push('/search')}
-          style={styles.headerBtn}
-        >
-          <Ionicons name="create-outline" size={26} color="#fff" />
-        </TouchableOpacity>
-      </View>
-
+      {/* Editorial Header */}
       <View style={styles.header}>
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="rgba(255,255,255,0.6)" style={styles.searchIcon} />
-          <TextInput 
-            style={styles.searchInput}
-            placeholder="Search conversations..."
-            placeholderTextColor="rgba(255,255,255,0.5)"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-      </View>
+        <View style={[styles.headerTop, { position: 'relative', justifyContent: 'center', minHeight: 48 }]}>
+          {/* Back Button (Left) */}
+          <View style={{ position: 'absolute', left: 0, zIndex: 10 }}>
+            <TouchableOpacity 
+              onPress={() => router.back()}
+              style={{
+                width: 44, height: 44, borderRadius: 22, 
+                backgroundColor: Colors.surface_container_low,
+                justifyContent: 'center', alignItems: 'center'
+              }}
+            >
+              <Ionicons name="chevron-back" size={24} color={Colors.on_background} />
+            </TouchableOpacity>
+          </View>
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>RECENT CHATS</Text>
+          {/* Centered Title */}
+          <Text style={[styles.headerTitle, { textAlign: 'center', fontSize: 24, letterSpacing: 1 }]}>
+            MESSAGES
+          </Text>
+
+          {/* Search Button (Right) */}
+          <View style={{ position: 'absolute', right: 0, zIndex: 10 }}>
+            <TouchableOpacity style={styles.searchIconBtn} onPress={() => setShowSearch(!showSearch)}>
+              <Ionicons name={showSearch ? "close" : "search"} size={22} color={Colors.on_background} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        
+        {showSearch && (
+          <View style={styles.searchBar}>
+            <TextInput 
+              style={styles.searchInput}
+              placeholder="Filter conversations..."
+              placeholderTextColor={Colors.on_surface_variant}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus
+            />
+          </View>
+        )}
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color="#7b61ff" /></View>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      ) : filteredConversations.length === 0 ? (
+        <View style={styles.empty}>
+          <View style={styles.emptyIconBox}>
+            <Ionicons name="chatbubbles" size={48} color={Colors.primary_dim} />
+          </View>
+          <Text style={styles.emptyTitle}>Silent Commons</Text>
+          <Text style={styles.emptySub}>No active conversations found. Start a thread by browsing listings.</Text>
+          <TouchableOpacity style={styles.exploreBtn} onPress={() => router.push('/(tabs)')}>
+            <LinearGradient colors={Gradients.primary} style={styles.btnGrad}>
+              <Text style={styles.btnText}>Explore Campus</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
           data={filteredConversations}
@@ -170,60 +223,86 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
   header: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: Spacing.margin,
+    paddingBottom: Spacing.md,
+    backgroundColor: Colors.background,
   },
-  topBar: {
+  headerTop: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 15,
-    paddingBottom: 15,
-  },
-  headerBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
-  topTitle: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: 0.5, flex: 1, textAlign: 'center' },
-
-  searchContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface_container_highest,
-    borderRadius: 30,
-    height: 54,
-    paddingHorizontal: 18,
-    borderWidth: 1,
-    borderColor: Colors.outline_variant,
   },
-  searchIcon: { marginRight: 12 },
-  searchInput: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '500' },
-
-  sectionHeader: { paddingHorizontal: 20, marginBottom: 15 },
-  sectionTitle: { ...Typography.label, color: '#a4a6ff', fontSize: 13, letterSpacing: 1.5, fontWeight: '800' },
-
-  listContent: { paddingHorizontal: 20, paddingBottom: 60, gap: 12 },
-  
-  chatPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  headerTitle: {
+    ...Typography.display,
+    fontSize: 42,
+    color: Colors.on_background,
+  },
+  searchIconBtn: {
+    width: 48, height: 48,
+    borderRadius: 24,
     backgroundColor: Colors.surface_container_high,
-    padding: 16,
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: Colors.outline_variant,
+    justifyContent: 'center', alignItems: 'center',
   },
-  avatarWrapper: { position: 'relative' },
-  avatar: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
-  avatarText: { ...Typography.title, color: '#fff', fontSize: 20 },
-  statusDot: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 14, height: 14, borderRadius: 7,
-    borderWidth: 2, borderColor: Colors.surface_container_high,
+  searchBar: {
+    marginTop: Spacing.md,
+    backgroundColor: Colors.surface_container_low,
+    borderRadius: Roundness.md,
+    paddingHorizontal: Spacing.lg,
+    height: 56,
+    justifyContent: 'center',
+  },
+  searchInput: {
+    ...Typography.body_medium,
+    color: Colors.on_background,
   },
 
-  chatInfo: { flex: 1, marginLeft: 16 },
-  chatTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  chatName: { ...Typography.body_medium, color: '#fff', fontSize: 17, fontWeight: '700' },
-  chatTime: { ...Typography.caption, color: '#a4a6ff', fontSize: 12, fontWeight: '600' },
-  chatBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  chatPreview: { ...Typography.body, color: 'rgba(255,255,255,0.5)', fontSize: 14, flex: 1, marginRight: 10 },
-  unreadIndicator: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#a4a6ff' },
+  listContent: { paddingHorizontal: Spacing.margin, paddingBottom: 120, gap: Spacing.sm },
+  
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: Roundness.lg,
+  },
+  avatarContainer: { position: 'relative', marginRight: Spacing.md },
+  avatarImg: { width: 64, height: 64, borderRadius: 32 },
+  avatarPlaceholder: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' },
+  avatarText: { ...Typography.title, color: Colors.on_primary, fontSize: 24 },
+  unreadPulse: {
+    position: 'absolute', bottom: 4, right: 4,
+    width: 14, height: 14, borderRadius: 7,
+    backgroundColor: Colors.tertiary,
+    borderWidth: 3, borderColor: Colors.background,
+  },
+
+  info: { flex: 1 },
+  infoTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+  name: { ...Typography.body_medium, color: Colors.on_surface_variant, fontSize: 16 },
+  nameUnread: { color: Colors.on_background, ...Typography.title, fontSize: 17 },
+  time: { ...Typography.caption, color: Colors.on_surface_variant },
+  timeUnread: { color: Colors.primary, fontWeight: '700' },
+  preview: { ...Typography.body, color: Colors.on_surface_variant, fontSize: 14 },
+  previewUnread: { color: Colors.on_background, ...Typography.body_medium },
+
+  unreadCount: {
+    backgroundColor: Colors.tertiary,
+    paddingHorizontal: 8, height: 22, minWidth: 22,
+    borderRadius: 11, justifyContent: 'center', alignItems: 'center',
+    marginLeft: Spacing.sm,
+  },
+  unreadCountText: { color: Colors.on_tertiary, ...Typography.label, fontSize: 11 },
+
+  empty: { flex: 1, padding: 40, alignItems: 'center', justifyContent: 'center' },
+  emptyIconBox: {
+    width: 96, height: 96, borderRadius: 48,
+    backgroundColor: Colors.surface_container_high,
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: Spacing.xl,
+  },
+  emptyTitle: { ...Typography.headline, color: Colors.on_background, marginBottom: Spacing.md },
+  emptySub: { ...Typography.body, color: Colors.on_surface_variant, textAlign: 'center', marginBottom: Spacing.xxl },
+  exploreBtn: { width: '100%', height: 60, borderRadius: Roundness.full, overflow: 'hidden' },
+  btnGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  btnText: { ...Typography.title, color: Colors.on_primary },
 });
