@@ -10,19 +10,37 @@ export interface ModerationResult {
   score: number;
 }
 
+import BAD_WORDS from './badWords.json';
+
+// Escape special characters so regex doesn't break on phrases with hyphens or asterisks
+const escapeRegExp = (str: string) => {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+const pattern = BAD_WORDS.map(escapeRegExp).join('|');
+
 /**
- * Moderates text content.
- * Currently disabled Gemini AI moderation to ensure consistent performance.
- * Performs basic local cleaning (if any) and returns the original text.
+ * Moderates text content locally using a regex-based blocklist.
+ * Replaces the previously disabled AI moderation for better performance.
  */
 export const moderateWithAI = async (text: string): Promise<ModerationResult> => {
-  // AI Moderation is currently disabled.
-  // Returning original text with a healthy status to allow normal app flow.
+  if (!text) return { cleanText: '', isFlagged: false, reason: null, score: 0 };
+  
+  let cleanText = text;
+  let isFlagged = false;
+
+  const regex = new RegExp(`\\b(${pattern})\\b`, 'gi');
+  
+  if (regex.test(cleanText)) {
+    isFlagged = true;
+    cleanText = cleanText.replace(regex, (match) => '*'.repeat(match.length));
+  }
+
   return {
-    cleanText: text,
-    isFlagged: false,
-    reason: null,
-    score: 0
+    cleanText,
+    isFlagged,
+    reason: isFlagged ? 'Contains inappropriate language' : null,
+    score: isFlagged ? 1 : 0
   };
 };
 

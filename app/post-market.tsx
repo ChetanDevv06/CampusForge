@@ -128,9 +128,19 @@ export default function PostMarketScreen() {
         imageUrl = await uploadImage(image, `marketplace/${user?.uid}/${Date.now()}`);
       }
 
+      const { moderateWithAI } = require('../utils/moderation');
+      const modTitle = await moderateWithAI(title);
+      const modDesc = await moderateWithAI(description);
+
+      const isFlagged = modTitle.isFlagged || modDesc.isFlagged;
+
       const payload = {
-        title, price: parseFloat(price), category, description,
+        title: modTitle.cleanText, 
+        price: parseFloat(price), 
+        category, 
+        description: modDesc.cleanText,
         imageUrl,
+        isFlagged,
         updatedAt: serverTimestamp(),
       };
 
@@ -147,6 +157,26 @@ export default function PostMarketScreen() {
           createdAt: serverTimestamp(),
           status: 'available',
         });
+
+        if (isFlagged) {
+          // Consolidated report for Admin with link to post
+          addDoc(collection(db, 'moderation_reports'), {
+            type: 'Marketplace Listing',
+            postCategory: category,
+            postId: docRef.id,
+            postCollection: 'marketplace',
+            userId: user?.uid,
+            userEmail: user?.email,
+            userName: profile?.name || 'Student',
+            userCollege: profile?.collegeShortName || 'Campus',
+            timestamp: serverTimestamp(),
+            details: {
+              title: { text: title, flagged: modTitle.isFlagged },
+              description: { text: description, flagged: modDesc.isFlagged }
+            },
+            resolved: false
+          }).catch(err => console.error('Failed to log consolidated report:', err));
+        }
         showFeedback('Success!', 'Your item is now live!', 'success');
         setTimeout(() => router.replace({ pathname: '/market-details/[id]', params: { id: docRef.id } } as any), 1500);
       }

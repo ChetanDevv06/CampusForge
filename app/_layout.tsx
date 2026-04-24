@@ -1,32 +1,31 @@
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
-import { StatusBar, AppState, View, ActivityIndicator } from 'react-native';
-import 'react-native-reanimated';
-import { useEffect, useRef } from 'react';
-import { useNotifications } from '../utils/useNotifications';
-import { db } from '../firebaseConfig';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { useEffect, useRef } from 'react';
+import { ActivityIndicator, AppState, StatusBar, View } from 'react-native';
+import 'react-native-reanimated';
+import { db } from '../firebaseConfig';
+import { useNotifications } from '../utils/useNotifications';
 
-import { useColorScheme } from 'react-native';
-import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/theme';
+import { AuthProvider, useAuth } from '../contexts/AuthContext';
 
 // Load Design System Fonts
-import { 
-  useFonts,
+import {
+  Manrope_400Regular,
+  Manrope_500Medium,
+  Manrope_600SemiBold,
+  Manrope_700Bold
+} from '@expo-google-fonts/manrope';
+import {
   PlusJakartaSans_400Regular,
   PlusJakartaSans_500Medium,
   PlusJakartaSans_600SemiBold,
   PlusJakartaSans_700Bold,
-  PlusJakartaSans_800ExtraBold 
+  PlusJakartaSans_800ExtraBold,
+  useFonts
 } from '@expo-google-fonts/plus-jakarta-sans';
-import { 
-  Manrope_400Regular, 
-  Manrope_500Medium, 
-  Manrope_600SemiBold, 
-  Manrope_700Bold 
-} from '@expo-google-fonts/manrope';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -40,7 +39,7 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
-  
+
   // Design System Font Hook
   const [fontsLoaded, fontError] = useFonts({
     PlusJakartaSans_400Regular,
@@ -65,7 +64,7 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (isLoading || !rootNavigationState?.key || !fontsLoaded) return;
-    
+
     const inAuthGroup = segments[0] === '(auth)';
     const onOnboarding = segments[0] === 'onboarding';
 
@@ -123,7 +122,7 @@ function RootLayoutNav() {
   const darkHeader = {
     headerStyle: { backgroundColor: Colors.background },
     headerTintColor: Colors.on_background,
-    headerTitleStyle: { 
+    headerTitleStyle: {
       fontFamily: 'PlusJakartaSans_700Bold',
       fontSize: 18,
     },
