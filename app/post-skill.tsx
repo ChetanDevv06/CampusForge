@@ -76,8 +76,20 @@ export default function PostSkillScreen() {
     }
     setLoading(true);
     try {
+      const { moderateWithAI } = require('../utils/moderation');
+      const modTitle = await moderateWithAI(title);
+      const modCategory = await moderateWithAI(category);
+      const modDesc = await moderateWithAI(description);
+
+      const isFlagged = modTitle.isFlagged || modCategory.isFlagged || modDesc.isFlagged;
+
+
       const payload = {
-        title, category, description, type,
+        title: modTitle.cleanText, 
+        category: modCategory.cleanText, 
+        description: modDesc.cleanText, 
+        type,
+        isFlagged,
         updatedAt: serverTimestamp(),
       };
 
@@ -94,6 +106,27 @@ export default function PostSkillScreen() {
           createdAt: serverTimestamp(),
           status: 'open',
         });
+
+        if (isFlagged) {
+          // Consolidated report for Admin with link to post
+          addDoc(collection(db, 'moderation_reports'), {
+            type: 'Skill Share Posting',
+            postCategory: category,
+            postId: docRef.id,
+            postCollection: 'skills',
+            userId: user?.uid,
+            userEmail: user?.email,
+            userName: profile?.name || 'Student',
+            userCollege: profile?.collegeShortName || 'Campus',
+            timestamp: serverTimestamp(),
+            details: {
+              title: { text: title, flagged: modTitle.isFlagged },
+              category: { text: category, flagged: modCategory.isFlagged },
+              description: { text: description, flagged: modDesc.isFlagged }
+            },
+            resolved: false
+          }).catch(err => console.error('Failed to log consolidated report:', err));
+        }
         showFeedback('Mastery Sealed', 'Your expertise is now live in the talent hub.', 'success');
         setTimeout(() => router.replace({ pathname: '/skill-details/[id]', params: { id: docRef.id } } as any), 1500);
       }

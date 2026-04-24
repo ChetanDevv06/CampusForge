@@ -28,9 +28,11 @@ export default function AdminDashboard() {
   const [recentPosts, setRecentPosts] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [collegeRequests, setCollegeRequests] = useState<any[]>([]);
+  const [moderationReports, setModerationReports] = useState<any[]>([]);
+  const [expandedReport, setExpandedReport] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
-  const [activeTab, setActiveTab] = useState<'analytics' | 'posts' | 'users' | 'colleges'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'posts' | 'users' | 'colleges' | 'reports'>('analytics');
   
   // Governance Security Check
   useEffect(() => {
@@ -49,15 +51,17 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [userSnap, postSnap, marketSnap, skillSnap, requestsSnap] = await Promise.all([
+      const [userSnap, postSnap, marketSnap, skillSnap, requestsSnap, reportsSnap] = await Promise.all([
         getDocs(collection(db, 'users')),
         getDocs(collection(db, 'lost_found')),
         getDocs(collection(db, 'marketplace')),
         getDocs(collection(db, 'skills')),
-        getDocs(query(collection(db, 'college_requests'), orderBy('createdAt', 'desc')))
+        getDocs(query(collection(db, 'college_requests'), orderBy('createdAt', 'desc'))),
+        getDocs(query(collection(db, 'moderation_reports'), orderBy('timestamp', 'desc')))
       ]);
 
       setCollegeRequests(requestsSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((r: any) => r.status === 'pending'));
+      setModerationReports(reportsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
       let volume = 0;
       marketSnap.docs.forEach(d => {
@@ -74,7 +78,7 @@ export default function AdminDashboard() {
       setStats({
         users: userSnap.size,
         posts: postSnap.size + marketSnap.size + skillSnap.size,
-        reports: flaggedPosts,
+        reports: reportsSnap.size + flaggedPosts,
         flagged: flaggedPosts,
         marketVolume: volume,
         categories: {
@@ -152,6 +156,33 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteFlaggedPost = async (report: any) => {
+    Alert.alert(
+      "Confirm Deletion",
+      "This will permanently strike the actual post from the campus records.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Strike Post", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await deleteDoc(doc(db, report.postCollection, report.postId));
+              await deleteDoc(doc(db, 'moderation_reports', report.id));
+              Alert.alert("Strike Complete", "The artifact has been purged from the feed.");
+              fetchData();
+            } catch (e) {
+              Alert.alert("Error", "Failed to strike the post.");
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const StatTile = ({ label, value, icon, colors }: { label: string; value: any; icon: string; colors: [string, string] }) => (
     <LinearGradient colors={colors} style={styles.statTile} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
       <View style={styles.statIconBox}>
@@ -187,7 +218,7 @@ export default function AdminDashboard() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.tabsContainer}>
-          {['analytics', 'posts', 'users', 'colleges'].map((tab) => (
+          {['analytics', 'posts', 'users', 'colleges', 'reports'].map((tab) => (
             <TouchableOpacity 
               key={tab}
               style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]} 
@@ -330,6 +361,84 @@ export default function AdminDashboard() {
             )}
           </View>
         )}
+        {activeTab === 'reports' && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Moderation Reports</Text>
+              <Text style={styles.headerSub}>{moderationReports.length} Active Incidents</Text>
+            </View>
+            {moderationReports.length === 0 ? (
+              <Text style={styles.emptyText}>No moderation reports found.</Text>
+            ) : (
+              moderationReports.map((report) => (
+                <View key={report.id} style={[styles.protocolItem, { flexDirection: 'column', alignItems: 'stretch' }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={styles.protocolInfo}>
+                      <Text style={styles.protocolTitle}>{report.userName || 'Student'} ({report.userCollege || 'Campus'})</Text>
+                      <Text style={styles.protocolMeta}>{report.userEmail} • {report.postCategory || 'General'}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity onPress={() => setExpandedReport(expandedReport === report.id ? null : report.id)} style={styles.refreshBtn}>
+                        <Ionicons name={expandedReport === report.id ? "chevron-up" : "chevron-down"} size={18} color={Colors.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        onPress={async () => {
+                          try {
+                            setLoading(true);
+                            await deleteDoc(doc(db, 'moderation_reports', report.id));
+                            fetchData();
+                          } catch (e) {
+                            Alert.alert("Error", "Failed to clear report.");
+                          } finally {
+                            setLoading(false);
+                          }
+                        }} 
+                        style={[styles.refreshBtn, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}
+                      >
+                        <Ionicons name="checkmark-done" size={18} color={Colors.success} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {expandedReport === report.id && (
+                    <View style={styles.reportDetailBox}>
+                      <View style={styles.detailDivider} />
+                      <Text style={styles.detailHeading}>INCIDENT BREAKDOWN</Text>
+                      
+                      {report.details ? (
+                        <>
+                          {Object.entries(report.details).map(([field, data]: [string, any]) => (
+                            <View key={field} style={[styles.detailRow, data.flagged && styles.flaggedDetailRow]}>
+                              <View style={styles.detailLabelArea}>
+                                <Text style={styles.detailLabel}>{field.toUpperCase()}</Text>
+                                {data.flagged && <Ionicons name="alert-circle" size={14} color={Colors.error} />}
+                              </View>
+                              <Text style={[styles.detailText, data.flagged && { color: Colors.error }]}>
+                                {data.text || 'No content provided'}
+                              </Text>
+                            </View>
+                          ))}
+
+                          {report.postId && report.postCollection && (
+                            <TouchableOpacity 
+                              onPress={() => handleDeleteFlaggedPost(report)}
+                              style={styles.deletePostBtn}
+                            >
+                              <Ionicons name="trash-outline" size={16} color={Colors.error} />
+                              <Text style={styles.deletePostText}>Strike Original Post</Text>
+                            </TouchableOpacity>
+                          )}
+                        </>
+                      ) : (
+                        <Text style={styles.detailText}>Legacy report structure - details unavailable.</Text>
+                      )}
+                    </View>
+                  )}
+                </View>
+              ))
+            )}
+          </View>
+        )}
       </ScrollView>
 
       <ModernAlert 
@@ -459,4 +568,33 @@ const styles = StyleSheet.create({
 
   emptyText: { ...Typography.body, color: Colors.on_surface_variant, marginTop: 12, textAlign: 'center', fontSize: 14, paddingHorizontal: 40 },
   refreshBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface_container_low, justifyContent: 'center', alignItems: 'center' },
+
+  reportDetailBox: { marginTop: 12, paddingBottom: 4 },
+  detailDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginBottom: 12 },
+  detailHeading: { ...Typography.caption, color: Colors.primary, fontSize: 10, fontWeight: '800', letterSpacing: 1, marginBottom: 12 },
+  detailRow: { backgroundColor: 'rgba(255,255,255,0.02)', padding: 12, borderRadius: Roundness.md, marginBottom: 8 },
+  flaggedDetailRow: { backgroundColor: 'rgba(244, 67, 54, 0.05)', borderColor: 'rgba(244, 67, 54, 0.2)', borderWidth: 1 },
+  detailLabelArea: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  detailLabel: { ...Typography.caption, color: Colors.on_surface_variant, fontSize: 9, fontWeight: 'bold' },
+  detailText: { ...Typography.body, color: Colors.on_surface, fontSize: 13, lineHeight: 18 },
+
+  deletePostBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    backgroundColor: 'rgba(244, 67, 54, 0.08)', 
+    paddingVertical: 10,
+    borderRadius: Roundness.md,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(244, 67, 54, 0.2)'
+  },
+  deletePostText: { 
+    color: Colors.error, 
+    marginLeft: 8, 
+    fontSize: 12, 
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
+  },
 });

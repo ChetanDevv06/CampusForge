@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import { uploadImage } from '../../utils/storage';
 import { useAuth } from '../../contexts/AuthContext';
@@ -137,10 +137,18 @@ export default function CreatePostScreen() {
       const userId = auth.currentUser?.uid;
       const userName = auth.currentUser?.email?.split('@')[0] || 'Student';
 
+      // Apply profanity moderation
+      const { moderateWithAI } = require('../../utils/moderation');
+      const modTitle = await moderateWithAI(title.trim());
+      const modDesc = await moderateWithAI(description.trim());
+      const modLoc = await moderateWithAI(location.trim());
+
+      const isFlagged = modTitle.isFlagged || modDesc.isFlagged || modLoc.isFlagged;
+
       const payload: any = {
-        title: title.trim(),
-        description: description.trim(),
-        location: location.trim(),
+        title: modTitle.cleanText,
+        description: modDesc.cleanText,
+        location: modLoc.cleanText,
         visibility: 'Everyone in Campus',
         imageUrl,
         linkUrl: linkUrl.trim() || null,
@@ -148,6 +156,7 @@ export default function CreatePostScreen() {
         userName,
         collegeId: profile?.collegeId || null,
         createdAt: new Date().toISOString(),
+        isFlagged,
       };
 
       let colName = 'lost_found';
@@ -168,7 +177,42 @@ export default function CreatePostScreen() {
         payload.tags = selectedTags;
       }
 
-      await addDoc(collection(db, colName), payload);
+      const docRef = await addDoc(collection(db, colName), payload);
+      
+      if (isFlagged) {
+        // Consolidated report for Admin with link to post
+        addDoc(collection(db, 'moderation_reports'), {
+          type: 'Unified Post',
+          postCategory: category,
+          postId: docRef.id,
+          postCollection: colName,
+          userId,
+          userEmail: auth.currentUser?.email,
+          userName: profile?.name || 'Student',
+          userCollege: profile?.collegeShortName || 'Campus',
+          timestamp: serverTimestamp(),
+          details: {
+            title: { text: title, flagged: modTitle.isFlagged },
+            description: { text: description, flagged: modDesc.isFlagged },
+            location: { text: location, flagged: modLoc.isFlagged }
+          },
+          resolved: false
+        }).catch(err => console.error('Failed to log consolidated report:', err));
+      }
+      
+      // Reset form states for the next post
+      setTitle('');
+      setDescription('');
+      setLocation('');
+      setPrice('');
+      setImage(null);
+      setVideoUri(null);
+      setLinkUrl('');
+      setCustomTags([]);
+      setSelectedTags(['Electronics']); // default tag
+      setCategory('Lost/Found');
+      setItemType('lost');
+
       router.push('/(tabs)');
     } catch (error) {
       console.error('Posting failed:', error);

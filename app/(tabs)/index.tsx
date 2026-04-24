@@ -638,7 +638,7 @@ const styles = StyleSheet.create({
   avatarImage: { width: '100%', height: '100%' },
   avatarPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   avatarText: { ...Typography.title, color: Colors.on_primary, fontSize: 18 },
-  campusLogo: { ...Typography.display, fontSize: 24, color: '#FFF' },
+  campusLogo: { ...Typography.display, fontSize: 24, color: '#FFF', marginTop: -11, marginLeft: 5 },
   searchIconBtn: { padding: Spacing.xs },
   greetingSection: { paddingHorizontal: Spacing.xl, marginBottom: Spacing.md },
   greetingHeading: { ...Typography.display, fontSize: 32, color: '#FFF', marginBottom: Spacing.xs },
