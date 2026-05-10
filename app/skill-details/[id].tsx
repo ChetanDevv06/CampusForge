@@ -9,7 +9,6 @@ import ImageViewing from 'react-native-image-viewing';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -19,6 +18,7 @@ import {
   Platform,
   Dimensions
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
 import { auth, db } from '../../firebaseConfig';
 import { startChat } from '../../utils/chat';
@@ -126,7 +126,7 @@ export default function SkillDetails() {
                   activeOpacity={0.9} 
                   onPress={() => { setViewerIndex(idx); setViewerVisible(true); }}
                 >
-                  <Image source={{ uri: url }} style={{ width, height: 400 }} />
+                  <Image source={{ uri: url }} style={{ width, height: 400 }} contentFit="cover" transition={300} />
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -136,7 +136,7 @@ export default function SkillDetails() {
               onPress={() => { setViewerIndex(0); setViewerVisible(true); }}
               style={StyleSheet.absoluteFillObject}
             >
-              <Image source={{ uri: skill.imageUrl }} style={StyleSheet.absoluteFillObject} />
+              <Image source={{ uri: skill.imageUrl }} style={StyleSheet.absoluteFillObject} contentFit="cover" transition={300} />
             </TouchableOpacity>
           ) : (
             <LinearGradient 
@@ -187,7 +187,7 @@ export default function SkillDetails() {
             >
               <View style={styles.avatarPill}>
                 {authorProfile?.avatarUrl ? (
-                  <Image source={{ uri: authorProfile.avatarUrl }} style={styles.avatarImg} />
+                  <Image source={{ uri: authorProfile.avatarUrl }} style={styles.avatarImg} contentFit="cover" transition={200} />
                 ) : (
                   <LinearGradient colors={Gradients.primary} style={styles.avatarImg}>
                     <Text style={styles.avatarChar}>{(authorProfile?.name || 'S')[0]}</Text>

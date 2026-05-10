@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, deleteDoc, doc, query, orderBy, limit, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, getDoc, deleteDoc, doc, query, orderBy, limit, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,7 +22,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ 
-    users: 0, posts: 0, reports: 0, flagged: 0, marketVolume: 0,
+    users: 0, posts: 0, reports: 0, flagged: 0, aiCatches: 0, marketVolume: 0,
     categories: { lost: 0, market: 0, skills: 0 }
   });
   const [recentPosts, setRecentPosts] = useState<any[]>([]);
@@ -30,9 +30,22 @@ export default function AdminDashboard() {
   const [collegeRequests, setCollegeRequests] = useState<any[]>([]);
   const [moderationReports, setModerationReports] = useState<any[]>([]);
   const [expandedReport, setExpandedReport] = useState<string | null>(null);
+  const [reportMedia, setReportMedia] = useState<any>(null);
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const [activeTab, setActiveTab] = useState<'analytics' | 'posts' | 'users' | 'colleges' | 'reports'>('analytics');
+
+  const fetchReportMedia = async (col: string, id: string) => {
+    setReportMedia(null);
+    try {
+      const snap = await getDoc(doc(db, col, id));
+      if (snap.exists()) {
+        setReportMedia(snap.data());
+      }
+    } catch (e) {
+      console.error("Failed to fetch report media:", e);
+    }
+  };
   
   // Governance Security Check
   useEffect(() => {
@@ -74,12 +87,14 @@ export default function AdminDashboard() {
         ...marketSnap.docs.filter(d => d.data().isFlagged),
         ...skillSnap.docs.filter(d => d.data().isFlagged)
       ].length;
+      const aiCatches = reportsSnap.docs.filter(d => d.data().aiReport?.isFlagged).length;
 
       setStats({
         users: userSnap.size,
         posts: postSnap.size + marketSnap.size + skillSnap.size,
-        reports: reportsSnap.size + flaggedPosts,
+        reports: reportsSnap.size,
         flagged: flaggedPosts,
+        aiCatches: aiCatches,
         marketVolume: volume,
         categories: {
           lost: postSnap.size,
@@ -367,6 +382,21 @@ export default function AdminDashboard() {
               <Text style={styles.sectionTitle}>Moderation Reports</Text>
               <Text style={styles.headerSub}>{moderationReports.length} Active Incidents</Text>
             </View>
+
+            <View style={styles.modStatsRow}>
+              <View style={[styles.modStatCard, { borderColor: Colors.error + '40' }]}>
+                <Text style={styles.modStatVal}>{(stats as any).reports || 0}</Text>
+                <Text style={styles.modStatLabel}>Total Reports</Text>
+              </View>
+              <View style={[styles.modStatCard, { borderColor: Colors.primary + '40' }]}>
+                <Text style={styles.modStatVal}>{(stats as any).aiCatches || 0}</Text>
+                <Text style={styles.modStatLabel}>AI Catches</Text>
+              </View>
+              <View style={[styles.modStatCard, { borderColor: Colors.success + '40' }]}>
+                <Text style={styles.modStatVal}>{(stats as any).flagged || 0}</Text>
+                <Text style={styles.modStatLabel}>Manual Flags</Text>
+              </View>
+            </View>
             {moderationReports.length === 0 ? (
               <Text style={styles.emptyText}>No moderation reports found.</Text>
             ) : (
@@ -378,7 +408,16 @@ export default function AdminDashboard() {
                       <Text style={styles.protocolMeta}>{report.userEmail} • {report.postCategory || 'General'}</Text>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
-                      <TouchableOpacity onPress={() => setExpandedReport(expandedReport === report.id ? null : report.id)} style={styles.refreshBtn}>
+                      <TouchableOpacity 
+                        onPress={() => {
+                          const isExpanding = expandedReport !== report.id;
+                          setExpandedReport(isExpanding ? report.id : null);
+                          if (isExpanding && report.postId && report.postCollection) {
+                            fetchReportMedia(report.postCollection, report.postId);
+                          }
+                        }} 
+                        style={styles.refreshBtn}
+                      >
                         <Ionicons name={expandedReport === report.id ? "chevron-up" : "chevron-down"} size={18} color={Colors.primary} />
                       </TouchableOpacity>
                       <TouchableOpacity 
@@ -403,6 +442,30 @@ export default function AdminDashboard() {
                   {expandedReport === report.id && (
                     <View style={styles.reportDetailBox}>
                       <View style={styles.detailDivider} />
+                      
+                      {reportMedia && (
+                        <View style={styles.mediaPreviewScroll}>
+                          <Text style={styles.detailHeading}>ATTACHED MEDIA</Text>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingBottom: 15 }}>
+                            {reportMedia.imageUrl && (
+                              <Image source={{ uri: reportMedia.imageUrl }} style={styles.reportImage} />
+                            )}
+                            {reportMedia.imageUrls?.map((url: string, idx: number) => (
+                              <Image key={idx} source={{ uri: url }} style={styles.reportImage} />
+                            ))}
+                            {reportMedia.videoUrl && (
+                              <View style={styles.videoPlaceholder}>
+                                <Ionicons name="play-circle" size={32} color="#fff" />
+                                <Text style={styles.videoLabel}>Video Artifact</Text>
+                              </View>
+                            )}
+                            {(!reportMedia.imageUrl && !reportMedia.imageUrls && !reportMedia.videoUrl) && (
+                              <Text style={styles.detailText}>No media attached to this post.</Text>
+                            )}
+                          </ScrollView>
+                        </View>
+                      )}
+
                       <Text style={styles.detailHeading}>INCIDENT BREAKDOWN</Text>
                       
                       {report.details ? (
@@ -418,6 +481,21 @@ export default function AdminDashboard() {
                               </Text>
                             </View>
                           ))}
+
+                          {report.aiReport && (
+                            <View style={styles.aiInsightBox}>
+                              <View style={styles.aiInsightHeader}>
+                                <Ionicons name="sparkles" size={16} color={Colors.primary} />
+                                <Text style={styles.aiInsightTitle}>Gemini AI Insight</Text>
+                              </View>
+                              <Text style={styles.aiInsightReason}>
+                                {report.aiReport.isFlagged ? `🚨 Flagged: ${report.aiReport.reason}` : `✅ AI Verdict: Content appears safe.`}
+                              </Text>
+                              <View style={styles.confidenceBarArea}>
+                                <View style={[styles.confidenceBar, { width: `${(report.aiReport.confidence || 0) * 100}%`, backgroundColor: report.aiReport.isFlagged ? Colors.error : Colors.primary }]} />
+                              </View>
+                            </View>
+                          )}
 
                           {report.postId && report.postCollection && (
                             <TouchableOpacity 
@@ -577,6 +655,33 @@ const styles = StyleSheet.create({
   detailLabelArea: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   detailLabel: { ...Typography.caption, color: Colors.on_surface_variant, fontSize: 9, fontWeight: 'bold' },
   detailText: { ...Typography.body, color: Colors.on_surface, fontSize: 13, lineHeight: 18 },
+
+  mediaPreviewScroll: { marginBottom: 15 },
+  reportImage: { width: 120, height: 120, borderRadius: Roundness.md, backgroundColor: Colors.surface_container_highest },
+  videoPlaceholder: { 
+    width: 120, height: 120, borderRadius: Roundness.md, 
+    backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' 
+  },
+  videoLabel: { ...Typography.caption, color: '#fff', fontSize: 8, marginTop: 4, fontWeight: 'bold' },
+
+  aiInsightBox: { 
+    backgroundColor: 'rgba(98, 0, 238, 0.05)', 
+    padding: 12, 
+    borderRadius: Roundness.md, 
+    marginTop: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(98, 0, 238, 0.1)'
+  },
+  aiInsightHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  aiInsightTitle: { ...Typography.caption, color: Colors.primary, marginLeft: 6, fontWeight: 'bold', fontSize: 10, letterSpacing: 0.5 },
+  aiInsightReason: { ...Typography.body, fontSize: 12, color: Colors.on_surface, marginBottom: 8 },
+  confidenceBarArea: { height: 3, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 2, overflow: 'hidden' },
+  confidenceBar: { height: '100%', borderRadius: 2 },
+
+  modStatsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  modStatCard: { flex: 1, backgroundColor: '#fff', padding: 12, borderRadius: Roundness.md, borderWidth: 1, alignItems: 'center' },
+  modStatVal: { ...Typography.title, color: Colors.on_surface, marginBottom: 2 },
+  modStatLabel: { ...Typography.caption, color: Colors.on_surface_variant, fontSize: 10 },
 
   deletePostBtn: { 
     flexDirection: 'row', 

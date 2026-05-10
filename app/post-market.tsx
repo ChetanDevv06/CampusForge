@@ -13,6 +13,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImage } from '../utils/storage';
+import { moderateWithAI, moderateWithGemini } from '../utils/moderation';
+import * as FileSystem from 'expo-file-system';
 import ImageSourceModal from '../components/ImageSourceModal';
 import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
 
@@ -101,7 +103,7 @@ export default function PostMarketScreen() {
         mediaTypes: ['images'],
         allowsEditing: Platform.OS === 'ios',
         aspect: [4, 3],
-        quality: 0.7,
+        quality: 0.9,
       };
 
       const result = useCamera 
@@ -128,11 +130,22 @@ export default function PostMarketScreen() {
         imageUrl = await uploadImage(image, `marketplace/${user?.uid}/${Date.now()}`);
       }
 
-      const { moderateWithAI } = require('../utils/moderation');
       const modTitle = await moderateWithAI(title);
       const modDesc = await moderateWithAI(description);
 
-      const isFlagged = modTitle.isFlagged || modDesc.isFlagged;
+      // Super-Moderation with Gemini
+      let geminiResult = { isFlagged: false, reason: 'Clean' };
+      try {
+        let base64 = '';
+        if (image) {
+          base64 = await FileSystem.readAsStringAsync(image, { encoding: 'base64' });
+        }
+        geminiResult = await moderateWithGemini(`${title} ${description}`, base64);
+      } catch (err) {
+        console.warn("Gemini skip:", err);
+      }
+
+      const finalIsFlagged = modTitle.isFlagged || modDesc.isFlagged || geminiResult.isFlagged;
 
       const payload = {
         title: modTitle.cleanText, 
@@ -140,13 +153,14 @@ export default function PostMarketScreen() {
         category, 
         description: modDesc.cleanText,
         imageUrl,
-        isFlagged,
+        isFlagged: finalIsFlagged,
+        aiModeration: geminiResult,
         updatedAt: serverTimestamp(),
       };
 
       if (editId) {
         await updateDoc(doc(db, 'marketplace', editId), payload);
-        showFeedback('Success!', 'Listing updated.', 'success');
+        showFeedback('Item Refined', 'The marketplace listing has been successfully updated.', 'success');
         setTimeout(() => router.back(), 1500);
       } else {
         const docRef = await addDoc(collection(db, 'marketplace'), {
@@ -158,7 +172,7 @@ export default function PostMarketScreen() {
           status: 'available',
         });
 
-        if (isFlagged) {
+        if (finalIsFlagged) {
           // Consolidated report for Admin with link to post
           addDoc(collection(db, 'moderation_reports'), {
             type: 'Marketplace Listing',
@@ -170,6 +184,8 @@ export default function PostMarketScreen() {
             userName: profile?.name || 'Student',
             userCollege: profile?.collegeShortName || 'Campus',
             timestamp: serverTimestamp(),
+            hasMedia: !!imageUrl,
+            aiReport: geminiResult,
             details: {
               title: { text: title, flagged: modTitle.isFlagged },
               description: { text: description, flagged: modDesc.isFlagged }

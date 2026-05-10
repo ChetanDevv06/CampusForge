@@ -12,7 +12,8 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
 import { uploadImage, uploadVideoToStorage } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
-import { moderateWithAI } from '../utils/moderation';
+import { moderateWithAI, moderateWithGemini } from '../utils/moderation';
+import * as FileSystem from 'expo-file-system';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import ImageSourceModal from '../components/ImageSourceModal';
@@ -152,7 +153,7 @@ export default function CreatePostScreen() {
         allowsEditing: useCamera ? Platform.OS === 'ios' : false,
         allowsMultipleSelection: !useCamera,
         aspect: [4, 3],
-        quality: 0.7,
+        quality: 0.9,
       };
 
       console.log(`🚀 [Unified] Launching ${useCamera ? 'Camera' : 'Gallery'}...`);
@@ -277,9 +278,27 @@ export default function CreatePostScreen() {
         payload.tags = selectedTags;
       }
 
-      const docRef = await addDoc(collection(db, colName), payload);
+      // NEW: Smart AI Moderation with Gemini (Super-Moderation)
+      let geminiResult = { isFlagged: false, reason: 'Clean' };
+      try {
+        let base64 = '';
+        if (image) {
+          base64 = await FileSystem.readAsStringAsync(image, { encoding: 'base64' });
+        }
+        geminiResult = await moderateWithGemini(`${title} ${description} ${location}`, base64);
+      } catch (err) {
+        console.warn("Gemini check skipped or failed:", err);
+      }
 
-      if (isFlagged) {
+      const finalIsFlagged = isFlagged || geminiResult.isFlagged;
+
+      const docRef = await addDoc(collection(db, colName), {
+        ...payload,
+        isFlagged: finalIsFlagged,
+        aiModeration: geminiResult
+      });
+
+      if (finalIsFlagged) {
         // Consolidated report for Admin with link to post
         addDoc(collection(db, 'moderation_reports'), {
           type: 'Lost/Found Post',
@@ -291,6 +310,8 @@ export default function CreatePostScreen() {
           userName: profile?.name || userName,
           userCollege: profile?.collegeShortName || 'Campus',
           timestamp: serverTimestamp(),
+          hasMedia: !!(primaryImageUrl || imageUrls.length > 0 || videoUrl),
+          aiReport: geminiResult,
           details: {
             title: { text: title, flagged: modTitle.isFlagged },
             description: { text: description, flagged: modDesc.isFlagged },

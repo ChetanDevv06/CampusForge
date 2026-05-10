@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Image,
+  View, Text, StyleSheet, ScrollView,
   TouchableOpacity, ActivityIndicator, StatusBar, Platform, Dimensions
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { Alert } from 'react-native';
@@ -17,6 +18,8 @@ import ImageViewing from 'react-native-image-viewing';
 import { startChat } from '../../utils/chat';
 import ModernAlert from '../../components/ModernAlert';
 import LocationPreview from '../../components/LocationPreview';
+
+const { width } = Dimensions.get('window');
 
 export default function MarketDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -116,7 +119,7 @@ export default function MarketDetails() {
                   activeOpacity={0.9} 
                   onPress={() => { setViewerIndex(idx); setViewerVisible(true); }}
                 >
-                  <Image source={{ uri: url }} style={{ width, height: 400 }} />
+                  <Image source={{ uri: url }} style={{ width, height: 400 }} contentFit="cover" transition={300} />
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -125,7 +128,7 @@ export default function MarketDetails() {
               activeOpacity={0.9} 
               onPress={() => { setViewerIndex(0); setViewerVisible(true); }}
             >
-              <Image source={{ uri: product.imageUrl }} style={styles.heroImage} />
+              <Image source={{ uri: product.imageUrl }} style={styles.heroImage} contentFit="cover" transition={300} />
             </TouchableOpacity>
           ) : (
             <LinearGradient colors={Gradients.primary} style={styles.heroPlaceholder}>
@@ -180,7 +183,7 @@ export default function MarketDetails() {
             >
               <View style={styles.sellerAvatarBox}>
                 {authorProfile?.avatarUrl ? (
-                  <Image source={{ uri: authorProfile.avatarUrl }} style={styles.sellerAvatar} />
+                  <Image source={{ uri: authorProfile.avatarUrl }} style={styles.sellerAvatar} contentFit="cover" transition={200} />
                 ) : (
                   <LinearGradient colors={Gradients.primary} style={styles.sellerAvatar}>
                     <Text style={styles.avatarText}>{(authorProfile?.name || 'S')[0]}</Text>
@@ -290,7 +293,7 @@ const styles = StyleSheet.create({
 
   scrollContent: { paddingBottom: 140 },
   hero: { height: 420 },
-  heroImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  heroImage: { width: '100%', height: '100%' },
   heroPlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
   heroOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 160 },
   
