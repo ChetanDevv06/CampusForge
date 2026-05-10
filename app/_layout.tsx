@@ -26,6 +26,7 @@ import {
   PlusJakartaSans_800ExtraBold,
   useFonts
 } from '@expo-google-fonts/plus-jakarta-sans';
+import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -51,6 +52,7 @@ function RootLayoutNav() {
     Manrope_500Medium,
     Manrope_600SemiBold,
     Manrope_700Bold,
+    SpaceMono_400Regular,
   });
 
   // Use our centralized notifications hook

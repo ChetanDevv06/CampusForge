@@ -11,6 +11,7 @@ import { db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../constants/theme';
+import { moderateWithAI, moderateWithGemini } from '../utils/moderation';
 import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
 
 const { width } = Dimensions.get('window');
@@ -76,20 +77,27 @@ export default function PostSkillScreen() {
     }
     setLoading(true);
     try {
-      const { moderateWithAI } = require('../utils/moderation');
       const modTitle = await moderateWithAI(title);
       const modCategory = await moderateWithAI(category);
       const modDesc = await moderateWithAI(description);
 
-      const isFlagged = modTitle.isFlagged || modCategory.isFlagged || modDesc.isFlagged;
+      // Super-Moderation with Gemini
+      let geminiResult = { isFlagged: false, reason: 'Clean' };
+      try {
+        geminiResult = await moderateWithGemini(`${title} ${category} ${description}`);
+      } catch (err) {
+        console.warn("Gemini skip:", err);
+      }
 
+      const finalIsFlagged = modTitle.isFlagged || modCategory.isFlagged || modDesc.isFlagged || geminiResult.isFlagged;
 
       const payload = {
         title: modTitle.cleanText, 
         category: modCategory.cleanText, 
         description: modDesc.cleanText, 
         type,
-        isFlagged,
+        isFlagged: finalIsFlagged,
+        aiModeration: geminiResult,
         updatedAt: serverTimestamp(),
       };
 
@@ -107,7 +115,7 @@ export default function PostSkillScreen() {
           status: 'open',
         });
 
-        if (isFlagged) {
+        if (finalIsFlagged) {
           // Consolidated report for Admin with link to post
           addDoc(collection(db, 'moderation_reports'), {
             type: 'Skill Share Posting',
@@ -119,6 +127,8 @@ export default function PostSkillScreen() {
             userName: profile?.name || 'Student',
             userCollege: profile?.collegeShortName || 'Campus',
             timestamp: serverTimestamp(),
+            hasMedia: false,
+            aiReport: geminiResult,
             details: {
               title: { text: title, flagged: modTitle.isFlagged },
               category: { text: category, flagged: modCategory.isFlagged },

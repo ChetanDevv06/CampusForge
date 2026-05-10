@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  Image,
   Platform,
   ScrollView,
   Share,
@@ -17,6 +16,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { Image } from 'expo-image';
 import ImageViewing from 'react-native-image-viewing';
 import LocationPreview from '../../components/LocationPreview';
 import ModernAlert from '../../components/ModernAlert';
@@ -188,7 +188,7 @@ export default function ItemDetails() {
                     activeOpacity={0.9} 
                     onPress={() => { setViewerIndex(idx); setViewerVisible(true); }}
                   >
-                    <Image source={{ uri: url }} style={{ width: width - (Spacing.margin * 2), height: 380, borderRadius: 24 }} />
+                    <Image source={{ uri: url }} style={{ width: width - (Spacing.margin * 2), height: 380, borderRadius: 24 }} contentFit="cover" transition={300} />
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -197,7 +197,7 @@ export default function ItemDetails() {
                 activeOpacity={0.9} 
                 onPress={() => { setViewerIndex(0); setViewerVisible(true); }}
               >
-                <Image source={{ uri: item.imageUrl }} style={styles.heroImg} />
+                <Image source={{ uri: item.imageUrl }} style={styles.heroImg} contentFit="cover" transition={300} />
               </TouchableOpacity>
             )}
             <View style={styles.heroBadge}>
@@ -289,7 +289,7 @@ export default function ItemDetails() {
         <View style={styles.profileCard}>
           <View style={styles.profileAvatarWrap}>
             {authorProfile?.avatarUrl ? (
-              <Image source={{ uri: authorProfile.avatarUrl }} style={styles.profileAvatar} />
+              <Image source={{ uri: authorProfile.avatarUrl }} style={styles.profileAvatar} contentFit="cover" transition={200} />
             ) : (
               <View style={[styles.profileAvatar, { backgroundColor: '#6B52FF', justifyContent: 'center', alignItems: 'center' }]}>
                 <Text style={{ color: '#FFF', fontSize: 24, fontWeight: 'bold' }}>{authorNameObj[0]?.toUpperCase()}</Text>
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginBottom: Spacing.xl,
   },
-  heroImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  heroImg: { width: '100%', height: '100%' },
   heroBadge: {
     position: 'absolute', top: 16, left: 16,
     backgroundColor: '#6B52FF',

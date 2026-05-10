@@ -6,7 +6,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Animated,
-  Dimensions, Image, Platform,
+  Dimensions,
+  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -14,9 +15,75 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  PanResponder
 } from 'react-native';
-import { Colors, Fonts, Gradients, Roundness, Spacing, Typography } from '../../constants/theme';
+import { Image } from 'expo-image';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const DraggableAIButton = ({ onPress }: { onPress: () => void }) => {
+  const pan = useRef(new Animated.ValueXY({ 
+    x: SCREEN_WIDTH - 80, 
+    y: SCREEN_HEIGHT - 130 
+  })).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gesture) => {
+        return Math.abs(gesture.dx) > 10 || Math.abs(gesture.dy) > 10;
+      },
+      onPanResponderGrant: () => {
+        pan.setOffset({
+          x: (pan.x as any)._value,
+          y: (pan.y as any)._value
+        });
+      },
+      onPanResponderMove: Animated.event(
+        [null, { dx: pan.x, dy: pan.y }],
+        { useNativeDriver: false }
+      ),
+      onPanResponderRelease: () => {
+        pan.flattenOffset();
+      }
+    })
+  ).current;
+
+  return (
+    <Animated.View
+      style={[
+        styles.aiFloatingBtn,
+        {
+          transform: [
+            { translateX: pan.x },
+            { translateY: pan.y }
+          ],
+          zIndex: 999,
+          elevation: 10
+        },
+        { position: 'absolute', top: 0, left: 0 }
+      ]}
+      {...panResponder.panHandlers}
+    >
+      <TouchableOpacity 
+        onPress={onPress} 
+        activeOpacity={0.8}
+        style={{ flex: 1 }}
+      >
+        <LinearGradient
+          colors={['#6B52FF', '#9D52FF']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.aiBtnGradient}
+        >
+          <Ionicons name="sparkles" size={24} color="#FFF" />
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+import { Colors, Fonts, Gradients, Roundness, Shadows, Spacing, Typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../firebaseConfig';
 import { setMarketTab } from '../../utils/marketTabStore';
@@ -285,7 +352,7 @@ export default function HomeScreen() {
           <View style={styles.navLeft}>
             <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.avatarWrap}>
               {profile?.avatarUrl ? (
-                <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} />
+                <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} contentFit="cover" transition={200} />
               ) : (
                 <LinearGradient colors={Gradients.primary} style={styles.avatarPlaceholder}>
                   <Text style={styles.avatarText}>{initials}</Text>
@@ -525,7 +592,7 @@ export default function HomeScreen() {
                     <TouchableOpacity key={item.id} style={styles.feedCardContainer} onPress={() => router.push({ pathname: '/market-details/[id]', params: { id: item.id } } as any)}>
                       {item.imageUrl ? (
                         <View style={styles.feedImageWrap}>
-                          <Image source={{ uri: item.imageUrl }} style={styles.feedImageFull} />
+                          <Image source={{ uri: item.imageUrl }} style={styles.feedImageFull} contentFit="cover" transition={300} />
                           <View style={styles.pricePill}><Text style={styles.pricePillText}>₹{item.price || '0.00'}</Text></View>
                         </View>
                       ) : null}
@@ -575,7 +642,7 @@ export default function HomeScreen() {
                     <TouchableOpacity key={item.id} style={styles.feedCardContainer} onPress={() => router.push({ pathname: '/item-details/[id]', params: { id: item.id } } as any)}>
                       {item.imageUrl ? (
                         <View style={styles.feedImageWrap}>
-                          <Image source={{ uri: item.imageUrl }} style={styles.feedImageFull} />
+                          <Image source={{ uri: item.imageUrl }} style={styles.feedImageFull} contentFit="cover" transition={300} />
                         </View>
                       ) : null}
                       <View style={styles.feedCardBody}>
@@ -608,6 +675,9 @@ export default function HomeScreen() {
         </Animated.View>
 
       </ScrollView>
+
+      {/* Draggable Floating AI Assistant Button (Disabled) */}
+      {/* <DraggableAIButton onPress={() => router.push('/assistant')} /> */}
     </View>
   );
 }
@@ -777,7 +847,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A20',
   },
   feedImageWrap: { height: 260, width: '100%', backgroundColor: '#27272a' },
-  feedImageFull: { width: '100%', height: '100%', resizeMode: 'cover' },
+  feedImageFull: { width: '100%', height: '100%' },
   pricePill: {
     position: 'absolute', top: 16, right: 16,
     backgroundColor: 'rgba(0,0,0,0.6)',
@@ -819,4 +889,20 @@ const styles = StyleSheet.create({
   },
   placeholderOverlay: { position: 'absolute', top: 0, right: 24 },
   placeholderText: { ...Typography.body_medium, color: '#5A5A5E', fontSize: 16 },
+  aiFloatingBtn: {
+    position: 'absolute',
+    right: 20,
+    bottom: Platform.OS === 'ios' ? 100 : 80,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    ...(Shadows?.lg || {}),
+    elevation: 8,
+  },
+  aiBtnGradient: {
+    flex: 1,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });
