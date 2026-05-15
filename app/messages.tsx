@@ -29,7 +29,10 @@ export default function MessagesScreen() {
   const getOtherName = (conv: any) => {
     if (!uid) return 'Unknown';
     const otherId = conv.participants.find((p: string) => p !== uid);
-    return conv.participantNames?.[otherId] || 'Campus Student';
+    const name = conv.participantNames?.[otherId];
+    // If the database accidentally stored "Me", show a better fallback
+    if (!name || name === 'Me') return 'Campus Student';
+    return name;
   };
 
   const filteredConversations = conversations.filter(conv => {

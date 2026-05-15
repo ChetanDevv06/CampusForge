@@ -357,21 +357,52 @@ export default function AdminDashboard() {
 
         {activeTab === 'colleges' && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>College Requests</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Campus Requests</Text>
+              <View style={styles.badgeCount}>
+                <Text style={styles.badgeText}>{collegeRequests.length} PENDING</Text>
+              </View>
+            </View>
+            
             {collegeRequests.length === 0 ? (
-              <Text style={styles.emptyText}>No pending requests.</Text>
+              <BlurView intensity={10} tint="dark" style={styles.emptyStateCard}>
+                <Ionicons name="school-outline" size={40} color="rgba(255,255,255,0.1)" />
+                <Text style={styles.emptyText}>All campuses are currently synchronized. No new requests.</Text>
+              </BlurView>
             ) : (
               collegeRequests.map((req) => (
-                <View key={req.id} style={styles.protocolItem}>
-                  <View style={styles.protocolInfo}>
-                    <Text style={styles.protocolTitle}>{req.name}</Text>
-                    <Text style={styles.protocolMeta}>{req.domain}</Text>
+                <BlurView key={req.id} intensity={20} tint="dark" style={styles.requestCard}>
+                  <View style={styles.requestHeader}>
+                    <View style={styles.requestInfo}>
+                      <Text style={styles.requestTitle}>{req.name}</Text>
+                      <View style={styles.domainBadge}>
+                        <Ionicons name="at-circle" size={14} color={Colors.primary} />
+                        <Text style={styles.domainText}>{req.domain}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.requestActions}>
+                      <TouchableOpacity 
+                        style={[styles.actionIconBtn, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]} 
+                        onPress={() => handleApproveCollege(req)}
+                      >
+                        <Ionicons name="checkmark" size={20} color={Colors.success} />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[styles.actionIconBtn, { backgroundColor: 'rgba(244, 67, 54, 0.1)' }]} 
+                        onPress={() => handleRejectCollege(req.id)}
+                      >
+                        <Ionicons name="trash-outline" size={20} color={Colors.error} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TouchableOpacity onPress={() => handleApproveCollege(req)}><Ionicons name="checkmark-circle" size={24} color={Colors.success} /></TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleRejectCollege(req.id)}><Ionicons name="close-circle" size={24} color={Colors.error} /></TouchableOpacity>
+                  
+                  <View style={styles.requestFooter}>
+                    <Text style={styles.requestMeta}>
+                      <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.3)" /> {req.location || 'Unknown Location'}
+                    </Text>
+                    <Text style={styles.requestUser}>Requested by: {req.requestedByEmail?.split('@')[0] || 'Student'}</Text>
                   </View>
-                </View>
+                </BlurView>
               ))
             )}
           </View>
@@ -702,4 +733,20 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5
   },
+
+  // College Request Styles
+  badgeCount: { backgroundColor: Colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  emptyStateCard: { padding: 40, alignItems: 'center', borderRadius: Roundness.xl, borderDashOffset: 1, borderStyle: 'dashed', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  requestCard: { borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', overflow: 'hidden' },
+  requestHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  requestInfo: { flex: 1, marginRight: 15 },
+  requestTitle: { color: '#FFF', fontSize: 18, fontWeight: '700', marginBottom: 6 },
+  domainBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(99, 102, 241, 0.1)', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, gap: 4 },
+  domainText: { color: Colors.primary, fontSize: 12, fontWeight: '600' },
+  requestActions: { flexDirection: 'row', gap: 10 },
+  actionIconBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  requestFooter: { marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  requestMeta: { color: 'rgba(255,255,255,0.4)', fontSize: 12 },
+  requestUser: { color: 'rgba(255,255,255,0.2)', fontSize: 11, fontStyle: 'italic' },
 });

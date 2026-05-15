@@ -15,6 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { uploadImage } from '../utils/storage';
 import { moderateWithAI, moderateWithGemini } from '../utils/moderation';
 import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
 import ImageSourceModal from '../components/ImageSourceModal';
 import FeedbackModal, { FeedbackType } from '../components/FeedbackModal';
 
@@ -138,7 +139,13 @@ export default function PostMarketScreen() {
       try {
         let base64 = '';
         if (image) {
-          base64 = await FileSystem.readAsStringAsync(image, { encoding: 'base64' });
+          // Resize for AI check to prevent OOM
+          const manipResult = await ImageManipulator.manipulateAsync(
+            image,
+            [{ resize: { width: 512 } }],
+            { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+          base64 = manipResult.base64 || '';
         }
         geminiResult = await moderateWithGemini(`${title} ${description}`, base64);
       } catch (err) {
