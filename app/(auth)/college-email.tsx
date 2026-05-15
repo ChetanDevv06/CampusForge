@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ActivityIndicator, StatusBar, Platform, KeyboardAvoidingView,
+  ActivityIndicator, StatusBar, Platform, KeyboardAvoidingView, Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +13,9 @@ import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../.
 import { validateCollegeEmail, incrementCollegeMemberCount } from '../../utils/colleges';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FeedbackModal, { FeedbackType } from '../../components/FeedbackModal';
+import { BlurView } from 'expo-blur';
+
+const { width } = Dimensions.get('window');
 
 type Step = 'email-entry' | 'check-inbox';
 
@@ -47,7 +50,6 @@ export default function CollegeEmailScreen() {
     const email = collegeEmail.trim().toLowerCase();
     if (!email) { showAlert('Required', 'Please enter your college email address.'); return; }
 
-    // Validate domain
     const emailDomain = email.split('@')[1];
     const validDomains = college.domains?.length ? college.domains : [college.domain];
     const isValid = validDomains.some(d => emailDomain === d.toLowerCase());
@@ -64,7 +66,6 @@ export default function CollegeEmailScreen() {
 
     setLoading(true);
     try {
-      // Store college info + mark as pending verification
       await updateDoc(doc(db, 'users', currentUser.uid), {
         collegeId: college.id,
         collegeName: college.name,
@@ -74,12 +75,8 @@ export default function CollegeEmailScreen() {
         collegeEmailVerified: false,
       });
 
-      // Send Firebase email verification (to the user's primary auth email)
       await sendEmailVerification(currentUser);
-      
-      // Increment college member count early to show activity
       await incrementCollegeMemberCount(college.id);
-
       setStep('check-inbox');
     } catch (e: any) {
       showAlert('Error', e.message || 'Failed to send verification email.');
@@ -95,7 +92,6 @@ export default function CollegeEmailScreen() {
     try {
       await currentUser.reload();
       if (currentUser.emailVerified) {
-        // Mark verified in Firestore
         await updateDoc(doc(db, 'users', currentUser.uid), {
           collegeEmailVerified: true,
         });
@@ -128,103 +124,91 @@ export default function CollegeEmailScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <View style={[styles.glow, { top: -60, left: -60 }]} />
+      
+      {/* Background Decor */}
+      <View style={StyleSheet.absoluteFill}>
+        <LinearGradient colors={['#0F172A', '#1E293B', '#020617']} style={StyleSheet.absoluteFill} />
+        <View style={styles.glow1} />
+        <View style={styles.glow2} />
+      </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={[styles.content, { paddingTop: insets.top + 20 }]}>
-
-          {/* Back button */}
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color={Colors.on_background} />
+            <Ionicons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
 
-          {step === 'email-entry' ? (
-            <>
-              {/* College identity */}
-              <View style={styles.collegeTag}>
-                <View style={styles.collegeIconBox}>
-                  <Text style={styles.collegeInitial}>{collegeName?.[0] || 'C'}</Text>
+          <BlurView intensity={20} tint="dark" style={styles.glassCard}>
+            {step === 'email-entry' ? (
+              <>
+                <View style={styles.header}>
+                  <View style={styles.iconBox}>
+                    <Ionicons name="school" size={24} color={Colors.primary} />
+                  </View>
+                  <Text style={styles.title}>Join your campus</Text>
+                  <Text style={styles.subtitle}>Verify your membership at {collegeName}</Text>
                 </View>
-                <View>
-                  <Text style={styles.collegeTagName} numberOfLines={1}>{collegeName}</Text>
-                  <Text style={styles.collegeTagDomain}>@{collegeDomain}</Text>
+
+                <View style={styles.inputBox}>
+                  <Ionicons name="mail-outline" size={20} color="rgba(255,255,255,0.4)" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder={`you@${collegeDomain}`}
+                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    value={collegeEmail}
+                    onChangeText={setCollegeEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    autoCorrect={false}
+                  />
                 </View>
-              </View>
 
-              <Text style={styles.title}>Verify College{'\n'}Membership</Text>
-              <Text style={styles.subtitle}>
-                Enter your official <Text style={{ color: Colors.secondary }}>@{collegeDomain}</Text> email address to verify you're a student of {collegeName}.
-              </Text>
+                <Text style={styles.helperText}>
+                  We'll send a secure verification link to your official student email.
+                </Text>
 
-              <View style={styles.inputBox}>
-                <Ionicons name="mail" size={20} color={Colors.on_surface_variant} />
-                <TextInput
-                  style={styles.input}
-                  placeholder={`you@${collegeDomain}`}
-                  placeholderTextColor={Colors.on_surface_variant}
-                  value={collegeEmail}
-                  onChangeText={setCollegeEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  autoCorrect={false}
-                />
-              </View>
-
-              <Text style={styles.notice}>
-                <Ionicons name="information-circle-outline" size={13} color={Colors.on_surface_variant} />
-                {' '}A verification link will be sent to this email. You must click it to join the campus community.
-              </Text>
-
-              <TouchableOpacity style={styles.btn} onPress={handleSendVerification} disabled={loading}>
-                <LinearGradient colors={Gradients.primary} style={styles.btnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                  {loading
-                    ? <ActivityIndicator color="#fff" />
-                    : <>
-                        <Ionicons name="send" size={18} color="#fff" />
-                        <Text style={styles.btnText}>Send Verification</Text>
+                <TouchableOpacity style={styles.mainBtn} onPress={handleSendVerification} disabled={loading}>
+                  <LinearGradient colors={Gradients.primary} style={styles.btnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                    {loading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <>
+                        <Text style={styles.btnText}>Verify Membership</Text>
+                        <Ionicons name="arrow-forward" size={18} color="#fff" />
                       </>
-                  }
-                </LinearGradient>
-              </TouchableOpacity>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={styles.successState}>
+                <View style={styles.successIconBox}>
+                  <Ionicons name="mail-open" size={40} color={Colors.primary} />
+                </View>
+                <Text style={styles.title}>Check your inbox</Text>
+                <Text style={styles.subtitle}>We've sent a verification link to your student email.</Text>
+                
+                <View style={styles.infoRow}>
+                  <Ionicons name="shield-checkmark" size={18} color="rgba(255,255,255,0.4)" />
+                  <Text style={styles.infoText}>Click the link to activate your account</Text>
+                </View>
 
-              <TouchableOpacity onPress={() => router.back()} style={styles.changeCollege}>
-                <Text style={styles.changeCollegeText}>Change college</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              {/* Check inbox state */}
-              <LinearGradient colors={Gradients.foundBadge} style={styles.successIcon}>
-                <Ionicons name="mail-open" size={40} color="#fff" />
-              </LinearGradient>
+                <TouchableOpacity style={styles.mainBtn} onPress={handleCheckVerified} disabled={loading}>
+                  <LinearGradient colors={Gradients.primary} style={styles.btnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                    {loading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.btnText}>I've verified my email</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
 
-              <Text style={styles.title}>Check Your{'\n'}Inbox</Text>
-              <Text style={styles.subtitle}>
-                We sent a verification link to your registered email. Click the link to confirm your {collegeName} membership.
-              </Text>
-
-              <View style={styles.infoCard}>
-                <Ionicons name="school" size={18} color={Colors.primary} />
-                <Text style={styles.infoCardText}>{collegeName} community</Text>
+                <TouchableOpacity onPress={handleResend} style={styles.secondaryBtn}>
+                  <Text style={styles.secondaryBtnText}>Didn't get the email? Resend</Text>
+                </TouchableOpacity>
               </View>
-
-              <TouchableOpacity style={styles.btn} onPress={handleCheckVerified} disabled={loading}>
-                <LinearGradient colors={Gradients.primary} style={styles.btnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                  {loading
-                    ? <ActivityIndicator color="#fff" />
-                    : <>
-                        <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                        <Text style={styles.btnText}>I've Verified My Email</Text>
-                      </>
-                  }
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={handleResend} style={styles.changeCollege}>
-                <Text style={styles.changeCollegeText}>Resend verification email</Text>
-              </TouchableOpacity>
-            </>
-          )}
+            )}
+          </BlurView>
         </View>
       </KeyboardAvoidingView>
 
@@ -234,68 +218,67 @@ export default function CollegeEmailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  glow: { position: 'absolute', width: 240, height: 240, borderRadius: 120, backgroundColor: Colors.primary + '20' },
+  container: { flex: 1, backgroundColor: '#020617' },
+  glow1: { position: 'absolute', top: -100, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: Colors.primary, opacity: 0.15 },
+  glow2: { position: 'absolute', bottom: 50, left: -100, width: 300, height: 300, borderRadius: 150, backgroundColor: Colors.secondary, opacity: 0.1 },
+  
   content: { flex: 1, paddingHorizontal: 24 },
+  backBtn: { width: 44, height: 44, justifyContent: 'center', marginBottom: 20 },
 
-  backBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: Colors.surface_container_low,
-    justifyContent: 'center', alignItems: 'center',
-    marginBottom: 24,
+  glassCard: {
+    borderRadius: 32,
+    padding: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    overflow: 'hidden',
   },
 
-  collegeTag: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: Colors.surface_container_low,
-    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
-    marginBottom: 28, alignSelf: 'flex-start',
+  header: { marginBottom: 32 },
+  iconBox: {
+    width: 56, height: 56,
+    borderRadius: 16,
+    backgroundColor: 'rgba(107, 82, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(107, 82, 255, 0.2)',
   },
-  collegeIconBox: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: Colors.primary + '25',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  collegeInitial: { fontSize: 18, fontWeight: '800', color: Colors.primary, fontFamily: 'PlusJakartaSans_800ExtraBold' },
-  collegeTagName: { fontSize: 14, fontWeight: '700', color: Colors.on_background, fontFamily: 'PlusJakartaSans_700Bold' },
-  collegeTagDomain: { fontSize: 12, color: Colors.on_surface_variant, fontFamily: 'Manrope_400Regular' },
-
-  title: {
-    fontSize: 32, fontWeight: '800',
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    color: Colors.on_background, lineHeight: 38, marginBottom: 12,
-  },
-  subtitle: {
-    fontSize: 15, color: Colors.on_surface_variant,
-    fontFamily: 'Manrope_400Regular', lineHeight: 22, marginBottom: 28,
-  },
+  title: { color: '#FFF', fontSize: 28, fontWeight: '800', marginBottom: 8 },
+  subtitle: { color: 'rgba(255,255,255,0.5)', fontSize: 16, lineHeight: 22 },
 
   inputBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: Colors.surface_container_low,
-    borderRadius: 16, paddingHorizontal: 16, height: 60, marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 60,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    marginBottom: 16,
   },
-  input: { flex: 1, color: Colors.on_background, fontSize: 15, fontFamily: 'Manrope_500Medium' },
+  inputIcon: { marginRight: 12 },
+  input: { flex: 1, color: '#FFF', fontSize: 16 },
 
-  notice: { fontSize: 12, color: Colors.on_surface_variant, fontFamily: 'Manrope_400Regular', marginBottom: 28, lineHeight: 18 },
+  helperText: { color: 'rgba(255,255,255,0.4)', fontSize: 13, lineHeight: 18, marginBottom: 32 },
 
-  btn: { borderRadius: Roundness.full, overflow: 'hidden', height: 58, ...Shadows.ambient, marginBottom: 16 },
+  mainBtn: { height: 58, borderRadius: 29, overflow: 'hidden' },
   btnGrad: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
-  btnText: { color: '#fff', fontSize: 17, fontWeight: '700', fontFamily: 'PlusJakartaSans_700Bold' },
+  btnText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
 
-  changeCollege: { alignItems: 'center', paddingVertical: 8 },
-  changeCollegeText: { color: Colors.primary, fontSize: 14, fontFamily: 'Manrope_600SemiBold' },
+  successState: { alignItems: 'center' },
+  successIconBox: {
+    width: 80, height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(107, 82, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 32 },
+  infoText: { color: 'rgba(255,255,255,0.5)', fontSize: 14 },
 
-  // Check inbox step
-  successIcon: {
-    width: 80, height: 80, borderRadius: 24,
-    justifyContent: 'center', alignItems: 'center',
-    marginBottom: 24, ...Shadows.ambient,
-  },
-  infoCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: Colors.surface_container_low,
-    borderRadius: 12, padding: 14, marginBottom: 28,
-  },
-  infoCardText: { flex: 1, color: Colors.on_background, fontSize: 14, fontFamily: 'Manrope_600SemiBold' },
+  secondaryBtn: { marginTop: 20, padding: 10 },
+  secondaryBtnText: { color: Colors.primary, fontWeight: '600' },
 });

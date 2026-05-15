@@ -14,6 +14,7 @@ import { uploadImage, uploadVideoToStorage } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { moderateWithAI, moderateWithGemini } from '../utils/moderation';
 import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import ImageSourceModal from '../components/ImageSourceModal';
@@ -283,7 +284,13 @@ export default function CreatePostScreen() {
       try {
         let base64 = '';
         if (image) {
-          base64 = await FileSystem.readAsStringAsync(image, { encoding: 'base64' });
+          // Resize image for AI moderation to prevent memory issues
+          const manipResult = await ImageManipulator.manipulateAsync(
+            image,
+            [{ resize: { width: 512 } }],
+            { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+          base64 = manipResult.base64 || '';
         }
         geminiResult = await moderateWithGemini(`${title} ${description} ${location}`, base64);
       } catch (err) {

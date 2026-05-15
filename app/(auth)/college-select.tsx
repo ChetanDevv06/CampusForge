@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, FlatList,
-  TouchableOpacity, ActivityIndicator, StatusBar, Platform, KeyboardAvoidingView, Image, Dimensions
+  TouchableOpacity, ActivityIndicator, StatusBar, Platform, KeyboardAvoidingView, Image, Dimensions, Modal
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,10 +11,11 @@ import { searchColleges, College, requestCollege, SEED_COLLEGES } from '../../ut
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { auth, db } from '../../firebaseConfig';
-import { writeBatch, doc, serverTimestamp, collection, onSnapshot, query, where, limit, getCountFromServer } from 'firebase/firestore';
+import { writeBatch, doc, serverTimestamp, collection, onSnapshot, query, where, limit, getCountFromServer, orderBy } from 'firebase/firestore';
 import FeedbackModal, { FeedbackType } from '../../components/FeedbackModal';
+import { BlurView } from 'expo-blur';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 export default function CollegeSelectScreen() {
   const router = useRouter();
@@ -25,7 +26,11 @@ export default function CollegeSelectScreen() {
   const [search, setSearch] = useState('');
   const [colleges, setColleges] = useState<College[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showRequest, setShowRequest] = useState(false);
+
+  // Request Modal State
+  const [requestVisible, setRequestVisible] = useState(false);
+  const [requestData, setRequestData] = useState({ name: '', domain: '', location: '' });
+  const [requesting, setRequesting] = useState(false);
 
   // Feedback
   const [feedbackVisible, setFeedbackVisible] = useState(false);
@@ -39,7 +44,8 @@ export default function CollegeSelectScreen() {
   useEffect(() => {
     setLoading(true);
     const collegesRef = collection(db, 'colleges');
-    const q = query(collegesRef, where('verified', '==', true), limit(50));
+    // Order by memberCount descending so active colleges are on top
+    const q = query(collegesRef, where('verified', '==', true), orderBy('memberCount', 'desc'), limit(50));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const allColleges = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as College));
@@ -89,7 +95,7 @@ export default function CollegeSelectScreen() {
     }
   };
 
-  const handleSeedFromEmpty = async () => {
+  const handleSeed = async () => {
     setLoading(true);
     try {
       const batch = writeBatch(db);
@@ -103,11 +109,33 @@ export default function CollegeSelectScreen() {
         });
       });
       await batch.commit();
-      showAlert('Database Ready', 'Initial campuses have been seeded for you!', 'success');
+      showAlert('Database Ready', 'Initial campuses have been seeded!', 'success');
     } catch (e: any) {
       showAlert('Seed Error', e.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRequestSubmit = async () => {
+    if (!requestData.name || !requestData.domain) {
+      showAlert('Required', 'Please fill in the college name and domain.');
+      return;
+    }
+    setRequesting(true);
+    try {
+      await requestCollege({
+        ...requestData,
+        requestedBy: user?.uid || 'anonymous',
+        requestedByEmail: user?.email || 'anonymous',
+      });
+      setRequestVisible(false);
+      setRequestData({ name: '', domain: '', location: '' });
+      showAlert('Request Sent', "We'll review your college and add it soon!", 'success');
+    } catch (e: any) {
+      showAlert('Error', e.message);
+    } finally {
+      setRequesting(false);
     }
   };
 
@@ -121,65 +149,62 @@ export default function CollegeSelectScreen() {
   };
 
   const renderCollegeItem = ({ item, index }: { item: College; index: number }) => {
-    const isFirst = index === 0 && search === '';
+    const isPopular = item.memberCount >= 100 && index < 3 && search === '';
+    const isTopOne = index === 0 && search === '';
     
     return (
-      <View style={[styles.card, isFirst && styles.premiumCard]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.logoContainer}>
-             {item.logo ? (
-               <Image source={{ uri: item.logo }} style={styles.logo} />
-             ) : (
-               <LinearGradient colors={Gradients.primary} style={styles.logoPlaceholder}>
-                 <Text style={styles.logoInitial}>{item.shortName[0]}</Text>
-               </LinearGradient>
-             )}
-          </View>
-          {isFirst && (
-            <View style={styles.topChoiceBadge}>
-              <Text style={styles.topChoiceText}>TOP CHOICE</Text>
+      <TouchableOpacity 
+        activeOpacity={0.9} 
+        onPress={() => handleSelect(item)}
+        style={styles.cardWrapper}
+      >
+        <BlurView intensity={20} tint="dark" style={[styles.card, isTopOne && styles.premiumCard]}>
+          <View style={styles.cardHeader}>
+            <View style={styles.logoContainer}>
+              {item.logo ? (
+                <Image source={{ uri: item.logo }} style={styles.logo} />
+              ) : (
+                <LinearGradient colors={Gradients.primary} style={styles.logoPlaceholder}>
+                  <Text style={styles.logoInitial}>{item.shortName[0]}</Text>
+                </LinearGradient>
+              )}
             </View>
-          )}
-        </View>
+            <View style={styles.headerRight}>
+              {isPopular && (
+                <View style={styles.topChoiceBadge}>
+                  <Text style={styles.topChoiceText}>POPULAR</Text>
+                </View>
+              )}
+              <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.3)" />
+            </View>
+          </View>
 
-        <Text style={styles.collegeName}>{item.name}</Text>
-        <Text style={styles.collegeDetails}>
-          {item.location} • {item.memberCount > 0 ? `${item.memberCount}+ students active` : 'Be the first to join!'}
-        </Text>
-
-        <TouchableOpacity 
-          activeOpacity={0.7}
-          style={isFirst ? styles.selectBtnPremium : styles.selectBtn} 
-          onPress={() => handleSelect(item)}
-        >
-          {isFirst ? (
-            <LinearGradient colors={['#A594FF', '#8B76FF']} style={styles.selectBtnGrad} start={{x:0, y:0}} end={{x:1, y:1}}>
-              <Text style={styles.selectBtnTextPremium}>Select {item.shortName}</Text>
-            </LinearGradient>
-          ) : (
-            <Text style={styles.selectBtnText}>Select</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+          <Text style={styles.collegeName}>{item.name}</Text>
+          <Text style={styles.collegeDetails}>
+            {item.location} • {item.memberCount > 0 ? `${item.memberCount}+ members` : 'New Community'}
+          </Text>
+        </BlurView>
+      </TouchableOpacity>
     );
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       
-      {/* Top Navbar */}
-      <View style={styles.navBar}>
-        <View style={styles.navLeft}>
-          <Ionicons name="school" size={24} color="#A594FF" />
-          <Text style={styles.navTitle}>Select Campus</Text>
-        </View>
-        <TouchableOpacity 
-          style={styles.navSearchBtn} 
-          onPress={handleLogout}
-          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-        >
-          <Ionicons name="log-out-outline" size={22} color="#8A8D93" />
+      <View style={StyleSheet.absoluteFill}>
+        <LinearGradient colors={['#0F172A', '#1E293B', '#020617']} style={StyleSheet.absoluteFill} />
+        <View style={styles.glow1} />
+        <View style={styles.glow2} />
+      </View>
+      
+      <View style={[styles.navBar, { paddingTop: insets.top + 10 }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color="#FFF" />
+        </TouchableOpacity>
+        <Text style={styles.navTitle}>Select Campus</Text>
+        <TouchableOpacity style={styles.navActionBtn} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={22} color="rgba(255,255,255,0.5)" />
         </TouchableOpacity>
       </View>
 
@@ -190,68 +215,100 @@ export default function CollegeSelectScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          <>
-            <View style={styles.hero}>
-              <Text style={styles.heroTitle}>Hey there! 👋</Text>
-              <Text style={styles.heroSub}>Where are you studying these days?</Text>
-            </View>
+          <View style={styles.header}>
+            <Text style={styles.heroTitle}>Find your hub</Text>
+            <Text style={styles.heroSub}>Choose your campus to join the loop</Text>
 
             <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color="#5A5A5E" style={styles.searchIcon} />
-              <TextInput 
-                style={styles.searchInput}
-                placeholder="Search your university..."
-                placeholderTextColor="#5A5A5E"
-                value={search}
-                onChangeText={setSearch}
-                autoCorrect={false}
-              />
+              <BlurView intensity={30} tint="dark" style={styles.searchBlur}>
+                <Ionicons name="search" size={20} color={Colors.primary} style={styles.searchIcon} />
+                <TextInput 
+                  style={styles.searchInput}
+                  placeholder="Search your college..."
+                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  value={search}
+                  onChangeText={setSearch}
+                  autoCorrect={false}
+                />
+              </BlurView>
             </View>
-
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Popular Hubs</Text>
-              <TouchableOpacity>
-                <Text style={styles.viewAll}>View all</Text>
-              </TouchableOpacity>
-            </View>
-          </>
+          </View>
         }
         ListFooterComponent={
-          <View style={styles.footer}>
-            <View style={styles.requestCard}>
-               <View style={styles.requestIconBox}>
-                 <Ionicons name="business" size={24} color="#FF94B4" />
-               </View>
-               <Text style={styles.requestTitle}>Can't find your campus?</Text>
-               <Text style={styles.requestSub}>Tell us where you study and we'll bring the Digital Commons to your doorstep.</Text>
-               
-               <TouchableOpacity style={styles.requestBtn} onPress={() => router.push('/(auth)/college-select')}>
-                 <Text style={styles.requestBtnText}>Request New College</Text>
-                 <Ionicons name="arrow-forward" size={16} color="#FFF" />
-               </TouchableOpacity>
-            </View>
+          <View style={styles.footerSection}>
+            <BlurView intensity={10} tint="dark" style={styles.requestFooterCard}>
+              <Text style={styles.requestFooterTitle}>Can't find your university?</Text>
+              <TouchableOpacity style={styles.requestFooterBtn} onPress={() => setRequestVisible(true)}>
+                <Text style={styles.requestFooterBtnText}>Request Campus</Text>
+                <Ionicons name="add-circle-outline" size={20} color={Colors.primary} />
+              </TouchableOpacity>
+            </BlurView>
+            
+            {colleges.length === 0 && !loading && (
+              <TouchableOpacity style={styles.seedBtn} onPress={handleSeed}>
+                <Text style={styles.seedBtnText}>Initialize Database</Text>
+              </TouchableOpacity>
+            )}
           </View>
         }
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator color="#A594FF" style={{ marginTop: 40 }} />
+            <ActivityIndicator color={Colors.primary} style={{ marginTop: 40 }} />
           ) : (
             <View style={styles.empty}>
-              <Ionicons name="alert-circle-outline" size={48} color="#8A8D93" style={{ marginBottom: 16 }} />
-              <Text style={styles.emptyText}>No results matching your search</Text>
-              
-              {search === '' && (
-                <TouchableOpacity 
-                  style={{ marginTop: 24, padding: 16, backgroundColor: '#1E1E24', borderRadius: 16 }}
-                  onPress={handleSeedFromEmpty}
-                >
-                  <Text style={{ color: '#A594FF', fontWeight: 'bold' }}>Seed Sample Colleges</Text>
-                </TouchableOpacity>
-              )}
+              <Ionicons name="search-outline" size={48} color="rgba(255,255,255,0.1)" />
+              <Text style={styles.emptyText}>No campuses found matching "{search}"</Text>
             </View>
           )
         }
       />
+
+      {/* Request Modal */}
+      <Modal visible={requestVisible} transparent animationType="fade">
+        <BlurView intensity={80} tint="dark" style={styles.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <BlurView intensity={40} tint="dark" style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Request Campus</Text>
+                <TouchableOpacity onPress={() => setRequestVisible(false)}>
+                  <Ionicons name="close" size={24} color="#FFF" />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.modalForm}>
+                <View style={styles.modalInputBox}>
+                  <Text style={styles.modalLabel}>University Name</Text>
+                  <TextInput 
+                    style={styles.modalInput} 
+                    placeholder="e.g. Stanford University" 
+                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    value={requestData.name}
+                    onChangeText={v => setRequestData(d => ({ ...d, name: v }))}
+                  />
+                </View>
+                
+                <View style={styles.modalInputBox}>
+                  <Text style={styles.modalLabel}>Email Domain</Text>
+                  <TextInput 
+                    style={styles.modalInput} 
+                    placeholder="e.g. stanford.edu" 
+                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    value={requestData.domain}
+                    onChangeText={v => setRequestData(d => ({ ...d, domain: v }))}
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleRequestSubmit} disabled={requesting}>
+                  <LinearGradient colors={Gradients.primary} style={styles.modalSubmitGrad} start={{x:0, y:0}} end={{x:1, y:1}}>
+                    {requesting ? <ActivityIndicator color="#FFF" /> : <Text style={styles.modalSubmitText}>Submit Request</Text>}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </BlurView>
+          </KeyboardAvoidingView>
+        </BlurView>
+      </Modal>
 
       <FeedbackModal isVisible={feedbackVisible} onClose={() => setFeedbackVisible(false)} title={feedbackConfig.title} message={feedbackConfig.message} type={feedbackConfig.type} />
     </View>
@@ -259,132 +316,111 @@ export default function CollegeSelectScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#09090B' },
+  container: { flex: 1, backgroundColor: '#020617' },
+  glow1: { position: 'absolute', top: -100, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: Colors.primary, opacity: 0.15 },
+  glow2: { position: 'absolute', bottom: 50, left: -100, width: 300, height: 300, borderRadius: 150, backgroundColor: Colors.secondary, opacity: 0.1 },
+
   navBar: {
-    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
+    paddingBottom: 15,
   },
-  navLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  navTitle: { color: '#FFF', fontSize: 18, fontWeight: '700', fontFamily: 'PlusJakartaSans_700Bold' },
-  navSearchBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  backBtn: { width: 40, height: 40, justifyContent: 'center' },
+  navTitle: { color: '#FFF', fontSize: 18, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'System' : 'Manrope_700Bold' },
+  navActionBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
 
-  scrollContent: { paddingBottom: 40 },
-  hero: { paddingHorizontal: 24, paddingTop: 20, marginBottom: 24 },
-  heroTitle: { color: '#FFF', fontSize: 32, fontWeight: '800', fontFamily: 'PlusJakartaSans_800ExtraBold', marginBottom: 8 },
-  heroSub: { color: '#8A8D93', fontSize: 16, fontFamily: 'Manrope_400Regular' },
+  scrollContent: { paddingBottom: 60, paddingHorizontal: 20 },
+  header: { paddingTop: 20, marginBottom: 24 },
+  heroTitle: { color: '#FFF', fontSize: 32, fontWeight: '800', marginBottom: 8 },
+  heroSub: { color: 'rgba(255,255,255,0.5)', fontSize: 16 },
 
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#000',
-    marginHorizontal: 20,
-    paddingHorizontal: 16,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: '#1A1C23',
-    marginBottom: 32,
-  },
+  searchContainer: { marginTop: 24, height: 60, borderRadius: 16, overflow: 'hidden' },
+  searchBlur: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   searchIcon: { marginRight: 12 },
-  searchInput: { flex: 1, color: '#FFF', fontSize: 16, fontFamily: 'Manrope_500Medium' },
+  searchInput: { flex: 1, color: '#FFF', fontSize: 16 },
 
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 20,
-  },
-  sectionTitle: { color: '#FFF', fontSize: 20, fontWeight: '700', fontFamily: 'PlusJakartaSans_700Bold' },
-  viewAll: { color: '#A594FF', fontSize: 14, fontWeight: '600' },
-
+  cardWrapper: { marginBottom: 16 },
   card: {
-    backgroundColor: '#1E1E24',
-    marginHorizontal: 20,
-    borderRadius: 32,
-    padding: 24,
-    marginBottom: 16,
+    borderRadius: 24,
+    padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.03)',
+    borderColor: 'rgba(255,255,255,0.05)',
+    overflow: 'hidden',
   },
   premiumCard: {
-    backgroundColor: '#1E1E24',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.4,
-    shadowRadius: 30,
-    elevation: 20,
+    borderColor: 'rgba(107, 82, 255, 0.3)',
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   logoContainer: {
-    width: 60, height: 60,
-    borderRadius: 14,
+    width: 50, height: 50,
+    borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   logo: { width: '100%', height: '100%', resizeMode: 'cover' },
   logoPlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
-  logoInitial: { color: '#FFF', fontSize: 24, fontWeight: '800' },
+  logoInitial: { color: '#FFF', fontSize: 20, fontWeight: '800' },
   topChoiceBadge: {
     backgroundColor: 'rgba(107, 82, 255, 0.2)',
-    paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 8,
   },
-  topChoiceText: { color: '#A594FF', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
-  collegeName: { color: '#FFF', fontSize: 22, fontWeight: '700', fontFamily: 'PlusJakartaSans_700Bold', marginBottom: 6 },
-  collegeDetails: { color: '#8A8D93', fontSize: 13, fontFamily: 'Manrope_400Regular', marginBottom: 24 },
+  topChoiceText: { color: '#A594FF', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   
-  selectBtn: {
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#23232A',
-    justifyContent: 'center',
+  collegeName: { color: '#FFF', fontSize: 20, fontWeight: '700', marginBottom: 4 },
+  collegeDetails: { color: 'rgba(255,255,255,0.4)', fontSize: 14 },
+
+  footerSection: { marginTop: 20, alignItems: 'center' },
+  requestFooterCard: {
+    width: '100%',
+    padding: 24,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
     alignItems: 'center',
-  },
-  selectBtnText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
-  
-  selectBtnPremium: {
-    height: 56,
-    borderRadius: 28,
     overflow: 'hidden',
   },
-  selectBtnGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  selectBtnTextPremium: { color: '#FFF', fontSize: 17, fontWeight: '700' },
+  requestFooterTitle: { color: 'rgba(255,255,255,0.4)', fontSize: 14, marginBottom: 16 },
+  requestFooterBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20 },
+  requestFooterBtnText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
 
-  footer: { marginTop: 20, paddingHorizontal: 20 },
-  requestCard: {
-    backgroundColor: '#111116',
-    borderRadius: 32,
-    padding: 30,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.03)',
-  },
-  requestIconBox: {
-    width: 56, height: 56,
-    borderRadius: 18,
-    backgroundColor: '#1E1E24',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  requestTitle: { color: '#FFF', fontSize: 20, fontWeight: '800', marginBottom: 10, textAlign: 'center' },
-  requestSub: { color: '#8A8D93', fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  requestBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#2A2A32',
-    paddingHorizontal: 24, paddingVertical: 14,
-    borderRadius: 28,
-  },
-  requestBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  seedBtn: { marginTop: 40, padding: 10 },
+  seedBtnText: { color: 'rgba(255,255,255,0.15)', fontSize: 12, fontWeight: '600' },
 
   empty: { padding: 40, alignItems: 'center' },
-  emptyText: { color: '#8A8D93', fontSize: 15, textAlign: 'center' },
+  emptyText: { color: 'rgba(255,255,255,0.4)', fontSize: 15, textAlign: 'center', marginTop: 16 },
+
+  // Modal Styles
+  modalOverlay: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: 'rgba(0,0,0,0.4)' },
+  modalContent: { 
+    borderRadius: 32, 
+    padding: 24, 
+    borderWidth: 1, 
+    borderColor: 'rgba(255,255,255,0.1)', 
+    overflow: 'hidden',
+    backgroundColor: 'rgba(15, 23, 42, 0.95)', // More opaque
+  },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  modalTitle: { color: '#FFF', fontSize: 22, fontWeight: '800' },
+  modalForm: { gap: 16 },
+  modalInputBox: { gap: 6 },
+  modalLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '700', marginLeft: 4 },
+  modalInput: { 
+    backgroundColor: 'rgba(255,255,255,0.05)', 
+    height: 54, 
+    borderRadius: 16, 
+    paddingHorizontal: 16, 
+    color: '#FFF', 
+    fontSize: 15, 
+    borderWidth: 1, 
+    borderColor: 'rgba(255,255,255,0.1)' 
+  },
+  modalSubmitBtn: { height: 56, borderRadius: 28, overflow: 'hidden', marginTop: 8 },
+  modalSubmitGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  modalSubmitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
 });

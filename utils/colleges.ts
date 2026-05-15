@@ -26,7 +26,7 @@ export interface College {
 export async function searchColleges(term: string): Promise<College[]> {
   try {
     const snap = await getDocs(
-      query(collection(db, 'colleges'), where('verified', '==', true), limit(50))
+      query(collection(db, 'colleges'), where('verified', '==', true), orderBy('memberCount', 'desc'), limit(50))
     );
     const all = snap.docs.map(d => ({ id: d.id, ...d.data() } as College));
     if (!term.trim()) return all;
@@ -161,6 +161,22 @@ export const SEED_COLLEGES: Omit<College, 'id' | 'createdAt' | 'memberCount'>[] 
     shortName: 'CHRIST',
     domain: 'christuniversity.in',
     domains: ['christuniversity.in', 'student.christuniversity.in'],
+    location: 'Bengaluru, Karnataka',
+    verified: true,
+  },
+  {
+    name: 'MS Ramaiah University of Applied Sciences',
+    shortName: 'MSRUAS',
+    domain: 'msruas.ac.in',
+    domains: ['msruas.ac.in', 'student.msruas.ac.in'],
+    location: 'Bengaluru, Karnataka',
+    verified: true,
+  },
+  {
+    name: 'BMS College of Engineering',
+    shortName: 'BMSCE',
+    domain: 'bmsce.ac.in',
+    domains: ['bmsce.ac.in', 'student.bmsce.ac.in'],
     location: 'Bengaluru, Karnataka',
     verified: true,
   },

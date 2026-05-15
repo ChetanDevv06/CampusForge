@@ -79,7 +79,7 @@ export default function ChatScreen() {
     if (targetId === 'new') {
       const newConv = await addDoc(collection(db, 'conversations'), {
         participants: [uid, otherUserId],
-        participantNames: { [uid!]: 'Me', [otherUserId]: name || 'Campus Mate' },
+        participantNames: { [uid!]: profile?.name || 'Campus Student', [otherUserId]: name || 'Campus Mate' },
         lastMessage: imageUri ? 'Sent a photo' : msgText,
         lastMessageAt: serverTimestamp(),
         lastSenderId: uid,

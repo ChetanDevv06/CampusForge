@@ -6,7 +6,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebaseConfig';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
@@ -35,88 +35,86 @@ export default function ProfileScreen() {
 
   const [activeTab, setActiveTab] = useState<TabKey>('posts');
   const [posts, setPosts] = useState<Post[]>([]);
-  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [loadingPosts, setLoadingPosts] = useState(true);
   const [counts, setCounts] = useState({ posts: 0, sold: 0, skills: 0 });
 
+  // Source data for all collections
+  const [marketData, setMarketData] = useState<Post[]>([]);
+  const [lostData, setLostData] = useState<Post[]>([]);
+  const [skillData, setSkillData] = useState<Post[]>([]);
+
   // ------------------------------------------------------------------
-  //  Fetch real counts (marketplace + lost_found + skills)
+  //  Real-time Listeners for all user content
   // ------------------------------------------------------------------
   useEffect(() => {
-    if (!user || user.uid === 'guest-user-123') return;
-    const uid = user.uid;
-
-    const fetch = async () => {
-      try {
-        const [marketSnap, lostSnap, skillSnap] = await Promise.all([
-          getDocs(query(collection(db, 'marketplace'), where('userId', '==', uid))),
-          getDocs(query(collection(db, 'lost_found'), where('userId', '==', uid))),
-          getDocs(query(collection(db, 'skills'), where('userId', '==', uid))),
-        ]);
-
-        const soldCount = marketSnap.docs.filter(d => d.data().status === 'sold').length;
-
-        setCounts({
-          posts: marketSnap.size + lostSnap.size,
-          sold: soldCount,
-          skills: skillSnap.size,
-        });
-      } catch (error) {
-        console.warn('📊 [Profile] Stats fetch error:', error);
-      }
-    };
-
-    fetch();
-  }, [user]);
-
-  // ------------------------------------------------------------------
-  //  Fetch posts for selected tab
-  // ------------------------------------------------------------------
-  const fetchTabPosts = useCallback(async (tab: TabKey) => {
-    if (!user || user.uid === 'guest-user-123') return;
-    const uid = user.uid;
-    setLoadingPosts(true);
-
-    try {
-      let all: Post[] = [];
-
-      if (tab === 'posts') {
-        const [mSnap, lSnap, sSnap] = await Promise.all([
-          getDocs(query(collection(db, 'marketplace'), where('userId', '==', uid))),
-          getDocs(query(collection(db, 'lost_found'), where('userId', '==', uid))),
-          getDocs(query(collection(db, 'skills'), where('userId', '==', uid))),
-        ]);
-        mSnap.forEach(d => all.push({ id: d.id, ...d.data() as any, collection: 'marketplace' }));
-        lSnap.forEach(d => all.push({ id: d.id, ...d.data() as any, collection: 'lost_found' }));
-        sSnap.forEach(d => all.push({ id: d.id, ...d.data() as any, collection: 'skills' }));
-      }
-
-      if (tab === 'archives') {
-        const mSnap = await getDocs(
-          query(collection(db, 'marketplace'), where('userId', '==', uid), where('status', '==', 'sold'))
-        );
-        mSnap.forEach(d => all.push({ id: d.id, ...d.data() as any, collection: 'marketplace' }));
-      }
-
-      // Sort all results by createdAt descending in memory to avoid Index requirements
-      all.sort((a: any, b: any) => {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
-        return dateB - dateA;
-      });
-
-      // 'saved' would require a savedItems subcollection – show empty for now
-      setPosts(all);
-    } catch (error) {
-      console.warn('📊 [Profile] Post fetch error:', error);
-      setPosts([]);
-    } finally {
+    if (!user || user.uid === 'guest-user-123') {
       setLoadingPosts(false);
+      return;
     }
+    const uid = user.uid;
+
+    // 1. Marketplace Listener
+    const qMarket = query(collection(db, 'marketplace'), where('userId', '==', uid));
+    const unsubMarket = onSnapshot(qMarket, (snap) => {
+      const items = snap.docs.map(d => ({ id: d.id, ...d.data(), collection: 'marketplace' } as Post));
+      setMarketData(items);
+    }, (err) => console.warn('☁️ [Profile] Market listener error:', err));
+
+    // 2. Lost & Found Listener
+    const qLost = query(collection(db, 'lost_found'), where('userId', '==', uid));
+    const unsubLost = onSnapshot(qLost, (snap) => {
+      const items = snap.docs.map(d => ({ id: d.id, ...d.data(), collection: 'lost_found' } as Post));
+      setLostData(items);
+    }, (err) => console.warn('☁️ [Profile] Lost listener error:', err));
+
+    // 3. Skills Listener
+    const qSkill = query(collection(db, 'skills'), where('userId', '==', uid));
+    const unsubSkill = onSnapshot(qSkill, (snap) => {
+      const items = snap.docs.map(d => ({ id: d.id, ...d.data(), collection: 'skills' } as Post));
+      setSkillData(items);
+      setLoadingPosts(false);
+    }, (err) => {
+      console.warn('☁️ [Profile] Skill listener error:', err);
+      setLoadingPosts(false);
+    });
+
+    return () => {
+      unsubMarket();
+      unsubLost();
+      unsubSkill();
+    };
   }, [user]);
 
+  // ------------------------------------------------------------------
+  //  Derived State: Counts & Filtered Posts
+  // ------------------------------------------------------------------
   useEffect(() => {
-    fetchTabPosts(activeTab);
-  }, [activeTab, fetchTabPosts]);
+    // Update Stats
+    const soldCount = marketData.filter(p => p.status === 'sold').length;
+    setCounts({
+      posts: marketData.length + lostData.length,
+      sold: soldCount,
+      skills: skillData.length
+    });
+
+    // Update Tab Content
+    let filtered: Post[] = [];
+    if (activeTab === 'posts') {
+      filtered = [...marketData, ...lostData, ...skillData];
+    } else if (activeTab === 'archives') {
+      filtered = marketData.filter(p => p.status === 'sold');
+    }
+    // Note: 'saved' would come from a different collection listener if implemented
+
+    // Sort by createdAt descending
+    filtered.sort((a: any, b: any) => {
+      const dateA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date(a.createdAt || 0).getTime();
+      const dateB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date(b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+
+    setPosts(filtered);
+  }, [activeTab, marketData, lostData, skillData]);
 
   // ------------------------------------------------------------------
   //  Handlers
@@ -271,10 +269,15 @@ export default function ProfileScreen() {
             <Text style={styles.emptyText}>No posts yet</Text>
           </View>
         ) : (
-          <View style={styles.grid}>
-            {posts.map((item, idx) => (
+          <FlatList
+            data={posts}
+            keyExtractor={(item) => item.id}
+            numColumns={2}
+            scrollEnabled={false} // Since we are inside a ScrollView
+            contentContainerStyle={styles.grid}
+            columnWrapperStyle={{ gap: 8 }}
+            renderItem={({ item }) => (
               <TouchableOpacity
-                key={item.id}
                 style={styles.gridCard}
                 activeOpacity={0.85}
                 onPress={() => {
@@ -320,8 +323,8 @@ export default function ProfileScreen() {
                   </View>
                 )}
               </TouchableOpacity>
-            ))}
-          </View>
+            )}
+          />
         )}
 
         {/* ── Settings section ── */}
@@ -477,8 +480,7 @@ const styles = StyleSheet.create({
   },
   emptyText: { color: Colors.on_surface_variant, fontSize: 14, fontFamily: 'Manrope_500Medium' },
   grid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    marginHorizontal: 18, gap: 8,
+    marginHorizontal: 18,
     marginBottom: 28,
   },
   gridCard: {
