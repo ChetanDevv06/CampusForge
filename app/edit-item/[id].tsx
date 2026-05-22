@@ -133,7 +133,11 @@ export default function EditItem() {
       }
 
       await updateDoc(doc(db, 'lost_found', id!), updateData);
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace(`/item-details/${id}`);
+      }
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to update the listing.');
@@ -163,7 +167,16 @@ export default function EditItem() {
           headerTintColor: '#FFF',
           headerTitleStyle: { ...Typography.title, fontSize: 18 },
           headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 16 }}>
+            <TouchableOpacity 
+              onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace(`/item-details/${id}`);
+                }
+              }} 
+              style={{ marginLeft: 16 }}
+            >
               <Ionicons name="close" size={26} color="#FFF" />
             </TouchableOpacity>
           ),

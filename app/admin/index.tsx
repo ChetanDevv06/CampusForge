@@ -253,7 +253,16 @@ export default function AdminDashboard() {
       
       <BlurView intensity={30} tint="dark" style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 60 : 40 }]}>
         <View style={styles.headerTop}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity 
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)/profile');
+              }
+            }} 
+            style={styles.backBtn}
+          >
             <Ionicons name="chevron-back" size={24} color={Colors.on_background} />
           </TouchableOpacity>
           <View style={styles.headerTitleArea}>

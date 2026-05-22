@@ -188,7 +188,13 @@ export default function PostMarketScreen() {
       if (editId) {
         await updateDoc(doc(db, 'marketplace', editId), payload);
         showFeedback('Item Refined', 'The marketplace listing has been successfully updated.', 'success');
-        setTimeout(() => router.back(), 1500);
+        setTimeout(() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(tabs)/market');
+          }
+        }, 1500);
       } else {
         const docRef = await addDoc(collection(db, 'marketplace'), {
           ...payload,
@@ -233,7 +239,16 @@ export default function PostMarketScreen() {
       <StatusBar barStyle="light-content" />
       
       <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 60 : 40 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity 
+          style={styles.backBtn} 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)/market');
+            }
+          }}
+        >
           <Ionicons name="chevron-back" size={24} color={Colors.on_background} />
         </TouchableOpacity>
         <View style={styles.headerTitleArea}>

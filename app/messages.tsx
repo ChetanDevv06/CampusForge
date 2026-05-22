@@ -164,7 +164,16 @@ export default function MessagesScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity 
+            style={styles.backBtn} 
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)');
+              }
+            }}
+          >
             <Ionicons name="chevron-back" size={28} color={Colors.on_background} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Messages</Text>

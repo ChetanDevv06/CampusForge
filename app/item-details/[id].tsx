@@ -106,7 +106,11 @@ export default function ItemDetails() {
       }
 
       await deleteDoc(doc(db, 'lost_found', id!));
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/lost-found');
+      }
     } catch (e) {
       console.error(e);
       setLoading(false);
@@ -168,7 +172,16 @@ export default function ItemDetails() {
       <View style={styles.error}>
         <Ionicons name="alert-circle" size={64} color="#1A1C23" />
         <Text style={styles.errorText}>This listing has vanished.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)/lost-found');
+            }
+          }} 
+          style={styles.backBtn}
+        >
           <Text style={styles.backBtnText}>Return Route</Text>
         </TouchableOpacity>
       </View>
@@ -187,7 +200,16 @@ export default function ItemDetails() {
 
       {/* Top Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerBackBtn} onPress={() => router.back()}>
+        <TouchableOpacity 
+          style={styles.headerBackBtn} 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)/lost-found');
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={22} color="#FFF" />
         </TouchableOpacity>
       </View>
