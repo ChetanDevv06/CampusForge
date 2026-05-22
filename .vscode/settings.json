@@ -3,5 +3,6 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  "avdmanager.executable": "d:\\Android SDK\\emulator\\emulator.exe"
 }

@@ -18,6 +18,7 @@ import ImageViewing from 'react-native-image-viewing';
 import { startChat } from '../../utils/chat';
 import ModernAlert from '../../components/ModernAlert';
 import LocationPreview from '../../components/LocationPreview';
+import { deleteImageFromCloudinary } from '../../utils/storage';
 
 const { width } = Dimensions.get('window');
 
@@ -60,6 +61,16 @@ export default function MarketDetails() {
   const handleDelete = async () => {
     try {
       setLoading(true);
+      
+      // Delete from Cloudinary if delete token exists
+      if (product?.cloudinaryDeleteToken) {
+        try {
+          await deleteImageFromCloudinary(product.cloudinaryDeleteToken);
+        } catch (err) {
+          console.error("Cloudinary deletion failed:", err);
+        }
+      }
+
       await deleteDoc(doc(db, 'marketplace', product.id));
       router.back();
     } catch (e) {

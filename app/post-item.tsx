@@ -10,7 +10,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
-import { uploadImage, uploadVideoToStorage } from '../utils/storage';
+import { uploadImage, uploadImageDetailed, deleteImageFromCloudinary, uploadVideoToStorage } from '../utils/storage';
 import { useAuth } from '../contexts/AuthContext';
 import { moderateWithAI, moderateWithGemini } from '../utils/moderation';
 import * as FileSystem from 'expo-file-system';
@@ -220,11 +220,18 @@ export default function CreatePostScreen() {
     setLoading(true);
     try {
       let imageUrls: string[] = [];
+      let deleteTokens: string[] = [];
+      
       if (images.length > 0) {
-        imageUrls = await Promise.all(images.map(img => uploadImage(img, 'unified_posts')));
+        const uploadResults = await Promise.all(images.map(img => uploadImageDetailed(img, 'campusloop/lost_found')));
+        imageUrls = uploadResults.map(res => res.secure_url);
+        deleteTokens = uploadResults.map(res => res.delete_token).filter((t): t is string => !!t);
       } else if (image) {
-        const url = await uploadImage(image, 'unified_posts');
-        imageUrls = [url];
+        const uploadResult = await uploadImageDetailed(image, 'campusloop/lost_found');
+        imageUrls = [uploadResult.secure_url];
+        if (uploadResult.delete_token) {
+          deleteTokens = [uploadResult.delete_token];
+        }
       }
       
       const primaryImageUrl = imageUrls.length > 0 ? imageUrls[0] : null;
@@ -258,6 +265,8 @@ export default function CreatePostScreen() {
         locationCoords: locationCoords || null,
         createdAt: new Date().toISOString(),
         isFlagged,
+        cloudinaryDeleteToken: deleteTokens.length > 0 ? deleteTokens[0] : null,
+        cloudinaryDeleteTokens: deleteTokens.length > 0 ? deleteTokens : null,
       };
 
 

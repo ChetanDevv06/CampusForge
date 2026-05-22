@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import ImageSourceModal from '../../components/ImageSourceModal';
+import { uploadImageDetailed, deleteImageFromCloudinary } from '../../utils/storage';
 
 export default function EditItem() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,6 +25,7 @@ export default function EditItem() {
   const [image, setImage] = useState<string | null>(null);
   const [isImageModalVisible, setIsImageModalVisible] = useState(false);
   const [canInteract, setCanInteract] = useState(false);
+  const [oldDeleteToken, setOldDeleteToken] = useState<string | null>(null);
 
   const router = useRouter();
 
@@ -45,6 +47,7 @@ export default function EditItem() {
           setLocation(data.location || '');
           setType(data.type || 'lost');
           setImage(data.imageUrl || null);
+          setOldDeleteToken(data.cloudinaryDeleteToken || null);
         }
       } catch (e) {
         console.error(e);
@@ -95,14 +98,41 @@ export default function EditItem() {
 
     try {
       setSaving(true);
-      await updateDoc(doc(db, 'lost_found', id!), {
+      
+      let imageUrl = image;
+      let newDeleteToken: string | null = null;
+      
+      if (image && !image.startsWith('http') && !image.startsWith('data:image')) {
+        const uploadResult = await uploadImageDetailed(image, 'unified_posts');
+        imageUrl = uploadResult.secure_url;
+        newDeleteToken = uploadResult.delete_token || null;
+        
+        // Delete old image from Cloudinary to keep it clean!
+        if (oldDeleteToken) {
+          try {
+            await deleteImageFromCloudinary(oldDeleteToken);
+          } catch (e) {
+            console.error("Failed to delete old image:", e);
+          }
+        }
+      }
+
+      const updateData: any = {
         title: itemName,
         description,
         location,
         type,
-        imageUrl: image,
+        imageUrl,
         updatedAt: new Date().toISOString(),
-      });
+      };
+
+      if (newDeleteToken) {
+        updateData.cloudinaryDeleteToken = newDeleteToken;
+      } else if (image === null && oldDeleteToken) {
+        updateData.cloudinaryDeleteToken = null;
+      }
+
+      await updateDoc(doc(db, 'lost_found', id!), updateData);
       router.back();
     } catch (e) {
       console.error(e);

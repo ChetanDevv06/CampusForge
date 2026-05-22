@@ -23,6 +23,7 @@ import ModernAlert from '../../components/ModernAlert';
 import { Roundness, Shadows, Spacing, Typography } from '../../constants/theme';
 import { auth, db } from '../../firebaseConfig';
 import { startChat } from '../../utils/chat';
+import { deleteImageFromCloudinary } from '../../utils/storage';
 
 const { width } = Dimensions.get('window');
 
@@ -88,6 +89,22 @@ export default function ItemDetails() {
   const handleDelete = async () => {
     try {
       setLoading(true);
+
+      // Clean up Cloudinary photos if delete tokens are present
+      if (item?.cloudinaryDeleteTokens && item.cloudinaryDeleteTokens.length > 0) {
+        try {
+          await Promise.all(item.cloudinaryDeleteTokens.map((token: string) => deleteImageFromCloudinary(token)));
+        } catch (err) {
+          console.error("Cloudinary batch deletion failed:", err);
+        }
+      } else if (item?.cloudinaryDeleteToken) {
+        try {
+          await deleteImageFromCloudinary(item.cloudinaryDeleteToken);
+        } catch (err) {
+          console.error("Cloudinary single deletion failed:", err);
+        }
+      }
+
       await deleteDoc(doc(db, 'lost_found', id!));
       router.back();
     } catch (e) {

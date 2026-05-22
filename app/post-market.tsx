@@ -12,7 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../constants/theme';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadImage } from '../utils/storage';
+import { uploadImage, uploadImageDetailed, deleteImageFromCloudinary } from '../utils/storage';
 import { moderateWithAI, moderateWithGemini } from '../utils/moderation';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -31,6 +31,7 @@ export default function PostMarketScreen() {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [memberCount, setMemberCount] = useState<number | null>(null);
+  const [oldDeleteToken, setOldDeleteToken] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialCategory) setCategory(initialCategory);
@@ -62,6 +63,7 @@ export default function PostMarketScreen() {
             setCategory(data.category);
             setDescription(data.description || '');
             setImage(data.imageUrl);
+            setOldDeleteToken(data.cloudinaryDeleteToken || null);
           }
         } catch (e: any) {
           showFeedback('Error', 'Failed to retrieve details.');
@@ -127,8 +129,20 @@ export default function PostMarketScreen() {
     setLoading(true);
     try {
       let imageUrl = image;
+      let newDeleteToken: string | null = null;
       if (image && !image.startsWith('http') && !image.startsWith('data:image')) {
-        imageUrl = await uploadImage(image, `marketplace/${user?.uid}/${Date.now()}`);
+        const uploadResult = await uploadImageDetailed(image, 'campusloop/marketplace');
+        imageUrl = uploadResult.secure_url;
+        newDeleteToken = uploadResult.delete_token || null;
+        
+        // Delete old image from Cloudinary to keep it clean!
+        if (oldDeleteToken) {
+          try {
+            await deleteImageFromCloudinary(oldDeleteToken);
+          } catch (e) {
+            console.error("Failed to delete old image:", e);
+          }
+        }
       }
 
       const modTitle = await moderateWithAI(title);
@@ -154,7 +168,7 @@ export default function PostMarketScreen() {
 
       const finalIsFlagged = modTitle.isFlagged || modDesc.isFlagged || geminiResult.isFlagged;
 
-      const payload = {
+      const payload: any = {
         title: modTitle.cleanText, 
         price: parseFloat(price), 
         category, 
@@ -164,6 +178,12 @@ export default function PostMarketScreen() {
         aiModeration: geminiResult,
         updatedAt: serverTimestamp(),
       };
+
+      if (newDeleteToken) {
+        payload.cloudinaryDeleteToken = newDeleteToken;
+      } else if (image === null && oldDeleteToken) {
+        payload.cloudinaryDeleteToken = null;
+      }
 
       if (editId) {
         await updateDoc(doc(db, 'marketplace', editId), payload);

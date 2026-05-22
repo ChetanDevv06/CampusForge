@@ -10,7 +10,7 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
-import { uploadImage } from '../../utils/storage';
+import { uploadImage, uploadImageDetailed } from '../../utils/storage';
 import { useAuth } from '../../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import ImageSourceModal from '../../components/ImageSourceModal';
@@ -132,7 +132,12 @@ export default function CreatePostScreen() {
     setLoading(true);
     try {
       let imageUrl: string | null = null;
-      if (image) imageUrl = await uploadImage(image, 'unified_posts');
+      let deleteToken: string | null = null;
+      if (image) {
+        const uploadResult = await uploadImageDetailed(image, 'unified_posts');
+        imageUrl = uploadResult.secure_url;
+        deleteToken = uploadResult.delete_token || null;
+      }
 
       const userId = auth.currentUser?.uid;
       const userName = auth.currentUser?.email?.split('@')[0] || 'Student';
@@ -151,6 +156,8 @@ export default function CreatePostScreen() {
         location: modLoc.cleanText,
         visibility: 'Everyone in Campus',
         imageUrl,
+        cloudinaryDeleteToken: deleteToken,
+        cloudinaryDeleteTokens: deleteToken ? [deleteToken] : null,
         linkUrl: linkUrl.trim() || null,
         userId,
         userName,
