@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
 import { useRouter } from 'expo-router';
-import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../constants/theme';
+import { Colors, Typography, Spacing, Roundness, Gradients, Shadows, Fonts } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { BlurView } from 'expo-blur';
 
@@ -20,7 +20,6 @@ export default function MessagesScreen() {
   const [loading, setLoading] = useState(true);
   const [avatarCache, setAvatarCache] = useState<Record<string, string | null>>({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const router = useRouter();
   const uid = user?.uid;
 
@@ -30,7 +29,6 @@ export default function MessagesScreen() {
     if (!uid) return 'Unknown';
     const otherId = conv.participants.find((p: string) => p !== uid);
     const name = conv.participantNames?.[otherId];
-    // If the database accidentally stored "Me", show a better fallback
     if (!name || name === 'Me') return 'Campus Student';
     return name;
   };
@@ -40,7 +38,7 @@ export default function MessagesScreen() {
     return otherName.includes(searchQuery.toLowerCase());
   });
 
-  const UserAvatar = ({ userId, otherName, cachedAvatar }: { userId: string, otherName: string, cachedAvatar?: string }) => {
+  const UserAvatar = ({ userId, otherName, cachedAvatar, size = 64, isOnline = false }: { userId: string, otherName: string, cachedAvatar?: string, size?: number, isOnline?: boolean }) => {
     const [localAvatar, setLocalAvatar] = useState<string | null>(cachedAvatar || avatarCache[userId] || null);
 
     useEffect(() => {
@@ -58,14 +56,22 @@ export default function MessagesScreen() {
       fetchAvatar();
     }, [userId]);
 
-    if (localAvatar) {
-      return <Image source={{ uri: localAvatar }} style={styles.avatarImg} />;
-    }
-
     return (
-      <LinearGradient colors={Gradients.primary} style={styles.avatarPlaceholder} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-        <Text style={styles.avatarText}>{otherName.charAt(0).toUpperCase()}</Text>
-      </LinearGradient>
+      <View style={{ width: size, height: size, position: 'relative' }}>
+        {localAvatar ? (
+          <Image source={{ uri: localAvatar }} style={[styles.avatarImg, { width: size, height: size, borderRadius: size / 2 }]} />
+        ) : (
+          <LinearGradient 
+            colors={Gradients.primary} 
+            style={[styles.avatarPlaceholder, { width: size, height: size, borderRadius: size / 2 }]} 
+            start={{ x: 0, y: 0 }} 
+            end={{ x: 1, y: 1 }}
+          >
+            <Text style={[styles.avatarText, { fontSize: size * 0.4 }]}>{otherName.charAt(0).toUpperCase()}</Text>
+          </LinearGradient>
+        )}
+        {isOnline && <View style={[styles.onlineIndicator, { right: size * 0.05, bottom: size * 0.05 }]} />}
+      </View>
     );
   };
 
@@ -73,8 +79,7 @@ export default function MessagesScreen() {
     if (!uid) { setLoading(false); return; }
     const q = query(
       collection(db, 'conversations'),
-      where('participants', 'array-contains', uid),
-      where('collegeId', '==', profile?.collegeId || '')
+      where('participants', 'array-contains', uid)
     );
     const unsub = onSnapshot(q, (snap) => {
       const convs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -94,24 +99,30 @@ export default function MessagesScreen() {
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diff / (1000 * 60));
+    const diffHours = Math.floor(diff / (1000 * 60 * 60));
     const diffDays = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (diffDays === 0) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) {
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      return days[date.getDay()];
+    }
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
-  const renderItem = ({ item, index }: { item: any, index: number }) => {
+  const renderItem = ({ item }: { item: any }) => {
     const otherUserId = getOtherUserId(item);
     const otherName = getOtherName(item);
     const unread = item.unreadCount?.[uid!] > 0;
+    const isMe = item.lastSenderId === uid;
 
     return (
       <TouchableOpacity
-        activeOpacity={0.8}
-        style={[
-          styles.card, 
-          { backgroundColor: unread ? Colors.surface_container_high : Colors.surface_container_low }
-        ]}
+        activeOpacity={0.9}
+        style={styles.card}
         onPress={() => {
           router.push({ 
             pathname: '/chat/[id]', 
@@ -119,26 +130,29 @@ export default function MessagesScreen() {
           } as any);
         }}
       >
-        <View style={styles.avatarContainer}>
-          <UserAvatar userId={otherUserId} otherName={otherName} cachedAvatar={item.participantAvatars?.[otherUserId]} />
-          {unread && <View style={styles.unreadPulse} />}
-        </View>
+        <UserAvatar 
+          userId={otherUserId} 
+          otherName={otherName} 
+          cachedAvatar={item.participantAvatars?.[otherUserId]} 
+          isOnline={item.onlineStatus?.[otherUserId]}
+        />
 
         <View style={styles.info}>
           <View style={styles.infoTop}>
-            <Text style={[styles.name, unread && styles.nameUnread]} numberOfLines={1}>{otherName}</Text>
-            <Text style={[styles.time, unread && styles.timeUnread]}>{formatTime(item.lastMessageAt)}</Text>
+            <Text style={styles.name} numberOfLines={1}>{otherName}</Text>
+            <Text style={styles.time}>{formatTime(item.lastMessageAt)}</Text>
           </View>
-          <Text style={[styles.preview, unread && styles.previewUnread]} numberOfLines={1}>
-            {item.lastSenderId === uid ? 'You: ' : ''}{item.lastMessage || 'Sent a photo'}
-          </Text>
+          <View style={styles.infoBottom}>
+            <Text style={[styles.preview, unread && styles.previewUnread]} numberOfLines={1}>
+              {item.lastMessage || 'Sent a photo'}
+            </Text>
+            {isMe ? (
+              <Ionicons name="checkmark-done" size={16} color={Colors.on_surface_variant} style={styles.statusIcon} />
+            ) : unread ? (
+              <View style={styles.unreadDot} />
+            ) : null}
+          </View>
         </View>
-
-        {unread && (
-          <View style={styles.unreadCount}>
-            <Text style={styles.unreadCountText}>{item.unreadCount[uid!]}</Text>
-          </View>
-        )}
       </TouchableOpacity>
     );
   };
@@ -147,49 +161,30 @@ export default function MessagesScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       
-      {/* Editorial Header */}
+      {/* Header */}
       <View style={styles.header}>
-        <View style={[styles.headerTop, { position: 'relative', justifyContent: 'center', minHeight: 48 }]}>
-          {/* Back Button (Left) */}
-          <View style={{ position: 'absolute', left: 0, zIndex: 10 }}>
-            <TouchableOpacity 
-              onPress={() => router.back()}
-              style={{
-                width: 44, height: 44, borderRadius: 22, 
-                backgroundColor: Colors.surface_container_low,
-                justifyContent: 'center', alignItems: 'center'
-              }}
-            >
-              <Ionicons name="chevron-back" size={24} color={Colors.on_background} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Centered Title */}
-          <Text style={[styles.headerTitle, { textAlign: 'center', fontSize: 24, letterSpacing: 1 }]}>
-            MESSAGES
-          </Text>
-
-          {/* Search Button (Right) */}
-          <View style={{ position: 'absolute', right: 0, zIndex: 10 }}>
-            <TouchableOpacity style={styles.searchIconBtn} onPress={() => setShowSearch(!showSearch)}>
-              <Ionicons name={showSearch ? "close" : "search"} size={22} color={Colors.on_background} />
-            </TouchableOpacity>
-          </View>
+        <View style={styles.headerTop}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Ionicons name="chevron-back" size={28} color={Colors.on_background} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Messages</Text>
+          <View style={{ width: 44 }} /> 
         </View>
-        
-        {showSearch && (
-          <View style={styles.searchBar}>
-            <TextInput 
-              style={styles.searchInput}
-              placeholder="Filter conversations..."
-              placeholderTextColor={Colors.on_surface_variant}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus
-            />
-          </View>
-        )}
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={Colors.on_surface_variant} />
+          <TextInput 
+            style={styles.searchInput}
+            placeholder="Search conversations..."
+            placeholderTextColor={Colors.on_surface_variant}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
       </View>
+
+      <Text style={styles.sectionTitle}>RECENT CHATS</Text>
 
       {loading ? (
         <View style={styles.center}>
@@ -201,12 +196,7 @@ export default function MessagesScreen() {
             <Ionicons name="chatbubbles" size={48} color={Colors.primary_dim} />
           </View>
           <Text style={styles.emptyTitle}>Silent Commons</Text>
-          <Text style={styles.emptySub}>No active conversations found. Start a thread by browsing listings.</Text>
-          <TouchableOpacity style={styles.exploreBtn} onPress={() => router.push('/(tabs)')}>
-            <LinearGradient colors={Gradients.primary} style={styles.btnGrad}>
-              <Text style={styles.btnText}>Explore Campus</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+          <Text style={styles.emptySub}>No active conversations found.</Text>
         </View>
       ) : (
         <FlatList
@@ -217,6 +207,7 @@ export default function MessagesScreen() {
           contentContainerStyle={styles.listContent}
         />
       )}
+
     </View>
   );
 }
@@ -227,85 +218,132 @@ const styles = StyleSheet.create({
   
   header: {
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingHorizontal: Spacing.margin,
-    paddingBottom: Spacing.md,
-    backgroundColor: Colors.background,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 25,
   },
-  headerTitle: {
-    ...Typography.display,
-    fontSize: 42,
-    color: Colors.on_background,
-  },
-  searchIconBtn: {
-    width: 48, height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.surface_container_high,
+  backBtn: {
+    width: 44, height: 44,
     justifyContent: 'center', alignItems: 'center',
   },
-  searchBar: {
-    marginTop: Spacing.md,
-    backgroundColor: Colors.surface_container_low,
-    borderRadius: Roundness.md,
-    paddingHorizontal: Spacing.lg,
-    height: 56,
-    justifyContent: 'center',
-  },
-  searchInput: {
-    ...Typography.body_medium,
-    color: Colors.on_background,
+  headerTitle: {
+    color: Colors.primary,
+    fontSize: 26,
+    fontFamily: Fonts.bold,
   },
 
-  listContent: { paddingHorizontal: Spacing.margin, paddingBottom: 120, gap: Spacing.sm },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface_container_low,
+    borderRadius: 25,
+    paddingHorizontal: 18,
+    height: 54,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.03)',
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 12,
+    color: '#FFF',
+    fontSize: 16,
+    fontFamily: Fonts.medium,
+  },
+
+  sectionTitle: {
+    color: Colors.primary,
+    fontSize: 13,
+    fontFamily: Fonts.bold,
+    letterSpacing: 1.5,
+    marginHorizontal: 25,
+    marginBottom: 20,
+    opacity: 0.9,
+  },
+
+  listContent: { 
+    paddingHorizontal: 15, 
+    paddingBottom: 120, 
+    gap: 12 
+  },
   
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.md,
-    borderRadius: Roundness.lg,
+    padding: 16,
+    backgroundColor: Colors.background,
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.02)',
   },
-  avatarContainer: { position: 'relative', marginRight: Spacing.md },
-  avatarImg: { width: 64, height: 64, borderRadius: 32 },
-  avatarPlaceholder: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' },
-  avatarText: { ...Typography.title, color: Colors.on_primary, fontSize: 24 },
-  unreadPulse: {
-    position: 'absolute', bottom: 4, right: 4,
-    width: 14, height: 14, borderRadius: 7,
-    backgroundColor: Colors.tertiary,
-    borderWidth: 3, borderColor: Colors.background,
+  avatarImg: { backgroundColor: '#1E1E22' },
+  avatarPlaceholder: { justifyContent: 'center', alignItems: 'center' },
+  avatarText: { fontFamily: Fonts.bold, color: '#FFF' },
+  onlineIndicator: {
+    position: 'absolute',
+    width: 14, height: 14,
+    borderRadius: 7,
+    backgroundColor: Colors.primary,
+    borderWidth: 3,
+    borderColor: Colors.background,
   },
 
-  info: { flex: 1 },
-  infoTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
-  name: { ...Typography.body_medium, color: Colors.on_surface_variant, fontSize: 16 },
-  nameUnread: { color: Colors.on_background, ...Typography.title, fontSize: 17 },
-  time: { ...Typography.caption, color: Colors.on_surface_variant },
-  timeUnread: { color: Colors.primary, fontWeight: '700' },
-  preview: { ...Typography.body, color: Colors.on_surface_variant, fontSize: 14 },
-  previewUnread: { color: Colors.on_background, ...Typography.body_medium },
-
-  unreadCount: {
-    backgroundColor: Colors.tertiary,
-    paddingHorizontal: 8, height: 22, minWidth: 22,
-    borderRadius: 11, justifyContent: 'center', alignItems: 'center',
-    marginLeft: Spacing.sm,
+  info: { flex: 1, marginLeft: 16 },
+  infoTop: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginBottom: 6 
   },
-  unreadCountText: { color: Colors.on_tertiary, ...Typography.label, fontSize: 11 },
+  name: { 
+    color: '#FFF', 
+    fontSize: 18, 
+    fontFamily: Fonts.bold 
+  },
+  time: { 
+    color: Colors.primary, 
+    fontSize: 12, 
+    fontFamily: Fonts.medium,
+    opacity: 0.8
+  },
+  infoBottom: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center' 
+  },
+  preview: { 
+    flex: 1,
+    color: '#8E8E93', 
+    fontSize: 14, 
+    fontFamily: Fonts.medium 
+  },
+  previewUnread: { 
+    color: '#FFF',
+  },
+  statusIcon: { marginLeft: 8, opacity: 0.6 },
+  unreadDot: {
+    width: 10, height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.primary,
+    marginLeft: 8,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+  },
 
   empty: { flex: 1, padding: 40, alignItems: 'center', justifyContent: 'center' },
   emptyIconBox: {
-    width: 96, height: 96, borderRadius: 48,
-    backgroundColor: Colors.surface_container_high,
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: Colors.background,
     justifyContent: 'center', alignItems: 'center',
-    marginBottom: Spacing.xl,
+    marginBottom: 20,
   },
-  emptyTitle: { ...Typography.headline, color: Colors.on_background, marginBottom: Spacing.md },
-  emptySub: { ...Typography.body, color: Colors.on_surface_variant, textAlign: 'center', marginBottom: Spacing.xxl },
-  exploreBtn: { width: '100%', height: 60, borderRadius: Roundness.full, overflow: 'hidden' },
-  btnGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  btnText: { ...Typography.title, color: Colors.on_primary },
+  emptyTitle: { color: '#FFF', fontSize: 20, fontFamily: Fonts.bold, marginBottom: 8 },
+  emptySub: { color: '#8E8E93', fontSize: 14, textAlign: 'center' },
+
 });

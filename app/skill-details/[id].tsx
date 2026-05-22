@@ -24,6 +24,7 @@ import { auth, db } from '../../firebaseConfig';
 import { startChat } from '../../utils/chat';
 import ModernAlert from '../../components/ModernAlert';
 import LocationPreview from '../../components/LocationPreview';
+import { deleteImageFromCloudinary } from '../../utils/storage';
 
 const { width } = Dimensions.get('window');
 
@@ -66,6 +67,22 @@ export default function SkillDetails() {
   const handleDelete = async () => {
     try {
       setLoading(true);
+      
+      // Clean up Cloudinary photos if delete tokens are present
+      if (skill?.cloudinaryDeleteTokens && skill.cloudinaryDeleteTokens.length > 0) {
+        try {
+          await Promise.all(skill.cloudinaryDeleteTokens.map((token: string) => deleteImageFromCloudinary(token)));
+        } catch (err) {
+          console.error("Cloudinary batch deletion failed in skills details:", err);
+        }
+      } else if (skill?.cloudinaryDeleteToken) {
+        try {
+          await deleteImageFromCloudinary(skill.cloudinaryDeleteToken);
+        } catch (err) {
+          console.error("Cloudinary single deletion failed in skills details:", err);
+        }
+      }
+
       await deleteDoc(doc(db, 'skills', skill.id));
       router.back();
     } catch (e) {

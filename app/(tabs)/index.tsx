@@ -244,14 +244,20 @@ export default function HomeScreen() {
       });
     });
 
-    // 3. Unread Messages
-    if (user?.uid) {
-      const chatsQuery = query(
-        collection(db, 'chats'),
-        where('participants', 'array-contains', user.uid)
-      );
+    return () => { unsubLost(); unsubMarket(); };
+  }, [profile?.collegeId]);
 
-      const unsubChats = onSnapshot(chatsQuery, (snap) => {
+  // 3. Unread Messages Listener (Independent of College)
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const chatsQuery = query(
+      collection(db, 'chats'),
+      where('participants', 'array-contains', user.uid)
+    );
+
+    const unsubChats = onSnapshot(chatsQuery, 
+      (snap) => {
         let totalUnread = 0;
         snap.docs.forEach(doc => {
           const data = doc.data();
@@ -260,12 +266,14 @@ export default function HomeScreen() {
           }
         });
         setUnreadCount(totalUnread);
-      });
-      return () => { unsubLost(); unsubMarket(); unsubChats(); };
-    }
+      },
+      (error) => {
+        console.error("Error listening to unread messages:", error);
+      }
+    );
 
-    return () => { unsubLost(); unsubMarket(); };
-  }, [profile?.collegeId, user?.uid]);
+    return () => unsubChats();
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!profile?.collegeId) return;

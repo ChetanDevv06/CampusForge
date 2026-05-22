@@ -14,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import ModernAlert from '../../components/ModernAlert';
 import { createCollege } from '../../utils/colleges';
 import { moderateWithAI } from '../../utils/moderation';
+import { deleteImageFromCloudinary } from '../../utils/storage';
 
 const { width } = Dimensions.get('window');
 
@@ -50,7 +51,7 @@ export default function AdminDashboard() {
   // Governance Security Check
   useEffect(() => {
     if (isLoading) return;
-    const isAuthorized = profile?.role === 'admin' || __DEV__;
+    const isAuthorized = profile?.role === 'admin';
     if (!user || !isAuthorized) {
       console.warn(`🔒 [Security] Protocol access denied for user: ${profile?.email || user?.email}`);
       router.replace('/(tabs)');
@@ -128,6 +129,21 @@ export default function AdminDashboard() {
     if (!selectedPost) return;
     try {
       setLoading(true);
+      // Clean up Cloudinary photos if delete tokens are present
+      if (selectedPost?.cloudinaryDeleteTokens && selectedPost.cloudinaryDeleteTokens.length > 0) {
+        try {
+          await Promise.all(selectedPost.cloudinaryDeleteTokens.map((token: string) => deleteImageFromCloudinary(token)));
+        } catch (err) {
+          console.error("Cloudinary batch deletion failed in admin:", err);
+        }
+      } else if (selectedPost?.cloudinaryDeleteToken) {
+        try {
+          await deleteImageFromCloudinary(selectedPost.cloudinaryDeleteToken);
+        } catch (err) {
+          console.error("Cloudinary single deletion failed in admin:", err);
+        }
+      }
+
       await deleteDoc(doc(db, selectedPost.type, selectedPost.id));
       setShowDeleteAlert(false);
       fetchData();
@@ -183,6 +199,22 @@ export default function AdminDashboard() {
           onPress: async () => {
             try {
               setLoading(true);
+
+              // Query the original post to extract Cloudinary delete tokens
+              try {
+                const postSnap = await getDoc(doc(db, report.postCollection, report.postId));
+                if (postSnap.exists()) {
+                  const postData = postSnap.data();
+                  if (postData?.cloudinaryDeleteTokens && postData.cloudinaryDeleteTokens.length > 0) {
+                    await Promise.all(postData.cloudinaryDeleteTokens.map((token: string) => deleteImageFromCloudinary(token)));
+                  } else if (postData?.cloudinaryDeleteToken) {
+                    await deleteImageFromCloudinary(postData.cloudinaryDeleteToken);
+                  }
+                }
+              } catch (cloudinaryErr) {
+                console.error("Failed to clean up Cloudinary images during flagged post strike:", cloudinaryErr);
+              }
+
               await deleteDoc(doc(db, report.postCollection, report.postId));
               await deleteDoc(doc(db, 'moderation_reports', report.id));
               Alert.alert("Strike Complete", "The artifact has been purged from the feed.");
@@ -737,7 +769,7 @@ const styles = StyleSheet.create({
   // College Request Styles
   badgeCount: { backgroundColor: Colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
   badgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  emptyStateCard: { padding: 40, alignItems: 'center', borderRadius: Roundness.xl, borderDashOffset: 1, borderStyle: 'dashed', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  emptyStateCard: { padding: 40, alignItems: 'center', borderRadius: Roundness.xl, borderStyle: 'dashed', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   requestCard: { borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', overflow: 'hidden' },
   requestHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   requestInfo: { flex: 1, marginRight: 15 },
