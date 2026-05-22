@@ -72,7 +72,11 @@ export default function MarketDetails() {
       }
 
       await deleteDoc(doc(db, 'marketplace', product.id));
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/market');
+      }
     } catch (e) {
       console.error(e);
       Alert.alert("Forge Error", "Failed to relinquish this listing.");
@@ -93,7 +97,16 @@ export default function MarketDetails() {
       <View style={styles.error}>
         <Ionicons name="alert-circle" size={64} color={Colors.surface_container_high} />
         <Text style={styles.errorText}>Listing not found</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)/market');
+            }
+          }} 
+          style={styles.backBtn}
+        >
           <Text style={styles.backBtnText}>Return to Market</Text>
         </TouchableOpacity>
       </View>
@@ -147,7 +160,16 @@ export default function MarketDetails() {
             </LinearGradient>
           )}
 
-          <TouchableOpacity style={styles.absBack} onPress={() => router.back()}>
+          <TouchableOpacity 
+            style={styles.absBack} 
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)/market');
+              }
+            }}
+          >
             <BlurView intensity={30} tint="dark" style={styles.backBlur}>
               <Ionicons name="chevron-back" size={24} color={Colors.on_background} />
             </BlurView>

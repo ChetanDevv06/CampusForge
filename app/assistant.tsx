@@ -152,7 +152,16 @@ export default function AssistantScreen() {
       <View style={styles.header}>
         <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
         <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.iconCircle}>
+          <TouchableOpacity 
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)');
+              }
+            }} 
+            style={styles.iconCircle}
+          >
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <View style={styles.headerInfo}>

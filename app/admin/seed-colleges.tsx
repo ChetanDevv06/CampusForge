@@ -46,7 +46,16 @@ export default function SeedCollegesScreen() {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+      <TouchableOpacity 
+        style={styles.backBtn} 
+        onPress={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/admin');
+          }
+        }}
+      >
         <Ionicons name="arrow-back" size={24} color={Colors.on_background} />
       </TouchableOpacity>
       

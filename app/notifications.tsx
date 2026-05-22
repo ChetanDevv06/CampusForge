@@ -70,7 +70,16 @@ export default function NotificationsScreen() {
       <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity 
+          style={styles.backBtn} 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)');
+            }
+          }}
+        >
           <Ionicons name="chevron-back" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>

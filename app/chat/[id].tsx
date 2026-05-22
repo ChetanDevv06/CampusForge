@@ -152,7 +152,16 @@ export default function ChatScreen() {
       {/* Glass Header */}
       <BlurView intensity={30} tint="dark" style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity 
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/messages');
+              }
+            }} 
+            style={styles.backBtn}
+          >
             <Ionicons name="chevron-back" size={24} color={Colors.on_background} />
           </TouchableOpacity>
           <View style={styles.headerInfo}>

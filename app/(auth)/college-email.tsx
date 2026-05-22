@@ -134,7 +134,16 @@ export default function CollegeEmailScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={[styles.content, { paddingTop: insets.top + 20 }]}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity 
+            style={styles.backBtn} 
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(auth)/college-select');
+              }
+            }}
+          >
             <Ionicons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
 

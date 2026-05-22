@@ -104,7 +104,13 @@ export default function EditProfileScreen() {
       }, { merge: true });
 
       showFeedback('Profile Saved', 'Your changes have been updated.', 'success');
-      setTimeout(() => router.back(), 1500);
+      setTimeout(() => {
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(tabs)/profile');
+        }
+      }, 1500);
     } catch (error: any) {
       showFeedback('Update Error', error.message);
     } finally {
@@ -120,7 +126,16 @@ export default function EditProfileScreen() {
       
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top || 40, height: (insets.top || 40) + 60 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+        <TouchableOpacity 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)/profile');
+            }
+          }} 
+          style={styles.headerBtn}
+        >
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>

@@ -84,7 +84,11 @@ export default function SkillDetails() {
       }
 
       await deleteDoc(doc(db, 'skills', skill.id));
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/skills');
+      }
     } catch (e) {
       console.error(e);
       Alert.alert("Forge Error", "Failed to relinquish this expertise listing.");
@@ -105,7 +109,16 @@ export default function SkillDetails() {
       <View style={styles.error}>
         <Ionicons name="flash-off" size={64} color={Colors.surface_container_high} />
         <Text style={styles.errorText}>Expertise listing not found</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)/skills');
+            }
+          }} 
+          style={styles.backBtn}
+        >
           <Text style={styles.backBtnText}>Return to Hub</Text>
         </TouchableOpacity>
       </View>
@@ -162,7 +175,16 @@ export default function SkillDetails() {
               start={{x:0, y:0}} end={{x:1, y:1}}
             />
           )}
-          <TouchableOpacity style={styles.absBack} onPress={() => router.back()}>
+          <TouchableOpacity 
+            style={styles.absBack} 
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)/skills');
+              }
+            }}
+          >
             <BlurView intensity={30} tint="dark" style={styles.backBlur}>
               <Ionicons name="chevron-back" size={24} color={Colors.on_primary} />
             </BlurView>

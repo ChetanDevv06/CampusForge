@@ -138,7 +138,16 @@ export default function SearchScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? insets.top : insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)');
+            }
+          }} 
+          style={styles.backBtn}
+        >
           <Ionicons name="chevron-back" size={28} color={Colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.searchBar}>

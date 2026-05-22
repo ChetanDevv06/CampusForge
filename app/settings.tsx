@@ -187,7 +187,16 @@ export default function SettingsScreen() {
       <View style={[styles.header, { paddingTop: insets.top || 40 }]}>
         <View style={styles.headerTop}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <TouchableOpacity 
+              onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace('/(tabs)/profile');
+                }
+              }} 
+              style={styles.backBtn}
+            >
                <Ionicons name="arrow-back" size={24} color={Colors.primary} />
             </TouchableOpacity>
             <Text style={styles.headerTitleText}>Settings</Text>
