@@ -11,7 +11,7 @@ import { useNotifications } from '../utils/useNotifications';
 import { Colors } from '../constants/theme';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 
-// Load Design System Fonts
+
 import {
   Manrope_400Regular,
   Manrope_500Medium,
@@ -28,7 +28,7 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 
-// Keep the splash screen visible while we fetch resources
+
 SplashScreen.preventAutoHideAsync();
 
 export const unstable_settings = {
@@ -41,7 +41,7 @@ function RootLayoutNav() {
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
 
-  // Design System Font Hook
+
   const [fontsLoaded, fontError] = useFonts({
     PlusJakartaSans_400Regular,
     PlusJakartaSans_500Medium,
@@ -55,7 +55,7 @@ function RootLayoutNav() {
     SpaceMono_400Regular,
   });
 
-  // Use our centralized notifications hook
+
   useNotifications(user?.uid);
 
   useEffect(() => {
@@ -74,7 +74,7 @@ function RootLayoutNav() {
       router.replace('/(auth)/login');
     } else if (user) {
       if (inAuthGroup) {
-        // Allow college-select and college-email even when logged in
+
         const onCollegeFlow = segments[1] === 'college-select' || segments[1] === 'college-email';
         if (!onCollegeFlow) {
           router.replace('/(tabs)');

@@ -9,7 +9,7 @@ const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
  */
 export const uploadImage = async (uri: string, path: string): Promise<string> => {
   console.log(`☁️ [Cloudinary] Preparing upload for: ${uri.substring(0, 50)}...`);
-  
+
   try {
     // 1. Optional: Optimize locally before upload to save user data
     const manipResult = await ImageManipulator.manipulateAsync(
@@ -39,12 +39,11 @@ export const uploadImage = async (uri: string, path: string): Promise<string> =>
       body: data,
       headers: {
         'Accept': 'application/json',
-        'Content-Type': 'multipart/form-data',
       },
     });
 
     const result = await response.json();
-    
+
     if (result.error) {
       throw new Error(result.error.message);
     }
@@ -63,7 +62,7 @@ export const uploadImage = async (uri: string, path: string): Promise<string> =>
  */
 export const uploadImageDetailed = async (uri: string, path: string): Promise<{ secure_url: string; delete_token?: string }> => {
   console.log(`☁️ [Cloudinary] Preparing detailed upload for: ${uri.substring(0, 50)}...`);
-  
+
   try {
     // 1. Optimize locally before upload
     const manipResult = await ImageManipulator.manipulateAsync(
@@ -90,12 +89,11 @@ export const uploadImageDetailed = async (uri: string, path: string): Promise<{ 
       body: data,
       headers: {
         'Accept': 'application/json',
-        'Content-Type': 'multipart/form-data',
       },
     });
 
     const result = await response.json();
-    
+
     if (result.error) {
       throw new Error(result.error.message);
     }
@@ -120,7 +118,7 @@ export const deleteImageFromCloudinary = async (deleteToken: string): Promise<bo
   try {
     const cloudName = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || '';
     const url = `https://api.cloudinary.com/v1_1/${cloudName}/delete_by_token`;
-    
+
     const data = new FormData();
     data.append('token', deleteToken);
 
@@ -152,10 +150,10 @@ export const deleteImageFromCloudinary = async (deleteToken: string): Promise<bo
  */
 export const uploadVideoToStorage = async (uri: string, path: string): Promise<string> => {
   console.log(`☁️ [Cloudinary] Preparing video upload...`);
-  
+
   try {
     const CLOUDINARY_VIDEO_URL = `https://api.cloudinary.com/v1_1/${process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME}/video/upload`;
-    
+
     const data = new FormData();
     // @ts-ignore
     data.append('file', {
