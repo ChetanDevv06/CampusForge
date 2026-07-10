@@ -17,12 +17,10 @@
     },
     "android": {
       "package": "com.campusforge.app",
-      "newArchEnabled": true,
       "adaptiveIcon": {
         "backgroundColor": "#15151A",
         "foregroundImage": "./assets/images/CampusForge logo.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -50,18 +48,9 @@
             "backgroundColor": "#15151A"
           }
         }
-      ],
-      "@react-native-firebase/app",
-      "@react-native-firebase/crashlytics",
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "enableCrashlytics": true
-          }
-        }
       ]
     ],
+
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
