@@ -4,7 +4,7 @@
     "slug": "CampusLoop",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/CampusForge logo.png",
+    "icon": "./assets/images/CampusForge_logo.png",
     "scheme": "campusforge",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -19,13 +19,13 @@
       "package": "com.campusforge.app",
       "adaptiveIcon": {
         "backgroundColor": "#15151A",
-        "foregroundImage": "./assets/images/CampusForge logo.png"
+        "foregroundImage": "./assets/images/CampusForge_logo.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/CampusForge logo.png"
+      "favicon": "./assets/images/CampusForge_logo.png"
     },
     "plugins": [
       "expo-router",
@@ -41,7 +41,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/CampusForgelogo_splash.png",
+          "image": "./assets/images/CampusForge_splash.png",
           "resizeMode": "cover",
           "backgroundColor": "#15151A",
           "dark": {

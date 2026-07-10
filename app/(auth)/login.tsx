@@ -17,7 +17,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import FeedbackModal, { FeedbackType } from "../../components/FeedbackModal";
 import { Colors, Gradients, Shadows, Typography } from "../../constants/theme";
@@ -98,7 +98,7 @@ export default function LoginScreen() {
       {/* Dynamic Background */}
       <View style={StyleSheet.absoluteFill}>
         <LinearGradient
-          colors={["#0F172A", "#1E293B", "#020617"]}
+          colors={[Colors.background, "#15151A", "#15151A"]}
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.glow1} />
@@ -116,16 +116,8 @@ export default function LoginScreen() {
         >
           {/* Header Section */}
           <View style={styles.header}>
-            <View style={styles.logoPill}>
-              <LinearGradient
-                colors={Gradients.primary}
-                style={styles.logoCircle}
-              >
-                <Ionicons name="infinite" size={32} color={Colors.on_primary} />
-              </LinearGradient>
-            </View>
-            <Text style={styles.appName}>CampusLoop</Text>
-            <Text style={styles.tagline}>The Forge of Campus Exchange</Text>
+            <Text style={styles.appName}>CampusForge</Text>
+            <Text style={styles.tagline}>Lost it.Post it.Find it</Text>
           </View>
 
           {/* Glass Login Card */}
@@ -150,7 +142,7 @@ export default function LoginScreen() {
                 <TextInput
                   style={styles.input}
                   placeholder="College Email"
-                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  placeholderTextColor={Colors.on_surface_variant}
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -168,7 +160,7 @@ export default function LoginScreen() {
                 <TextInput
                   style={styles.input}
                   placeholder="Password"
-                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  placeholderTextColor={Colors.on_surface_variant}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPass}
@@ -178,7 +170,7 @@ export default function LoginScreen() {
                   <Ionicons
                     name={showPass ? "eye-off-outline" : "eye-outline"}
                     size={20}
-                    color="rgba(255,255,255,0.4)"
+                    color={Colors.on_surface_variant}
                   />
                 </TouchableOpacity>
               </View>
@@ -241,7 +233,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#020617" },
+  container: { flex: 1, backgroundColor: Colors.background },
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
@@ -271,77 +263,59 @@ const styles = StyleSheet.create({
     opacity: 0.1,
   },
 
-  header: { alignItems: "center", marginBottom: 40 },
-  logoPill: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    marginBottom: 16,
-  },
-  logoCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    ...Shadows.ambient,
-  },
+  header: { alignItems: "center", marginBottom: 60 },
   appName: {
     ...Typography.display,
     fontSize: 36,
-    color: "#FFFFFF",
+    color: Colors.on_background,
     letterSpacing: -1,
   },
   tagline: {
     ...Typography.body_medium,
-    color: "rgba(255,255,255,0.5)",
+    color: Colors.on_surface_variant,
     fontSize: 14,
     marginTop: 4,
     textTransform: "uppercase",
     letterSpacing: 1,
   },
 
+  // Glass Card (Surface Hierarchy - Interactive Cards)
   glassCard: {
-    borderRadius: 32,
+    borderRadius: 24, // Full roundness
     padding: 32,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderWidth: 0, // No-Line Rule
     overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: Colors.surface_container_high,
+    ...Shadows.lg,
   },
   welcomeTitle: {
     ...Typography.headline,
-    color: "#FFFFFF",
+    color: Colors.on_surface,
     fontSize: 28,
   },
   welcomeSubtitle: {
     ...Typography.body,
-    color: "rgba(255,255,255,0.5)",
+    color: Colors.on_surface_variant,
     fontSize: 15,
     marginTop: 4,
     marginBottom: 32,
   },
 
   form: { gap: 20 },
+  // Input Boxes (Surface Hierarchy - Interactive Elements)
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: Colors.surface_container,
     borderRadius: 16,
     height: 60,
     paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderWidth: 0, // No-Line Rule
   },
   inputIcon: { marginRight: 12 },
   input: {
     flex: 1,
-    color: "#FFFFFF",
+    color: Colors.on_surface,
     ...Typography.body_medium,
     fontSize: 16,
   },
@@ -380,7 +354,7 @@ const styles = StyleSheet.create({
   },
   footerText: {
     ...Typography.body,
-    color: "rgba(255,255,255,0.5)",
+    color: Colors.on_surface_variant,
     fontSize: 15,
   },
   signUpLink: {
