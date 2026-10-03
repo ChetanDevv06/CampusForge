@@ -46,8 +46,9 @@ updates:
           - "patch"
     ignore:
       # Major version upgrades require manual review
-      - dependency-type: "direct"
-        update-type: "version-update:semver-major"
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
     open-pull-requests-limit: 10
 
   # GitHub Actions
