@@ -5,18 +5,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 
 interface ImageViewerProps {
-  images: Array<{ uri: string }>;
+  images: { uri: string }[];
   imageIndex: number;
   visible: boolean;
   onRequestClose: () => void;
 }
 
 export default function ImageViewer({ images, imageIndex, visible, onRequestClose }: ImageViewerProps) {
-  if (!visible || images.length === 0) return null;
-
   const [currentIndex, setCurrentIndex] = useState(imageIndex);
-  const [scale, setScale] = useState(new Animated.Value(1));
-  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  const scale = useState(new Animated.Value(1))[0];
+  const { width: screenWidth } = Dimensions.get('window');
 
   useEffect(() => {
     setCurrentIndex(imageIndex);
@@ -30,9 +28,7 @@ export default function ImageViewer({ images, imageIndex, visible, onRequestClos
     }
   };
 
-  const handlePanResponder = () => {
-    // Swipe gestures handled by touchable opacity on web
-  };
+  if (!visible || images.length === 0) return null;
 
   return (
     <View style={styles.overlay} pointerEvents={visible ? 'auto' : 'none'}>

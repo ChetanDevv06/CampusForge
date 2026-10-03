@@ -84,7 +84,7 @@ export default function ItemDetails() {
       }
     };
     fetchItem();
-  }, [id]);
+  }, [id, uid]);
 
   const handleDelete = async () => {
     try {
