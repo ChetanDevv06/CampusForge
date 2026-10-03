@@ -1,59 +1,199 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+# ============================================================
+# CampusForge - Git Ignore Rules
+# ============================================================
 
 # dependencies
 node_modules/
+.pnp
+.pnp.js
 
-# Expo
+# ============================================================
+# Expo & React Native
+# ============================================================
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
+*.expo.ts
+*.expo.tsx
 
-# Native
-.kotlin/
-*.orig.*
+# Native builds
+*.apk
+*.aab
+*.ipa
+*.dSYM/
+*.xcarchive/
+/ios/
+/android/
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
+*.orig.*
 google-services.json
 GoogleService-Info.plist
 
-# Metro
+# Metro bundler
 .metro-health-check*
+metro-cache/
+.metro/
 
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
+# Hermes bytecode
+hermes-bytecode/
 
-# macOS
-.DS_Store
-*.pem
-
-# Environment variables & secrets
+# ============================================================
+# Environment & Secrets
+# ============================================================
 .env
 .env.*
-!.env.example
-*.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!env.example
+!*.env.example
+*.pem
+secrets/
+credentials/
 
+# ============================================================
 # IDE / Editor
-.vscode/settings.json
-.vscode/tasks.json
-.vscode/launch.json
+# ============================================================
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
 .idea/
 *.swp
 *.swo
+*.sublime-*
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.tmproj
+.esproj
+*.vs/
+.vs/
 
-# typescript
+# ============================================================
+# OS Generated
+# ============================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ============================================================
+# Logs & Debug
+# ============================================================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+logs/
+*.pid
+*.seed
+*.pid.lock
+
+# ============================================================
+# Testing & Coverage
+# ============================================================
+coverage/
+.nyc_output/
+*.lcov
+*.coverage.json
+test-results/
+.playwright/
+.cypress/
+cypress/videos/
+cypress/screenshots/
+
+# ============================================================
+# TypeScript
+# ============================================================
 *.tsbuildinfo
+dist-ts/
+build/
 
-# temporary files
-app-example/
+# ============================================================
+# Temporary & Cache
+# ============================================================
 tmp/
 temp/
+.tmp/
+.cache/
+*.tmp
+*.temp
+*.bak
+*.backup
+app-example/
 
-# generated native folders
-/ios/
-/android/
+# ============================================================
+# Build Outputs
+# ============================================================
+build/
+dist/
+out/
+.next/
+.nuxt/
+.vercel/
+.netlify/
+
+# ============================================================
+# Package Manager
+# ============================================================
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+# Keep only one lockfile (we use npm)
+# !package-lock.json
+
+# ============================================================
+# Misc
+# ============================================================
+tsc_output*.txt
+*.tsc_output*.txt
+*.eslintcache
+.stylelintcache
+.parcel-cache/
+.turbo/
+.vercel-output/
+
+# ============================================================
+# Project Specific
+# ============================================================
+# Firebase
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+firestore-debug.*.log
+
+# EAS
+.eas/
+eas.json.local
+
+# Sentry
+.sentryclirc
+.sentry/
+
+# Test artifacts
+testsprite_tests/
+
+# Kilo configuration
+.kilo/
+
+# Backup files
+*.backup.js
