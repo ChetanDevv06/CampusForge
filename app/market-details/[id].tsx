@@ -13,7 +13,7 @@ import { Video, ResizeMode } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import ImageViewing from 'react-native-image-viewing';
+import ImageViewer from '../../components/ImageViewer';
 
 import { startChat } from '../../utils/chat';
 import ModernAlert from '../../components/ModernAlert';
