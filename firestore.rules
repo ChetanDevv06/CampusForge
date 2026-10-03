@@ -1,0 +1,329 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ============================================================
+    // HELPER FUNCTIONS
+    // ============================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserId() {
+      return request.auth.uid;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(getUserId())).data;
+    }
+
+    function isAdmin() {
+      return getUserData().role == 'admin';
+    }
+
+    function getCollegeId() {
+      return getUserData().collegeId;
+    }
+
+    function ownsDocument(doc) {
+      return doc.data().userId == getUserId();
+    }
+
+    function ownsDocumentField(field) {
+      return field == getUserId();
+    }
+
+    function isInSameCollege(doc) {
+      return doc.data().collegeId == getCollegeId();
+    }
+
+    function isValidCollegeId(collegeId) {
+      return collegeId != null && collegeId != '';
+    }
+
+    function isValidContentType(type) {
+      return type in ['lost', 'found', 'market', 'skill'];
+    }
+
+    // ============================================================
+    // USERS COLLECTION
+    // ============================================================
+    match /users/{userId} {
+      // Users can read their own profile
+      allow read: if isSignedIn() && (getUserId() == userId || isAdmin());
+
+      // Users can create their profile on signup
+      allow create: if isSignedIn() && getUserId() == userId
+        && request.resource.data.keys().hasAll(['uid', 'name', 'email', 'collegeId', 'createdAt'])
+        && request.resource.data.uid == getUserId()
+        && request.resource.data.collegeId == getCollegeId();
+
+      // Users can update their own profile (limited fields)
+      allow update: if isSignedIn() && getUserId() == userId
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['name', 'avatarUrl', 'bio', 'major', 'gradYear', 'socials', 'quietMode', 'dataSaver', 'blockedUsers', 'hasSeenOnboarding', 'collegeEmailVerified', 'collegeEmail'])
+        && request.resource.data.collegeId == resource.data.collegeId; // Cannot change college
+
+      // Admins can do anything
+      allow read, write: if isAdmin();
+
+      // Prevent deletion
+      allow delete: if false;
+    }
+
+    // ============================================================
+    // COLLEGES COLLECTION (Read-only for users, Admin write)
+    // ============================================================
+    match /colleges/{collegeId} {
+      allow read: if isSignedIn() && isValidCollegeId(collegeId);
+      allow write: if isAdmin();
+    }
+
+    // ============================================================
+    // LOST & FOUND COLLECTION
+    // ============================================================
+    match /lost_found/{itemId} {
+      // Anyone in the same college can read active items
+      allow read: if isSignedIn() && isInSameCollege(resource)
+        && resource.data.status != 'resolved';
+
+      // Admins can read all
+      allow read: if isAdmin();
+
+      // Users can create items in their college
+      allow create: if isSignedIn()
+        && request.resource.data.userId == getUserId()
+        && request.resource.data.collegeId == getCollegeId()
+        && isValidContentType(request.resource.data.type)
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt == request.time;
+
+      // Owner or admin can update (status, resolution)
+      allow update: if isSignedIn() && (ownsDocument(resource) || isAdmin())
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.collegeId == resource.data.collegeId
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['status', 'resolvedAt', 'resolvedBy', 'description', 'location', 'imageUrl']);
+
+      // Only admins can delete
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // MARKETPLACE COLLECTION
+    // ============================================================
+    match /marketplace/{itemId} {
+      // Anyone in the same college can read active items
+      allow read: if isSignedIn() && isInSameCollege(resource)
+        && resource.data.status != 'sold';
+
+      // Admins can read all
+      allow read: if isAdmin();
+
+      // Users can create listings in their college
+      allow create: if isSignedIn()
+        && request.resource.data.userId == getUserId()
+        && request.resource.data.collegeId == getCollegeId()
+        && request.resource.data.status == 'active'
+        && request.resource.data.price >= 0
+        && request.resource.data.createdAt == request.time;
+
+      // Owner or admin can update (status, price, description)
+      allow update: if isSignedIn() && (ownsDocument(resource) || isAdmin())
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.collegeId == resource.data.collegeId
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['status', 'soldAt', 'soldTo', 'price', 'description', 'condition', 'category', 'imageUrl']);
+
+      // Only admins can delete
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // SKILLS COLLECTION
+    // ============================================================
+    match /skills/{skillId} {
+      // Anyone in the same college can read
+      allow read: if isSignedIn() && isInSameCollege(resource);
+
+      // Admins can read all
+      allow read: if isAdmin();
+
+      // Users can create skill listings in their college
+      allow create: if isSignedIn()
+        && request.resource.data.userId == getUserId()
+        && request.resource.data.collegeId == getCollegeId()
+        && request.resource.data.maxParticipants >= 1
+        && request.resource.data.createdAt == request.time;
+
+      // Owner or admin can update
+      allow update: if isSignedIn() && (ownsDocument(resource) || isAdmin())
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.collegeId == resource.data.collegeId
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['status', 'description', 'schedule', 'location', 'maxParticipants', 'imageUrl']);
+
+      // Only admins can delete
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // SKILL RESERVATIONS SUB-COLLECTION
+    // ============================================================
+    match /skills/{skillId}/reservations/{reservationId} {
+      // Skill owner and reserved user can read
+      allow read: if isSignedIn() && (
+        get(/databases/$(database)/documents/skills/$(skillId)).data.userId == getUserId()
+        || resource.data.userId == getUserId()
+        || isAdmin()
+      );
+
+      // Users can reserve a spot
+      allow create: if isSignedIn()
+        && request.resource.data.userId == getUserId()
+        && request.resource.data.skillId == skillId
+        && request.resource.data.status == 'confirmed'
+        && request.resource.data.createdAt == request.time
+        // Check skill has capacity
+        && get(/databases/$(database)/documents/skills/$(skillId)).data.currentParticipants
+          < get(/databases/$(database)/documents/skills/$(skillId)).data.maxParticipants;
+
+      // User can cancel their reservation, owner can manage
+      allow update: if isSignedIn() && (
+        resource.data.userId == getUserId()
+        || get(/databases/$(database)/documents/skills/$(skillId)).data.userId == getUserId()
+        || isAdmin()
+      )
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['status']);
+
+      // Only admins can delete
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // CHATS COLLECTION
+    // ============================================================
+    match /chats/{chatId} {
+      // Participants can read their chats
+      allow read: if isSignedIn() && getUserId() in resource.data.participants;
+
+      // Admins can read all
+      allow read: if isAdmin();
+
+      // Participants can create chats (validated by Cloud Function in practice)
+      allow create: if isSignedIn()
+        && getUserId() in request.resource.data.participants
+        && request.resource.data.participants.size() == 2
+        && request.resource.data.createdAt == request.time;
+
+      // Participants can update lastMessage, unreadCount
+      allow update: if isSignedIn() && getUserId() in resource.data.participants
+        && request.resource.data.participants == resource.data.participants
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['lastMessage', 'lastMessageAt', 'lastSenderId', 'unreadCount', 'participantNames']);
+
+      // No delete (archive instead)
+      allow delete: if false;
+    }
+
+    // ============================================================
+    // MESSAGES SUB-COLLECTION
+    // ============================================================
+    match /chats/{chatId}/messages/{messageId} {
+      // Participants can read messages
+      allow read: if isSignedIn() && getUserId() in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+
+      // Admins can read all
+      allow read: if isAdmin();
+
+      // Participants can send messages
+      allow create: if isSignedIn()
+        && getUserId() in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+        && request.resource.data.senderId == getUserId()
+        && request.resource.data.chatId == chatId
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.text.size() <= 5000; // Max message length
+
+      // No update/delete for messages (immutable)
+      allow update, delete: if false;
+    }
+
+    // ============================================================
+    // REVIEWS COLLECTION
+    // ============================================================
+    match /reviews/{reviewId} {
+      // Anyone can read reviews
+      allow read: if isSignedIn();
+
+      // Only the reviewer can create their review
+      allow create: if isSignedIn()
+        && request.resource.data.reviewerId == getUserId()
+        && request.resource.data.revieweeId != getUserId() // Can't review yourself
+        && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
+        && request.resource.data.createdAt == request.time;
+
+      // Only reviewer can update their review (within 24 hours)
+      allow update: if isSignedIn() && ownsDocument(resource)
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['rating', 'comment'])
+        && request.time < resource.data.createdAt + duration.value(86400000); // 24 hours in ms
+
+      // Only admins can delete
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // NOTIFICATIONS COLLECTION
+    // ============================================================
+    match /notifications/{notificationId} {
+      // User can read their own notifications
+      allow read: if isSignedIn() && resource.data.userId == getUserId();
+
+      // Admins can read all
+      allow read: if isAdmin();
+
+      // System creates notifications (via Cloud Functions)
+      allow create: if false; // Only Cloud Functions (admin SDK) can create
+
+      // User can mark as read
+      allow update: if isSignedIn() && resource.data.userId == getUserId()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['read']);
+
+      // User can delete their notifications
+      allow delete: if isSignedIn() && resource.data.userId == getUserId();
+    }
+
+    // ============================================================
+    // REPORTS COLLECTION (Content moderation)
+    // ============================================================
+    match /reports/{reportId} {
+      // Only admins can read reports
+      allow read: if isAdmin();
+
+      // Users can create reports
+      allow create: if isSignedIn()
+        && request.resource.data.reporterId == getUserId()
+        && request.resource.data.reportedUserId != getUserId()
+        && request.resource.data.createdAt == request.time;
+
+      // Only admins can update (status, resolution)
+      allow update: if isAdmin();
+
+      // Only admins can delete
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // SETTINGS / CONFIG (App-wide config, admin only)
+    // ============================================================
+    match /config/{configId} {
+      allow read: if isSignedIn(); // Public config readable by all users
+      allow write: if isAdmin();
+    }
+
+    // ============================================================
+    // DEFAULT DENY
+    // ============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
