@@ -72,22 +72,66 @@ export default function LoginScreen() {
   };
 
   const handleReset = async () => {
-    if (!email) {
+    const currentEmail = email.trim();
+    if (!currentEmail) {
       showAlert(
         "Reset Password",
         "Enter your college email to receive a reset link.",
       );
       return;
     }
+    if (!currentEmail.includes("@") || !currentEmail.includes(".")) {
+      showAlert("Invalid Email", "Please enter a valid email address.");
+      return;
+    }
+
+    // First check if the user exists in the database
     try {
-      await sendPasswordResetEmail(auth, email);
+      // Try to sign in with the email (this will fail if user doesn't exist, but tells us if email is registered)
+      await signInWithEmailAndPassword(auth, currentEmail, "dummy_password");
+    } catch (signInError: any) {
+      // If we get "auth/invalid-credential" it means user doesn't exist or email is invalid
+      if (signInError.message.includes("auth/invalid-credential")) {
+        showAlert(
+          "Account Not Found",
+          "No account registered with this email address. Please check the email or sign up first.",
+        );
+        return;
+      } else if (signInError.message.includes("auth/invalid-email")) {
+        showAlert(
+          "Invalid Email",
+          "Please enter a valid email address format.",
+        );
+        return;
+      }
+    }
+
+    // If we reach here, the email is registered, now send password reset
+    try {
+      await sendPasswordResetEmail(auth, currentEmail);
       showAlert(
         "Check Email",
-        "A reset link has been dispatched to your inbox.",
+        "A reset link has been dispatched to your inbox. Please check your email (including spam folder).",
         "success",
       );
     } catch (error: any) {
-      showAlert("Reset Failed", error.message);
+      console.log("Reset password error:", error);
+      let errorMessage = error.message;
+
+      // Handle specific Firebase error codes
+      if (errorMessage.includes("auth/invalid-email")) {
+        errorMessage = "Invalid email address format.";
+      } else if (errorMessage.includes("auth/user-not-found")) {
+        errorMessage = "No account found with this email address.";
+      } else if (errorMessage.includes("auth/too-many-requests")) {
+        errorMessage = "Too many requests. Please try again later.";
+      } else if (errorMessage.includes("auth/network-request-failed")) {
+        errorMessage = "Network error. Please check your internet connection.";
+      } else if (errorMessage.includes("auth/internal-error")) {
+        errorMessage = "Internal server error. Please try again.";
+      }
+
+      showAlert("Reset Failed", errorMessage);
     }
   };
 
@@ -165,6 +209,8 @@ export default function LoginScreen() {
                   onChangeText={setPassword}
                   secureTextEntry={!showPass}
                   autoCapitalize="none"
+                  maxLength={50}
+                  blurOnSubmit={false}
                 />
                 <TouchableOpacity onPress={() => setShowPass(!showPass)}>
                   <Ionicons
@@ -285,7 +331,7 @@ const styles = StyleSheet.create({
     padding: 32,
     borderWidth: 0, // No-Line Rule
     overflow: "hidden",
-    backgroundColor: Colors.surface_container_high,
+    backgroundColor: "rgba(28, 28, 32, 0.3)", // More translucent
     ...Shadows.lg,
   },
   welcomeTitle: {
@@ -318,6 +364,7 @@ const styles = StyleSheet.create({
     color: Colors.on_surface,
     ...Typography.body_medium,
     fontSize: 16,
+    textAlign: "left",
   },
 
   forgotBtn: { alignSelf: "flex-end", marginTop: -8 },

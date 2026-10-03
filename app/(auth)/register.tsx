@@ -15,7 +15,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import FeedbackModal, { FeedbackType } from "../../components/FeedbackModal";
 import { Colors, Gradients, Shadows, Typography } from "../../constants/theme";
@@ -40,7 +40,7 @@ const Field = ({
     <TextInput
       style={styles.input}
       placeholder={placeholder}
-      placeholderTextColor="rgba(255,255,255,0.4)"
+      placeholderTextColor={Colors.on_surface_variant}
       value={value}
       onChangeText={onChangeText}
       secureTextEntry={secure}
@@ -143,10 +143,10 @@ export default function RegisterScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Space Background */}
+      {/* Dynamic Background */}
       <View style={StyleSheet.absoluteFill}>
         <LinearGradient
-          colors={["#0F172A", "#1E293B", "#020617"]}
+          colors={[Colors.background, "#15151A", "#15151A"]}
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.glow1} />
@@ -163,15 +163,7 @@ export default function RegisterScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <View style={styles.logoBox}>
-              <LinearGradient
-                colors={Gradients.primary}
-                style={styles.logoPill}
-              >
-                <Ionicons name="sparkles" size={28} color={Colors.on_primary} />
-              </LinearGradient>
-            </View>
-            <Text style={styles.title}>Join the Loop</Text>
+            <Text style={styles.title}>Join the Forge</Text>
             <Text style={styles.subtitle}>
               Create your unique campus identity
             </Text>
@@ -210,7 +202,7 @@ export default function RegisterScreen() {
                   <Text
                     style={[
                       styles.inputLabel,
-                      !collegeName && { color: "rgba(255,255,255,0.4)" },
+                      !collegeName && { color: Colors.on_surface_variant },
                     ]}
                   >
                     {collegeName || "Select your College"}
@@ -219,7 +211,7 @@ export default function RegisterScreen() {
                 <Ionicons
                   name="chevron-forward"
                   size={18}
-                  color="rgba(255,255,255,0.4)"
+                  color={Colors.on_surface_variant}
                 />
               </TouchableOpacity>
 
@@ -268,7 +260,7 @@ export default function RegisterScreen() {
           </BlurView>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Already part of the Loop? </Text>
+            <Text style={styles.footerText}>Already part of the Forge? </Text>
             <Link href="/(auth)/login" asChild>
               <TouchableOpacity>
                 <Text style={styles.linkText}>Sign In</Text>
@@ -290,8 +282,13 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#020617" },
-  scroll: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40 },
+  container: { flex: 1, backgroundColor: Colors.background },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    justifyContent: "center",
+  },
 
   glow1: {
     position: "absolute",
@@ -314,61 +311,51 @@ const styles = StyleSheet.create({
     opacity: 0.1,
   },
 
-  header: { alignItems: "center", marginBottom: 32 },
-  logoBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    marginBottom: 16,
-  },
-  logoPill: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    ...Shadows.ambient,
-  },
+  header: { alignItems: "center", marginBottom: 40 },
   title: {
     ...Typography.display,
-    color: "#FFFFFF",
-    fontSize: 34,
+    color: Colors.on_background,
+    fontSize: 36,
     textAlign: "center",
   },
   subtitle: {
     ...Typography.body,
-    color: "rgba(255,255,255,0.5)",
-    marginTop: 6,
+    color: Colors.on_surface_variant,
+    marginTop: 8,
     textAlign: "center",
   },
 
   glassCard: {
-    borderRadius: 32,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderRadius: 24, // Full roundness
+    padding: 32,
+    borderWidth: 0, // No-Line Rule
     overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: "rgba(28, 28, 32, 0.3)", // More translucent
+    ...Shadows.lg,
   },
   formArea: { gap: 16 },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: Colors.surface_container,
     borderRadius: 16,
     height: 60,
     paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderWidth: 0, // No-Line Rule
   },
   inputIcon: { marginRight: 12 },
-  input: { flex: 1, ...Typography.body_medium, color: "#FFFFFF", fontSize: 16 },
-  inputLabel: { ...Typography.body_medium, color: "#FFFFFF", fontSize: 16 },
+  input: {
+    flex: 1,
+    ...Typography.body_medium,
+    color: Colors.on_surface,
+    fontSize: 16,
+    textAlign: "left",
+  },
+  inputLabel: {
+    ...Typography.body_medium,
+    color: Colors.on_surface_variant,
+    fontSize: 16,
+  },
 
   submitBtn: {
     height: 64,
@@ -388,7 +375,7 @@ const styles = StyleSheet.create({
   footer: { flexDirection: "row", justifyContent: "center", marginTop: 32 },
   footerText: {
     ...Typography.body,
-    color: "rgba(255,255,255,0.5)",
+    color: Colors.on_surface_variant,
     fontSize: 15,
   },
   linkText: { ...Typography.title, color: Colors.primary, fontSize: 15 },
