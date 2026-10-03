@@ -3,7 +3,7 @@ import ImageViewing from 'react-native-image-viewing';
 import { View, StyleSheet } from 'react-native';
 
 interface ImageViewerProps {
-  images: Array<{ uri: string }>;
+  images: { uri: string }[];
   imageIndex: number;
   visible: boolean;
   onRequestClose: () => void;

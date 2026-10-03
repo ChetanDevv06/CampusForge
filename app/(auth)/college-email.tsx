@@ -173,7 +173,7 @@ export default function CollegeEmailScreen() {
                 </View>
 
                 <Text style={styles.helperText}>
-                  We'll send a secure verification link to your official student email.
+                  We&apos;ll send a secure verification link to your official student email.
                 </Text>
 
                 <TouchableOpacity style={styles.mainBtn} onPress={handleSendVerification} disabled={loading}>
@@ -195,7 +195,7 @@ export default function CollegeEmailScreen() {
                   <Ionicons name="mail-open" size={40} color={Colors.primary} />
                 </View>
                 <Text style={styles.title}>Check your inbox</Text>
-                <Text style={styles.subtitle}>We've sent a verification link to your student email.</Text>
+                <Text style={styles.subtitle}>We&apos;ve sent a verification link to your student email.</Text>
                 
                 <View style={styles.infoRow}>
                   <Ionicons name="shield-checkmark" size={18} color="rgba(255,255,255,0.4)" />
@@ -207,13 +207,13 @@ export default function CollegeEmailScreen() {
                     {loading ? (
                       <ActivityIndicator color="#fff" />
                     ) : (
-                      <Text style={styles.btnText}>I've verified my email</Text>
+                      <Text style={styles.btnText}>I&apos;ve verified my email</Text>
                     )}
                   </LinearGradient>
                 </TouchableOpacity>
 
                 <TouchableOpacity onPress={handleResend} style={styles.secondaryBtn}>
-                  <Text style={styles.secondaryBtnText}>Didn't get the email? Resend</Text>
+                  <Text style={styles.secondaryBtnText}>Didn&apos;t get the email? Resend</Text>
                 </TouchableOpacity>
               </View>
             )}
