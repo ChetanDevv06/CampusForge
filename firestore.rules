@@ -61,7 +61,14 @@ service cloud.firestore {
       allow update: if isSignedIn() && getUserId() == userId
         && request.resource.data.diff(resource.data).changedKeys()
           .hasOnly(['name', 'avatarUrl', 'bio', 'major', 'gradYear', 'socials', 'quietMode', 'dataSaver', 'blockedUsers', 'hasSeenOnboarding', 'collegeEmailVerified', 'collegeEmail'])
-        && request.resource.data.collegeId == resource.data.collegeId; // Cannot change college
+        && request.resource.data.collegeId == resource.data.collegeId // Cannot change college
+        && (
+          request.resource.data.collegeEmailVerified != true
+          || (
+            request.auth.token.email_verified == true
+            && request.resource.data.collegeEmail == request.auth.token.email
+          )
+        );
 
       // Admins can do anything
       allow read, write: if isAdmin();
