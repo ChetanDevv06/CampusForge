@@ -107,6 +107,10 @@ jobs:
         continue-on-error: true
 
       - name: Check for secrets (truffleHog)
+        # Only meaningful on pull requests. On a push to main the action's
+        # `base: main` and `head: HEAD` resolve to the same commit, so TruffleHog
+        # refuses to scan an empty range and fails the job.
+        if: github.event_name == 'pull_request'
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
