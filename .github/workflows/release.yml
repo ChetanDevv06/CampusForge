@@ -201,7 +201,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: *-build
+          pattern: '*-build'
           merge-multiple: true
 
       - name: Create Release
