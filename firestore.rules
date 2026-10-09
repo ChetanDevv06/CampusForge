@@ -53,7 +53,7 @@ service cloud.firestore {
 
       // Users can create their profile on signup
       allow create: if isSignedIn() && getUserId() == userId
-        && request.resource.data.keys().hasAll(['uid', 'name', 'email', 'collegeId', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'email', 'collegeId', 'createdAt'])
         && request.resource.data.uid == getUserId()
         && request.resource.data.collegeId == getCollegeId();
 
