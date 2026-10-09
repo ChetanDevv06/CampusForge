@@ -154,12 +154,12 @@ out/
 # ============================================================
 # Package Manager
 # ============================================================
-package-lock.json
+!package-lock.json
 yarn.lock
 pnpm-lock.yaml
 bun.lockb
 # Keep only one lockfile (we use npm)
-# !package-lock.json
+# package-lock.json is intentionally tracked
 
 # ============================================================
 # Misc
