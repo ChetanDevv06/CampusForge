@@ -5,7 +5,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { deleteDoc, doc, getDoc } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import { Video, ResizeMode } from 'expo-av';
-import ImageViewing from 'react-native-image-viewing';
+import ImageViewer from '../../components/ImageViewer';
 import {
   ActivityIndicator,
   Alert,
@@ -324,12 +324,11 @@ export default function SkillDetails() {
         isDestructive
       />
 
-      <ImageViewing
+      <ImageViewer
         images={(skill.imageUrls || (skill.imageUrl ? [skill.imageUrl] : [])).map((url: string) => ({ uri: url }))}
         imageIndex={viewerIndex}
         visible={viewerVisible}
         onRequestClose={() => setViewerVisible(false)}
-        animationType="fade"
       />
     </View>
   );

@@ -37,7 +37,7 @@ export const unstable_settings = {
 
 function RootLayoutNav() {
   const { user, profile, isLoading } = useAuth();
-  const segments = useSegments();
+  const segments: readonly string[] = useSegments();
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
 

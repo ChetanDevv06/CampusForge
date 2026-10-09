@@ -33,6 +33,18 @@ import {
   PanResponder,
 } from "react-native";
 import { Image } from "expo-image";
+import {
+  Colors,
+  Fonts,
+  Gradients,
+  Roundness,
+  Shadows,
+  Spacing,
+  Typography,
+} from "../../constants/theme";
+import { useAuth } from "../../contexts/AuthContext";
+import { db } from "../../firebaseConfig";
+import { setMarketTab } from "../../utils/marketTabStore";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -95,18 +107,6 @@ const DraggableAIButton = ({ onPress }: { onPress: () => void }) => {
     </Animated.View>
   );
 };
-import {
-  Colors,
-  Fonts,
-  Gradients,
-  Roundness,
-  Shadows,
-  Spacing,
-  Typography,
-} from "../../constants/theme";
-import { useAuth } from "../../contexts/AuthContext";
-import { db } from "../../firebaseConfig";
-import { setMarketTab } from "../../utils/marketTabStore";
 
 const { width } = Dimensions.get("window");
 

@@ -1,10 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState , useRef } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot , collection, query, where, onSnapshot as onSnapshotColl, limit, orderBy } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
-import { collection, query, where, onSnapshot as onSnapshotColl, limit, orderBy } from 'firebase/firestore';
 import { registerForPushNotificationsAsync, sendLocalNotification } from '../utils/notifications';
-import { useRef } from 'react';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
