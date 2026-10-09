@@ -3,15 +3,15 @@
  * Handles text cleaning and safety checks for user-generated content.
  */
 
+import BAD_WORDS from './badWords.json';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 export interface ModerationResult {
   cleanText: string;
   isFlagged: boolean;
   reason: string | null;
   score: number;
 }
-
-import BAD_WORDS from './badWords.json';
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || "");
 

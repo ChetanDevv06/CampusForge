@@ -17,7 +17,7 @@ import {
   View
 } from 'react-native';
 import { Image } from 'expo-image';
-import ImageViewing from 'react-native-image-viewing';
+import ImageViewer from '../../components/ImageViewer';
 import LocationPreview from '../../components/LocationPreview';
 import ModernAlert from '../../components/ModernAlert';
 import { Roundness, Shadows, Spacing, Typography } from '../../constants/theme';
@@ -84,7 +84,7 @@ export default function ItemDetails() {
       }
     };
     fetchItem();
-  }, [id]);
+  }, [id, uid]);
 
   const handleDelete = async () => {
     try {
@@ -430,12 +430,11 @@ export default function ItemDetails() {
         isDestructive
       />
 
-      <ImageViewing
+      <ImageViewer
         images={(item.imageUrls || (item.imageUrl ? [item.imageUrl] : [])).map((url: string) => ({ uri: url }))}
         imageIndex={viewerIndex}
         visible={viewerVisible}
         onRequestClose={() => setViewerVisible(false)}
-        animationType="fade"
       />
     </View>
   );
