@@ -59,7 +59,7 @@ export default function ImageSourceModal({ isVisible, onClose, onSelect }: Image
                 </LinearGradient>
                 <View style={styles.optionTexts}>
                   <Text style={styles.optionLabel}>Take a Photo</Text>
-                  <Text style={styles.optionDesc}>Use your phone's camera</Text>
+                  <Text style={styles.optionDesc}>Use your phone&apos;s camera</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.2)" />
               </TouchableOpacity>
