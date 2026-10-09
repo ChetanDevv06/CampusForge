@@ -48,7 +48,8 @@
             "backgroundColor": "#15151A"
           }
         }
-      ]
+      ],
+      "expo-asset"
     ],
 
     "experiments": {
