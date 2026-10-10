@@ -24,16 +24,20 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FeedbackModal, { FeedbackType } from "../../components/FeedbackModal";
-import { Colors } from "../../constants/theme";
+import { Colors, Roundness, Typography, Shadows, Spacing } from "../../constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
 import { auth, db } from "../../firebaseConfig";
 import { College, requestCollege, SEED_COLLEGES } from "../../utils/colleges";
+import CollegeCard from "../../components/ui/CollegeCard";
+import SearchInput from "../../components/ui/SearchInput";
+import PrimaryButton from "../../components/ui/PrimaryButton";
+import SecondaryButton from "../../components/ui/SecondaryButton";
+import InputField from "../../components/ui/InputField";
 
 export default function CollegeSelectScreen() {
   const router = useRouter();
@@ -44,6 +48,7 @@ export default function CollegeSelectScreen() {
   const [search, setSearch] = useState("");
   const [colleges, setColleges] = useState<College[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   // Request Modal State
   const [requestVisible, setRequestVisible] = useState(false);
@@ -74,7 +79,6 @@ export default function CollegeSelectScreen() {
   useEffect(() => {
     setLoading(true);
     const collegesRef = collection(db, "colleges");
-    // Order by memberCount descending so active colleges are on top
     const q = query(
       collegesRef,
       where("verified", "==", true),
@@ -200,73 +204,17 @@ export default function CollegeSelectScreen() {
     }
   };
 
-  const renderCollegeItem = ({
-    item,
-    index,
-  }: {
-    item: College;
-    index: number;
-  }) => {
-    const isPopular = item.memberCount >= 100 && index < 3 && search === "";
-    const isTopOne = index === 0 && search === "";
+  const handleSearchClear = () => {
+    setSearch("");
+  };
 
-    return (
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={() => handleSelect(item)}
-        style={styles.cardWrapper}
-      >
-        <BlurView
-          intensity={30}
-          tint="dark"
-          style={[
-            styles.card,
-            styles.surfaceCard,
-            isTopOne && styles.premiumCard,
-          ]}
-        >
-          <View style={styles.cardHeader}>
-            <View style={styles.logoContainer}>
-              {item.logo ? (
-                <Image source={{ uri: item.logo }} style={styles.logo} />
-              ) : (
-                <LinearGradient
-                  colors={["#a4a6ff", "#9396ff"]}
-                  style={styles.logoPlaceholder}
-                >
-                  <Text style={styles.logoInitial}>{item.shortName[0]}</Text>
-                </LinearGradient>
-              )}
-            </View>
-            <View style={styles.headerRight}>
-              {isPopular && (
-                <View style={styles.topChoiceBadge}>
-                  <Text style={styles.topChoiceText}>POPULAR</Text>
-                </View>
-              )}
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color={Colors.on_surface_variant}
-              />
-            </View>
-          </View>
-
-          <Text style={styles.collegeName}>{item.name}</Text>
-          <Text style={styles.collegeDetails}>
-            {item.location} •{" "}
-            {item.memberCount > 0
-              ? `${item.memberCount}+ members`
-              : "New Community"}
-          </Text>
-        </BlurView>
-      </TouchableOpacity>
-    );
+  const handleFilterPress = () => {
+    setFilterOpen(!filterOpen);
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" backgroundColor={Colors.background} />
 
       <View style={StyleSheet.absoluteFill}>
         <LinearGradient
@@ -281,6 +229,7 @@ export default function CollegeSelectScreen() {
         <View style={styles.glow2} />
       </View>
 
+      {/* Navigation Bar */}
       <View style={[styles.navBar, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity
           onPress={() => {
@@ -294,7 +243,7 @@ export default function CollegeSelectScreen() {
         >
           <Ionicons name="arrow-back" size={24} color={Colors.on_background} />
         </TouchableOpacity>
-        <Text style={styles.navTitle}>Select Campus</Text>
+        <Text style={styles.navTitle}>Choose your college</Text>
         <TouchableOpacity style={styles.navActionBtn} onPress={handleLogout}>
           <Ionicons
             name="log-out-outline"
@@ -307,37 +256,83 @@ export default function CollegeSelectScreen() {
       <FlatList
         data={colleges}
         keyExtractor={(item) => item.id}
-        renderItem={renderCollegeItem}
+        renderItem={({ item, index }) => (
+          <CollegeCard
+            college={item}
+            onPress={() => handleSelect(item)}
+            isPopular={item.memberCount >= 100 && index < 3 && search === ""}
+            isTopOne={index === 0 && search === ""}
+          />
+        )}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.header}>
+            {/* Step Indicator */}
+            <View style={styles.stepIndicator}>
+              <View style={styles.stepDotActive} />
+              <View style={styles.stepLine} />
+              <View style={styles.stepDotInactive} />
+            </View>
+            <View style={styles.stepLabels}>
+              <Text style={styles.stepLabelActive}>01 Select College</Text>
+              <Text style={styles.stepLabelInactive}>02 Verify Email</Text>
+            </View>
+
             <Text style={styles.heroTitle}>Find your hub</Text>
             <Text style={styles.heroSub}>
               Choose your campus to join the loop
             </Text>
 
-            <View style={[styles.searchContainer, styles.surfaceCard]}>
+            {/* Search */}
+            <View style={styles.searchContainer}>
               <BlurView intensity={30} tint="dark" style={styles.searchBlur}>
-                <View style={styles.searchIconWrapper}>
-                  <Ionicons
-                    name="search"
-                    size={20}
-                    color={Colors.primary}
-                    style={styles.searchIcon}
-                  />
-                </View>
-                <TextInput
-                  style={styles.searchInput}
+                <SearchInput
                   placeholder="Search your college..."
-                  placeholderTextColor={Colors.on_surface_variant}
                   value={search}
                   onChangeText={setSearch}
-                  autoCorrect={false}
-                  autoCapitalize="none"
+                  onClear={handleSearchClear}
+                  showFilter
+                  onFilterPress={handleFilterPress}
                 />
               </BlurView>
             </View>
+
+            {/* Quick Filters */}
+            {!filterOpen && search === "" && (
+              <View style={styles.quickFilters}>
+                <SecondaryButton
+                  title="Bengaluru"
+                  onPress={() => setSearch("Bengaluru")}
+                  variant="ghost"
+                  style={{ paddingHorizontal: 16, height: 40 }}
+                />
+                <SecondaryButton
+                  title="Karnataka"
+                  onPress={() => setSearch("Karnataka")}
+                  variant="ghost"
+                  style={{ paddingHorizontal: 16, height: 40 }}
+                />
+                <SecondaryButton
+                  title="All Tech Nodes"
+                  onPress={() => setSearch("")}
+                  variant="ghost"
+                  style={{ paddingHorizontal: 16, height: 40 }}
+                />
+              </View>
+            )}
+
+            {filterOpen && (
+              <View style={styles.filterPanel}>
+                <Text style={styles.filterTitle}>Filter Campuses</Text>
+                <View style={styles.filterOptions}>
+                  <Text style={styles.filterOption}>Verified Only</Text>
+                  <Text style={styles.filterOption}>Near Me</Text>
+                  <Text style={styles.filterOption}>High Activity</Text>
+                  <Text style={styles.filterOption}>Research Hubs</Text>
+                </View>
+              </View>
+            )}
           </View>
         }
         ListFooterComponent={
@@ -368,6 +363,10 @@ export default function CollegeSelectScreen() {
                 <Text style={styles.seedBtnText}>Initialize Database</Text>
               </TouchableOpacity>
             )}
+
+            <Text style={styles.note}>
+              You can add secondary research affiliations later in profile settings.
+            </Text>
           </View>
         }
         ListEmptyComponent={
@@ -397,62 +396,53 @@ export default function CollegeSelectScreen() {
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : undefined}
           >
-            <BlurView intensity={40} tint="dark" style={styles.modalContent}>
+            <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Request Campus</Text>
                 <TouchableOpacity onPress={() => setRequestVisible(false)}>
-                  <Ionicons name="close" size={24} color="#FFF" />
+                  <Ionicons name="close" size={24} color={Colors.on_background} />
                 </TouchableOpacity>
               </View>
 
               <View style={styles.modalForm}>
-                <View style={styles.modalInputBox}>
-                  <Text style={styles.modalLabel}>University Name</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    placeholder="e.g. Stanford University"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    value={requestData.name}
-                    onChangeText={(v) =>
-                      setRequestData((d) => ({ ...d, name: v }))
-                    }
-                  />
-                </View>
+                <InputField
+                  icon="school-outline"
+                  label="University Name"
+                  placeholder="e.g. Stanford University"
+                  value={requestData.name}
+                  onChangeText={(v) =>
+                    setRequestData((d) => ({ ...d, name: v }))
+                  }
+                />
 
-                <View style={styles.modalInputBox}>
-                  <Text style={styles.modalLabel}>Email Domain</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    placeholder="e.g. stanford.edu"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    value={requestData.domain}
-                    onChangeText={(v) =>
-                      setRequestData((d) => ({ ...d, domain: v }))
-                    }
-                    autoCapitalize="none"
-                  />
-                </View>
+                <InputField
+                  icon="mail-outline"
+                  label="Email Domain"
+                  placeholder="e.g. stanford.edu"
+                  value={requestData.domain}
+                  onChangeText={(v) =>
+                    setRequestData((d) => ({ ...d, domain: v }))
+                  }
+                  autoCapitalize="none"
+                />
 
-                <TouchableOpacity
-                  style={styles.modalSubmitBtn}
+                <InputField
+                  icon="location-outline"
+                  label="Location"
+                  placeholder="City, State, Country"
+                  value={requestData.location}
+                  onChangeText={(v) =>
+                    setRequestData((d) => ({ ...d, location: v }))
+                  }
+                />
+
+                <PrimaryButton
+                  title="Submit Request"
                   onPress={handleRequestSubmit}
-                  disabled={requesting}
-                >
-                  <LinearGradient
-                    colors={["#a4a6ff", "#9396ff"]}
-                    style={styles.modalSubmitGrad}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  >
-                    {requesting ? (
-                      <ActivityIndicator color="#FFF" />
-                    ) : (
-                      <Text style={styles.modalSubmitText}>Submit Request</Text>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
+                  loading={requesting}
+                />
               </View>
-            </BlurView>
+            </View>
           </KeyboardAvoidingView>
         </BlurView>
       </Modal>
@@ -468,7 +458,7 @@ export default function CollegeSelectScreen() {
   );
 }
 
-const styles = StyleSheet.create<{ [key: string]: any }>({
+const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   glow1: {
     position: "absolute",
@@ -495,155 +485,145 @@ const styles = StyleSheet.create<{ [key: string]: any }>({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: Spacing.margin,
     paddingBottom: 15,
   },
-  backBtn: { width: 40, height: 40, justifyContent: "center" },
+  backBtn: { width: 44, height: 44, justifyContent: "center", alignItems: "center" },
   navTitle: {
     color: Colors.on_background,
     fontSize: 18,
     fontWeight: "700",
-    fontFamily: Platform.OS === "ios" ? "System" : "Manrope_700Bold",
+    fontFamily: "PlusJakartaSans_700Bold",
+    flex: 1,
+    textAlign: "center",
   },
   navActionBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     justifyContent: "center",
-    alignItems: "flex-end",
+    alignItems: "center",
   },
 
-  scrollContent: { paddingBottom: 60, paddingHorizontal: 20 },
-  header: { paddingTop: 20, marginBottom: 24 },
+  scrollContent: { paddingBottom: 40, paddingHorizontal: Spacing.margin },
+  header: { marginBottom: 24 },
+
+  // Step Indicator
+  stepIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  stepDotActive: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.primary,
+  },
+  stepLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: Colors.primary,
+    marginHorizontal: 12,
+  },
+  stepDotInactive: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.outline,
+    opacity: 0.3,
+  },
+  stepLabels: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 24,
+    marginBottom: 20,
+  },
+  stepLabelActive: {
+    ...Typography.label,
+    color: Colors.primary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  stepLabelInactive: {
+    ...Typography.label,
+    color: Colors.on_surface_variant,
+    fontSize: 12,
+    opacity: 0.5,
+  },
+
   heroTitle: {
     color: Colors.on_background,
     fontSize: 32,
     fontWeight: "800",
+    fontFamily: "PlusJakartaSans_800ExtraBold",
     marginBottom: 8,
-    textShadowColor: "rgba(107, 82, 255, 0.2)",
+    textShadowColor: "rgba(164, 166, 255, 0.2)",
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 8,
   },
-  heroSub: { color: Colors.on_surface_variant, fontSize: 16 },
+  heroSub: { color: Colors.on_surface_variant, fontSize: 16, marginBottom: 24 },
 
   searchContainer: {
-    marginTop: 24,
-    height: 64,
-    borderRadius: 20,
-    overflow: "hidden",
+    marginBottom: 20,
   },
   searchBlur: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: 16,
     backgroundColor: "rgba(0, 0, 0, 0.1)",
   },
-  searchIconWrapper: {
-    marginRight: 12,
-    backgroundColor: "rgba(0, 0, 0, 0.15)",
-    borderRadius: 16,
-    width: 48,
-    height: 48,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 1,
+
+  quickFilters: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 20,
   },
-  searchIcon: { marginRight: 0 },
-  searchInput: {
-    flex: 1,
-    color: Colors.on_background,
-    fontSize: 16,
-    paddingHorizontal: 4,
+
+  filterPanel: {
+    backgroundColor: Colors.surface_container_low,
+    borderRadius: Roundness.lg,
+    padding: 20,
+    marginBottom: 20,
   },
+  filterTitle: {
+    ...Typography.headline,
+    color: Colors.on_surface,
+    fontSize: 20,
+    marginBottom: 16,
+  },
+  filterOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  filterOption: {
+    ...Typography.body_medium,
+    color: Colors.on_surface_variant,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: Colors.surface_container,
+    borderRadius: Roundness.full,
+  },
+
   surfaceCard: {
     backgroundColor: Colors.surface_container_high,
-    borderRadius: 20,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 3,
+    borderRadius: Roundness.lg,
+    ...Shadows.md,
   },
 
   cardWrapper: { marginBottom: 16 },
-  card: {
-    borderRadius: 24,
-    padding: 20,
-    overflow: "hidden",
-    backgroundColor: Colors.surface_container_high,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-  premiumCard: {
-    borderColor: "rgba(107, 82, 255, 0.3)",
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 12 },
-  logoContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  logo: { width: "100%", height: "100%", resizeMode: "cover" },
-  logoPlaceholder: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  logoInitial: { color: Colors.on_background, fontSize: 20, fontWeight: "800" },
-  topChoiceBadge: {
-    backgroundColor: "rgba(107, 82, 255, 0.2)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  topChoiceText: {
-    color: "#A594FF",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-
-  collegeName: {
-    color: Colors.on_background,
-    fontSize: 20,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  collegeDetails: { color: Colors.on_surface_variant, fontSize: 14 },
 
   footerSection: { marginTop: 20, alignItems: "center" },
   requestFooterCard: {
     width: "100%",
     padding: 24,
-    borderRadius: 24,
+    borderRadius: Roundness.lg,
     alignItems: "center",
     overflow: "hidden",
-    backgroundColor: "rgba(0, 0, 0, 0.1)",
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    backgroundColor: Colors.surface_bright,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    ...Shadows.md,
   },
   requestFooterTitle: {
     color: Colors.on_background,
@@ -657,12 +637,8 @@ const styles = StyleSheet.create<{ [key: string]: any }>({
     gap: 8,
     paddingHorizontal: 24,
     paddingVertical: 14,
-    borderRadius: 20,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 2,
+    borderRadius: Roundness.full,
+    ...Shadows.sm,
   },
   requestFooterBtnText: {
     color: Colors.primary,
@@ -670,24 +646,40 @@ const styles = StyleSheet.create<{ [key: string]: any }>({
     fontSize: 15,
   },
 
-  // Gradient definitions for enhanced visual effects
-  glassGradient: {
-    background: "rgba(255, 255, 255, 0.03)",
-    highlight: "rgba(255, 255, 255, 0.06)",
-  },
-
   seedBtn: {
     marginTop: 40,
     padding: 10,
     backgroundColor: Colors.surface_container,
-    borderRadius: 12,
+    borderRadius: Roundness.md,
     borderWidth: 1,
-    borderColor: "rgba(107, 82, 255, 0.3)",
+    borderColor: "rgba(164, 166, 255, 0.3)",
   },
   seedBtnText: {
     color: Colors.primary,
     fontSize: 12,
     fontWeight: "600",
+  },
+
+  // Mesh Node Radar
+  meshNode: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    padding: 20,
+    backgroundColor: Colors.surface_container_high,
+    borderRadius: Roundness.lg,
+    marginTop: 24,
+    marginBottom: 16,
+    ...Shadows.md,
+  },
+  note: {
+    textAlign: "center",
+    ...Typography.caption,
+    color: Colors.on_surface_variant,
+    fontSize: 13,
+    paddingHorizontal: 20,
+    marginTop: 8,
   },
 
   empty: { padding: 40, alignItems: "center" },
@@ -706,10 +698,15 @@ const styles = StyleSheet.create<{ [key: string]: any }>({
     backgroundColor: "rgba(0,0,0,0.7)",
   },
   modalContent: {
-    borderRadius: 32,
+    borderRadius: Roundness.xl,
     padding: 24,
     overflow: "hidden",
-    backgroundColor: "rgba(28, 28, 32, 0.95)",
+    backgroundColor: Colors.surface_bright,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    width: "100%",
+    maxWidth: 400,
+    ...Shadows.lg,
   },
   modalHeader: {
     flexDirection: "row",
@@ -718,32 +715,11 @@ const styles = StyleSheet.create<{ [key: string]: any }>({
     marginBottom: 24,
   },
   modalTitle: {
+    ...Typography.headline,
     color: Colors.on_background,
     fontSize: 22,
-    fontWeight: "800",
   },
   modalForm: { gap: 16 },
-  modalInputBox: { gap: 6 },
-  modalLabel: {
-    color: Colors.on_surface_variant,
-    fontSize: 13,
-    fontWeight: "700",
-    marginLeft: 4,
-  },
-  modalInput: {
-    height: 54,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    color: Colors.on_background,
-    fontSize: 15,
-  },
-  modalSubmitBtn: {
-    height: 56,
-    borderRadius: 28,
-    overflow: "hidden",
-    marginTop: 8,
-  },
-  modalSubmitGrad: { flex: 1, justifyContent: "center", alignItems: "center" },
-  modalSubmitText: { color: "#FFF", fontSize: 16, fontWeight: "700" },
+
+  // Feedback Modal (handled by component)
 });

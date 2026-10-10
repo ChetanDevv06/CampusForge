@@ -4,7 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -13,44 +13,16 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import FeedbackModal, { FeedbackType } from "../../components/FeedbackModal";
-import { Colors, Gradients, Shadows, Typography } from "../../constants/theme";
+import { Colors, Gradients, Shadows, Typography, Spacing, Roundness } from "../../constants/theme";
 import { auth, db } from "../../firebaseConfig";
 import { incrementCollegeMemberCount } from "../../utils/colleges";
-
-const Field = ({
-  icon,
-  placeholder,
-  value,
-  onChangeText,
-  secure = false,
-  keyboard = "default",
-}: any) => (
-  <View style={styles.inputWrapper}>
-    <Ionicons
-      name={icon}
-      size={20}
-      color={Colors.primary}
-      style={styles.inputIcon}
-    />
-    <TextInput
-      style={styles.input}
-      placeholder={placeholder}
-      placeholderTextColor={Colors.on_surface_variant}
-      value={value}
-      onChangeText={onChangeText}
-      secureTextEntry={secure}
-      autoCapitalize="none"
-      keyboardType={keyboard}
-      autoCorrect={false}
-      cursorColor={Colors.primary}
-    />
-  </View>
-);
+import PrimaryButton from "../../components/ui/PrimaryButton";
+import SecondaryButton from "../../components/ui/SecondaryButton";
+import InputField from "../../components/ui/InputField";
 
 export default function RegisterScreen() {
   const [name, setName] = useState("");
@@ -70,7 +42,7 @@ export default function RegisterScreen() {
   const [collegeId, setCollegeId] = useState("");
   const [collegeName, setCollegeName] = useState("");
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (params.collegeId && params.collegeName) {
       setCollegeId(params.collegeId);
       setCollegeName(params.collegeName);
@@ -103,12 +75,16 @@ export default function RegisterScreen() {
     if (!name || !collegeId || !email || !password || !confirmPassword) {
       showAlert(
         "Missing Details",
-        "Please complete all fields to join the Loop.",
+        "Please complete all fields to join the Forge.",
       );
       return;
     }
     if (password !== confirmPassword) {
       showAlert("Mismatch", "Your passwords do not match.");
+      return;
+    }
+    if (password.length < 8) {
+      showAlert("Weak Password", "Password must be at least 8 characters with numbers & symbols.");
       return;
     }
     setLoading(true);
@@ -141,12 +117,12 @@ export default function RegisterScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" backgroundColor={Colors.background} />
 
       {/* Dynamic Background */}
       <View style={StyleSheet.absoluteFill}>
         <LinearGradient
-          colors={[Colors.background, "#15151A", "#15151A"]}
+          colors={[Colors.background, Colors.surface_container_low, Colors.surface_container_low]}
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.glow1} />
@@ -162,11 +138,11 @@ export default function RegisterScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Join the Forge</Text>
-            <Text style={styles.subtitle}>
-              Create your unique campus identity
-            </Text>
+            <Text style={styles.title}>Create Student Account</Text>
+            <Text style={styles.subtitle}>Join the Forge</Text>
+            <Text style={styles.subtitleDetail}>Create your unique campus identity</Text>
           </View>
 
           <BlurView
@@ -175,11 +151,12 @@ export default function RegisterScreen() {
             style={styles.glassCard}
           >
             <View style={styles.formArea}>
-              <Field
+              <InputField
                 icon="person-outline"
                 placeholder="Full Name"
                 value={name}
                 onChangeText={setName}
+                helperText="Your display name on campus"
               />
 
               <TouchableOpacity
@@ -190,7 +167,10 @@ export default function RegisterScreen() {
                     params: { returnTo: "/(auth)/register" },
                   })
                 }
-                style={styles.inputWrapper}
+                style={[
+                  styles.collegeSelector,
+                  collegeName && styles.collegeSelectorSelected,
+                ]}
               >
                 <Ionicons
                   name="school-outline"
@@ -198,64 +178,64 @@ export default function RegisterScreen() {
                   color={Colors.primary}
                   style={styles.inputIcon}
                 />
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
                   <Text
                     style={[
-                      styles.inputLabel,
+                      styles.collegeSelectorLabel,
                       !collegeName && { color: Colors.on_surface_variant },
                     ]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
                   >
                     {collegeName || "Select your College"}
                   </Text>
+                  {collegeName && (
+                    <Text style={styles.collegeSelectorDetail} numberOfLines={1} ellipsizeMode="tail">
+                      {collegeName} • Verified Network
+                    </Text>
+                  )}
                 </View>
                 <Ionicons
                   name="chevron-forward"
-                  size={18}
+                  size={20}
                   color={Colors.on_surface_variant}
                 />
               </TouchableOpacity>
 
-              <Field
+              <InputField
                 icon="mail-outline"
                 placeholder="College Email"
                 value={email}
                 onChangeText={setEmail}
-                keyboard="email-address"
+                keyboardType="email-address"
+                suffix=".edu"
+                helperText="Verification link will be dispatched to validate collegiate credentials"
               />
-              <Field
+
+              <InputField
                 icon="lock-closed-outline"
                 placeholder="Password"
                 value={password}
                 onChangeText={setPassword}
-                secure
+                secureTextEntry
+                showVisibilityToggle
+                helperText="Min. 8 characters with numbers & symbols"
               />
-              <Field
+
+              <InputField
                 icon="shield-checkmark-outline"
                 placeholder="Confirm Password"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
-                secure
+                secureTextEntry
+                showVisibilityToggle
               />
 
-              <TouchableOpacity
+              <PrimaryButton
+                title="Get Started"
                 onPress={handleRegister}
-                disabled={loading}
-                activeOpacity={0.85}
-                style={styles.submitBtn}
-              >
-                <LinearGradient
-                  colors={Gradients.primary}
-                  style={styles.submitGrad}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  {loading ? (
-                    <ActivityIndicator color={Colors.on_primary} />
-                  ) : (
-                    <Text style={styles.submitText}>Get Started</Text>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
+                loading={loading}
+              />
             </View>
           </BlurView>
 
@@ -285,33 +265,43 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   scroll: {
     flexGrow: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: Spacing.margin,
     paddingBottom: 40,
     justifyContent: "center",
+    paddingTop: 20,
   },
 
   glow1: {
     position: "absolute",
-    top: -50,
-    right: -50,
-    width: 300,
-    height: 300,
-    borderRadius: 150,
+    top: -80,
+    right: -80,
+    width: 360,
+    height: 360,
+    borderRadius: 180,
     backgroundColor: Colors.primary,
-    opacity: 0.15,
+    opacity: 0.12,
   },
   glow2: {
     position: "absolute",
-    bottom: 50,
-    left: -50,
-    width: 250,
-    height: 250,
-    borderRadius: 125,
+    bottom: 80,
+    left: -80,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
     backgroundColor: Colors.tertiary,
-    opacity: 0.1,
+    opacity: 0.08,
   },
 
-  header: { alignItems: "center", marginBottom: 40 },
+  header: { alignItems: "center", marginBottom: 32 },
+  brandIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: Roundness.md,
+    backgroundColor: "rgba(164, 166, 255, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
   title: {
     ...Typography.display,
     color: Colors.on_background,
@@ -319,60 +309,58 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   subtitle: {
+    ...Typography.headline,
+    color: Colors.on_background,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  subtitleDetail: {
     ...Typography.body,
     color: Colors.on_surface_variant,
-    marginTop: 8,
+    marginTop: 4,
     textAlign: "center",
   },
 
   glassCard: {
-    borderRadius: 24, // Full roundness
-    padding: 32,
+    borderRadius: Roundness.lg,
+    padding: 28,
     borderWidth: 0, // No-Line Rule
     overflow: "hidden",
-    backgroundColor: "rgba(28, 28, 32, 0.3)", // More translucent
+    backgroundColor: "rgba(36, 36, 40, 0.85)",
     ...Shadows.lg,
   },
-  formArea: { gap: 16 },
-  inputWrapper: {
+  formArea: { gap: 18 },
+
+  inputIcon: { marginRight: 12 },
+
+  collegeSelector: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.surface_container,
-    borderRadius: 16,
-    height: 60,
-    paddingHorizontal: 20,
-    borderWidth: 0, // No-Line Rule
+    backgroundColor: Colors.surface_container_low,
+    borderRadius: Roundness.md,
+    height: 56,
+    paddingHorizontal: 16,
+    borderWidth: 0,
+    ...Shadows.sm,
   },
-  inputIcon: { marginRight: 12 },
-  input: {
-    flex: 1,
+  collegeSelectorSelected: {
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    ...Shadows.md,
+  },
+  collegeSelectorLabel: {
     ...Typography.body_medium,
     color: Colors.on_surface,
     fontSize: 16,
-    textAlign: "left",
   },
-  inputLabel: {
-    ...Typography.body_medium,
-    color: Colors.on_surface_variant,
-    fontSize: 16,
-  },
-
-  submitBtn: {
-    height: 64,
-    borderRadius: 20,
-    marginTop: 12,
-    overflow: "hidden",
-    ...Shadows.ambient,
-  },
-  submitGrad: { flex: 1, justifyContent: "center", alignItems: "center" },
-  submitText: {
-    ...Typography.title,
-    color: Colors.on_primary,
-    fontSize: 18,
-    fontWeight: "700",
+  collegeSelectorDetail: {
+    ...Typography.caption,
+    color: Colors.primary,
+    fontSize: 12,
+    marginTop: 2,
   },
 
-  footer: { flexDirection: "row", justifyContent: "center", marginTop: 32 },
+  footer: { flexDirection: "row", justifyContent: "center", marginTop: 28 },
   footerText: {
     ...Typography.body,
     color: Colors.on_surface_variant,
