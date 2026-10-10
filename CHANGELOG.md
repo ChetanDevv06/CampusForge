@@ -10,12 +10,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Security policy documentation
-- Contribution guidelines
-- Code of conduct
+- **Docker Development Environment** — Complete containerized setup for reproducible Windows development
+  - `Dockerfile` with Node.js 20 Bookworm slim (Expo SDK 54 compatible)
+  - `compose.yaml` with bind-mounted source, anonymous volumes for deps/cache
+  - `.dockerignore` excluding node_modules, .expo, .env, google-services.json
+  - `.env.example` template with all 9 EXPO_PUBLIC_* variables
+  - `DOCKER.md` comprehensive Windows developer guide
+- **Docker npm scripts** for streamlined workflow
+  - `npm run start:docker` — Build & start container (foreground)
+  - `npm run start:docker:detached` — Build & start container (background)
+  - `npm run docker:logs` — Follow container logs
+  - `npm run docker:stop` — Stop and remove container
+  - `npm run docker:rebuild` — Full rebuild with volume clear
+  - `npm run docker:clean` — Remove container, volumes, images
+  - `npm run doctor` — Expo configuration validation
+  - `npm run deps:check` — Dependency compatibility check
+- **Documentation updates** for Docker development
+  - README.md: Docker badge, Docker quick start as recommended Option 1
+  - CONTRIBUTING.md: Docker Desktop prerequisite, Docker vs native setup options
+  - docs/README.md: Docker Development link in documentation index
+  - docs/architecture.md: Development environments table, Docker architecture diagram
 
 ### Changed
-- Updated README with comprehensive documentation
+- **Expo SDK 53 → 54** (React Native 0.76 → 0.81.5, React 18 → 19)
+- **React Compiler** enabled in app.json experiments
+- **Expo Router v5 → v6** with typed routes
+- **Firebase JS SDK** upgraded to v12.19.0
+- **Expo Notifications** upgraded to ~0.32.17
+- **React Navigation** upgraded to v7 (bottom-tabs, elements, native)
+- **Expo SDK packages** aligned to ~54.0.x versions
+
+### Fixed
+- None
+
+---
+
+## [1.1.0] - 2025-01-15
+
+### Added
+- **Docker Development Environment** — Complete containerized setup for reproducible Windows development
+  - `Dockerfile` with Node.js 20 Bookworm slim (Expo SDK 54 compatible)
+  - `compose.yaml` with bind-mounted source, anonymous volumes for deps/cache
+  - `.dockerignore` excluding node_modules, .expo, .env, google-services.json
+  - `.env.example` template with all 9 EXPO_PUBLIC_* variables
+  - `DOCKER.md` comprehensive Windows developer guide
+- **Docker npm scripts** for streamlined workflow
+- **Documentation updates** for Docker development
+
+### Changed
+- **Expo SDK 53 → 54** (React Native 0.76 → 0.81.5, React 18 → 19)
+- **React Compiler** enabled in app.json experiments
+- **Expo Router v5 → v6** with typed routes
+- **Firebase JS SDK** upgraded to v12.19.0
+- **Expo Notifications** upgraded to ~0.32.17
+- **React Navigation** upgraded to v7 (bottom-tabs, elements, native)
+- **Expo SDK packages** aligned to ~54.0.x versions
 
 ### Fixed
 - None
@@ -93,15 +142,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version History Summary
 
-| Version | Date | Expo SDK | React Native | Key Milestone |
-|---------|------|----------|--------------|---------------|
-| 1.0.0 | 2024-12-15 | 53 | 0.76 | Public launch |
-| 0.9.0 | 2024-11-01 | 52 | 0.75 | Beta testing |
-| 0.5.0 | 2024-09-15 | 51 | 0.74 | Internal alpha |
+| Version | Date | Expo SDK | React Native | React | Key Milestone |
+|---------|------|----------|--------------|-------|---------------|
+| 1.1.0 | 2025-01-15 | 54 | 0.81.5 | 19.1.0 | Docker dev environment, SDK 54 upgrade |
+| 1.0.0 | 2024-12-15 | 53 | 0.76 | 18.2.0 | Public launch |
+| 0.9.0 | 2024-11-01 | 52 | 0.75 | 18.2.0 | Beta testing |
+| 0.5.0 | 2024-09-15 | 51 | 0.74 | 18.2.0 | Internal alpha |
 
 ---
 
 ## Upgrade Guides
+
+### Upgrading to 1.1.0 (from 1.0.x)
+
+**Breaking Changes:**
+- Expo SDK 53 → 54 (run `npx expo install --fix`)
+- React Native 0.76 → 0.81.5
+- React 18 → 19
+- Expo Router v5 → v6 (typedRoutes enabled)
+- React Navigation 6 → 7 (API changes in bottom-tabs, elements, native)
+
+**Migration Steps:**
+```bash
+# 1. Update dependencies
+npx expo install --fix
+
+# 2. Clear caches
+npx expo start --clear
+
+# 3. Rebuild native (if using custom dev client)
+eas build --platform all --profile development
+
+# 4. Deploy Firestore rules (if changed)
+firebase deploy --only firestore:rules
+
+# 5. For Docker users: rebuild container
+npm run docker:rebuild
+```
 
 ### Upgrading to 1.0.0 (from 0.9.x)
 
@@ -132,10 +209,10 @@ firebase deploy --only firestore:rules
 
 1. **Version bump** in `package.json` + `app.json`
 2. **Changelog update** (this file)
-3. **Git tag**: `git tag v1.0.0 && git push origin v1.0.0`
+3. **Git tag**: `git tag v1.1.0 && git push origin v1.1.0`
 4. **EAS Build**: `eas build --platform all --profile production`
 5. **App Store / Play Store** submission
-6. **OTA Update**: `eas update --branch production --message "Release v1.0.0"`
+6. **OTA Update**: `eas update --branch production --message "Release v1.1.0"`
 7. **GitHub Release** with changelog
 
 ---
