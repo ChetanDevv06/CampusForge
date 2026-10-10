@@ -4,6 +4,7 @@
 [![React Native](https://img.shields.io/badge/React_Native-0.81-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactnative.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
 [![Firebase](https://img.shields.io/badge/Firebase-12.11-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)](https://firebase.google.com)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](DOCKER.md)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
 > **A smart campus exchange platform** bridging the gap between students. Whether you've lost an item, want to sell a textbook, or need to learn a new skill—CampusForge is the go-to app for your university community.
@@ -93,6 +94,30 @@ CampusForge/
 
 ## 🚀 Quick Start
 
+### Option 1: Docker Development (Recommended for Windows)
+
+No local Node.js/npm installation needed. Runs in a container with hot reload.
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/ChetanDev06/CampusForge.git
+cd CampusForge
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your Firebase credentials
+
+# 3. Start development server in Docker
+npm run start:docker
+# Or detached: npm run start:docker:detached && npm run docker:logs
+```
+
+See **[DOCKER.md](DOCKER.md)** for complete guide: networking, troubleshooting, Android device connection, and Windows Firewall setup.
+
+---
+
+### Option 2: Native Development
+
 ### Prerequisites
 
 - **Node.js** ≥ 20 (LTS recommended) — [`nvm`](https://github.com/nvm-sh/nvm) or [`fnm`](https://github.com/Schniz/fnm) recommended
@@ -157,9 +182,19 @@ CLOUDINARY_API_SECRET="your-api-secret"
 ### Development Commands
 
 ```bash
+# Docker Development
+npm run start:docker          # Build & start container (foreground)
+npm run start:docker:detached # Build & start container (background)
+npm run docker:logs           # Follow container logs
+npm run docker:stop           # Stop and remove container
+npm run docker:rebuild        # Full rebuild (clear volumes, reinstall deps)
+npm run docker:clean          # Remove container, volumes, images
+
 # Lint & type-check
 npm run lint          # Expo ESLint config
-npx tsc --noEmit      # TypeScript type checking
+npm run typecheck     # TypeScript type checking
+npm run doctor        # Expo configuration validation
+npm run deps:check    # Dependency compatibility check
 
 # Reset project (clears cache, reinstalls)
 npm run reset-project

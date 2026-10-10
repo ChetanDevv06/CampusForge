@@ -4,6 +4,42 @@
 
 CampusForge follows a **client-serverless** architecture with Expo/React Native on the client and Firebase as the backend-as-a-service.
 
+### Development Environments
+
+| Environment | Description | Use Case |
+|-------------|-------------|----------|
+| **Docker (Recommended)** | Containerized Node.js 20 + Expo CLI + all deps | Windows development, CI parity, zero local setup |
+| **Native** | Local Node.js + Expo CLI | macOS/iOS development, native builds |
+
+**Docker Architecture:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        WINDOWS HOST                             │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Docker Desktop (WSL 2)                                 │   │
+│  │  ┌─────────────────────────────────────────────────┐   │   │
+│  │  │  campusforge-expo container                     │   │   │
+│  │  │  - Node.js 20 (Bookworm slim)                  │   │   │
+│  │  │  - /app (bind-mounted source)                   │   │   │
+│  │  │  - /app/node_modules (anonymous volume)         │   │   │
+│  │  │  - /app/.expo (anonymous volume)                │   │   │
+│  │  │  - Expo CLI + Metro on 0.0.0.0:8081            │   │   │
+│  │  └─────────────────────────────────────────────────┘   │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│         │                    │                    │             │
+│    Port 8081             Port 19000-19002      Port 19006      │
+│         ▼                    ▼                    ▼             │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  ANDROID PHONE (Expo Go)                                │   │
+│  │  - Connects to Windows LAN IP:8081                      │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+See **[DOCKER.md](../DOCKER.md)** for complete setup guide.
+
+### Client Architecture
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        CLIENT (Expo/React Native)               │

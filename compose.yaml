@@ -1,0 +1,46 @@
+services:
+  expo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: campusforge-expo
+    ports:
+      # Metro bundler (primary)
+      - "8081:8081"
+      # Expo dev server fallback
+      - "8082:8082"
+      # Expo dev tools
+      - "19000:19000"
+      - "19001:19001"
+      - "19002:19002"
+      # Web preview
+      - "19006:19006"
+    volumes:
+      # Mount source for hot reload
+      - .:/app
+      # Keep container's node_modules separate from host
+      - /app/node_modules
+      # Keep container's Expo cache separate
+      - /app/.expo
+    environment:
+      # Required for Expo to detect it's running in a container
+      - EXPO_DEVTOOLS_LISTEN_ADDRESS=0.0.0.0
+      # Metro bundler host
+      - REACT_NATIVE_PACKAGER_HOSTNAME=0.0.0.0
+      # Disable telemetry in CI
+      - EXPO_NO_TELEMETRY=1
+      # Use host network for LAN mode (requires host network mode or port mapping)
+      # EXPO_PUBLIC_* variables are loaded from .env file
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
+    # Restart unless explicitly stopped
+    restart: unless-stopped
+
+  # Optional: Watchman for faster file watching (uncomment if needed)
+  # watchman:
+  #   image: ghcr.io/facebook/watchman:latest
+  #   volumes:
+  #     - .:/app
+  #   network_mode: "service:expo"

@@ -26,13 +26,33 @@ This project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDU
 
 ### Prerequisites
 
-- Node.js ≥ 20 (LTS)
+- Node.js ≥ 20 (LTS) — for native development
 - npm ≥ 10 or pnpm ≥ 9
 - Expo CLI: `npm install -g @expo/cli`
+- **Docker Desktop** ≥ 4.25 (for containerized development) — [Install](https://www.docker.com/products/docker-desktop/)
 - Firebase project (for backend services)
 - iOS Simulator / Android Emulator / Physical device
 
 ### Setup
+
+#### Option A: Docker Development (Recommended)
+
+```bash
+# Fork and clone your fork
+git clone https://github.com/YOUR_USERNAME/CampusForge.git
+cd CampusForge
+
+# Configure environment
+cp .env.example .env
+# Add your Firebase credentials to .env
+
+# Start development server in Docker
+npm run start:docker
+```
+
+The container handles Node.js, npm, Expo CLI, and all dependencies. Source code is mounted for hot reload. See [DOCKER.md](DOCKER.md) for complete guide.
+
+#### Option B: Native Development
 
 ```bash
 # Fork and clone your fork
@@ -68,27 +88,41 @@ npx expo start
 
 ### Development Process
 
-1. **Create a branch** from `main`
-   ```bash
-   git checkout -b feat/your-feature-name
-   ```
+#### Using Docker (Recommended)
 
-2. **Make atomic commits** with clear messages
-   ```bash
-   git add .
-   git commit -m "feat: add skill reservation flow"
-   ```
+```bash
+# 1. Create a branch from main
+git checkout -b feat/your-feature-name
 
-3. **Run quality checks** before pushing
-   ```bash
-   npm run lint
-   npx tsc --noEmit
-   ```
+# 2. Make changes — hot reload works automatically
 
-4. **Push to your fork**
-   ```bash
-   git push origin feat/your-feature-name
-   ```
+# 3. Run quality checks INSIDE the container
+docker compose exec expo npm run lint
+docker compose exec expo npx tsc --noEmit
+# Or use npm scripts that run in container:
+npm run docker:logs  # Check logs
+
+# 4. Push to your fork
+git push origin feat/your-feature-name
+```
+
+#### Using Native Development
+
+```bash
+# 1. Create a branch from main
+git checkout -b feat/your-feature-name
+
+# 2. Make atomic commits with clear messages
+git add .
+git commit -m "feat: add skill reservation flow"
+
+# 3. Run quality checks before pushing
+npm run lint
+npx tsc --noEmit
+
+# 4. Push to your fork
+git push origin feat/your-feature-name
+```
 
 5. **Open a Pull Request** against `main`
 

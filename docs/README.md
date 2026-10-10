@@ -13,6 +13,7 @@ Welcome to the CampusForge documentation. This folder contains technical documen
 | [Deployment](./deployment.md) | Build, release, and deployment procedures |
 | [Testing](./testing.md) | Testing strategies and guidelines |
 | [Troubleshooting](./troubleshooting.md) | Common issues and solutions |
+| [Docker Development](../DOCKER.md) | Docker-based development environment setup |
 
 ---
 
