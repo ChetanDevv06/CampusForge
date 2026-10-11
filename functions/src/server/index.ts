@@ -349,6 +349,7 @@ function registerRoutes(app: Express) {
       }
 
       try {
+        await consumeRateLimit("revokeMembership", adminUid, getDb());
         await service.revokeMembership({
           userId,
           action: action as "suspend" | "revoke" | "expire" | "reinstate",
