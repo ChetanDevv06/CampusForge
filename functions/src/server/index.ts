@@ -157,7 +157,7 @@ function registerRoutes(app: Express) {
   });
 
   // ── startVerification ────────────────────────────────────────────────────────
-  app.post("/verify/start", authenticate, authenticateBurstLimiter, async (req: Request, res: Response) => {
+  app.post("/verify/start", authenticateBurstLimiter, authenticate, async (req: Request, res: Response) => {
     const uid = req.auth!.uid;
     const collegeId = bodyString(req.body?.collegeId, 120);
     if (!collegeId) {
