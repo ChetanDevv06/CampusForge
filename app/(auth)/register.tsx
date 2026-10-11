@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { Link, useLocalSearchParams, useRouter } from "expo-router";
+import { Link, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
@@ -20,6 +20,7 @@ import FeedbackModal, { FeedbackType } from "../../components/FeedbackModal";
 import { Colors, Gradients, Shadows, Typography, Spacing, Roundness } from "../../constants/theme";
 import { auth, db } from "../../firebaseConfig";
 import { incrementCollegeMemberCount } from "../../utils/colleges";
+import { consumeCollegeSelection } from "../../utils/collegeSelectionStore";
 import PrimaryButton from "../../components/ui/PrimaryButton";
 import SecondaryButton from "../../components/ui/SecondaryButton";
 import InputField from "../../components/ui/InputField";
@@ -49,6 +50,19 @@ export default function RegisterScreen() {
     }
     if (params.email) setEmail(params.email);
   }, [params]);
+
+  // Pick up the college chosen on the college-select screen. This runs on
+  // focus (not on mount) because the screen stays mounted while the college
+  // picker is open, so the rest of the form is never re-initialised.
+  useFocusEffect(
+    React.useCallback(() => {
+      const selection = consumeCollegeSelection();
+      if (!selection) return;
+      setCollegeId(selection.collegeId);
+      setCollegeName(selection.collegeName);
+      if (selection.email) setEmail(selection.email);
+    }, []),
+  );
 
   // Modal State
   const [modalVisible, setModalVisible] = useState(false);
@@ -108,6 +122,11 @@ export default function RegisterScreen() {
 
       // Update college member count
       await incrementCollegeMemberCount(collegeId);
+
+      // Selecting a college does NOT verify affiliation. Account holders start
+      // restricted and are routed into the verification flow; the campus
+      // experience is only reachable after the backend confirms membership.
+      router.replace("/(auth)/verify" as any);
     } catch (error: any) {
       showAlert("Registration Error", error.message);
     } finally {
@@ -191,7 +210,7 @@ export default function RegisterScreen() {
                   </Text>
                   {collegeName && (
                     <Text style={styles.collegeSelectorDetail} numberOfLines={1} ellipsizeMode="tail">
-                      {collegeName} • Verified Network
+                      {collegeName} • Verification required
                     </Text>
                   )}
                 </View>
@@ -204,12 +223,12 @@ export default function RegisterScreen() {
 
               <InputField
                 icon="mail-outline"
-                placeholder="College Email"
+                placeholder="Email Address"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
-                suffix=".edu"
-                helperText="Verification link will be dispatched to validate collegiate credentials"
+                autoCapitalize="none"
+                helperText="Used to sign in. College affiliation is verified separately — a personal email is fine."
               />
 
               <InputField

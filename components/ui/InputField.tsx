@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { forwardRef, useState, useEffect, useCallback } from "react";
+import React, { forwardRef, useState } from "react";
 import {
   TextInput,
   TouchableOpacity,
@@ -28,6 +28,9 @@ type IoniconsName =
   | "radio"
   | "location"
   | "shield-checkmark"
+  | "refresh"
+  | "hourglass"
+  | "cloud-offline"
   | "mail-outline"
   | "lock-closed-outline"
   | "person-outline"
@@ -76,21 +79,10 @@ const InputField = forwardRef<TextInput, InputFieldProps>(
   ) => {
     const [showPass, setShowPass] = useState(false);
     const [isFocused, setIsFocused] = useState(false);
-    const [internalValue, setInternalValue] = useState(value);
+    // While a secure field is masked, the native input owns the value. The
+    // displayed value is always the real `value` prop, so nothing a student
+    // types is ever rewritten by the mask.
     const effectiveSecure = secureTextEntry && !showPass;
-
-    // Sync internal value with external value changes
-    useEffect(() => {
-      setInternalValue(value);
-    }, [value]);
-
-    const handleChangeText = useCallback((text: string) => {
-      setInternalValue(text);
-      onChangeText(text);
-    }, [onChangeText]);
-
-    // For secure fields, render masked display value
-    const displayValue = effectiveSecure ? "•".repeat(internalValue.length) : internalValue;
 
     // Determine background color based on variant
     const backgroundColor = variant === "light" ? Colors.surface_container : Colors.surface_container_low;
@@ -124,9 +116,12 @@ const InputField = forwardRef<TextInput, InputFieldProps>(
             ]}
             placeholder={placeholder}
             placeholderTextColor={Colors.on_surface_variant}
-            value={displayValue}
-            onChangeText={handleChangeText}
-            secureTextEntry={false} // We handle masking manually
+            value={value}
+            onChangeText={onChangeText}
+            // Native masking. Rendering "•" characters into a plain TextInput
+            // instead inserts them into the real value as the student types,
+            // corrupting passwords and breaking the show/hide toggle.
+            secureTextEntry={effectiveSecure}
             autoCapitalize={autoCapitalize}
             keyboardType={keyboardType}
             editable={!disabled}

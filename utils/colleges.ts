@@ -20,7 +20,31 @@ export interface College {
   verified: boolean;
   memberCount: number;
   createdAt?: any;
+  // ─── Verification configuration (admin-controlled) ───
+  // Master gate: only partner colleges with verification enabled can grant
+  // campus access. A personal (non-college) email never grants access.
+  verificationEnabled: boolean;
+  // Provider adapter id (e.g. "sheerid"). Null = manual review only.
+  verificationProviderId: string | null;
+  // Provider program id — server-managed, never accepted from the client.
+  verificationProgramId: string | null;
+  // "provider_redirect" | "manual_review"
+  verificationMethod: 'provider_redirect' | 'manual_review';
 }
+
+/** Verification defaults for colleges that have no verification configured. */
+export const NO_VERIFICATION: Pick<
+  College,
+  | 'verificationEnabled'
+  | 'verificationProviderId'
+  | 'verificationProgramId'
+  | 'verificationMethod'
+> = {
+  verificationEnabled: false,
+  verificationProviderId: null,
+  verificationProgramId: null,
+  verificationMethod: 'manual_review',
+};
 
 // ─── Search colleges by name ────────────────────────────────────────────────
 export async function searchColleges(term: string): Promise<College[]> {
@@ -76,8 +100,16 @@ export async function requestCollege(data: {
 }
 
 // ─── Admin: create a new college ────────────────────────────────────────────
-export async function createCollege(data: Omit<College, 'id' | 'createdAt' | 'memberCount'>): Promise<string> {
+export async function createCollege(
+  data: Omit<
+    College,
+    'id' | 'createdAt' | 'memberCount' | keyof typeof NO_VERIFICATION
+  > &
+    Partial<Pick<College, keyof typeof NO_VERIFICATION>>,
+): Promise<string> {
   const ref = await addDoc(collection(db, 'colleges'), {
+    ...data,
+    ...NO_VERIFICATION,
     ...data,
     memberCount: 0,
     verified: data.verified ?? true,
@@ -99,6 +131,9 @@ export async function incrementCollegeMemberCount(collegeId: string, delta: 1 | 
 }
 
 // ─── Seed initial colleges into Firestore (run once) ────────────────────────
+// Verification is enabled for the initial partner campuses only. Every other
+// seeded campus stays closed until an admin configures a provider program or a
+// manual-review workflow for it.
 export const SEED_COLLEGES: Omit<College, 'id' | 'createdAt' | 'memberCount'>[] = [
   {
     name: 'RV College of Engineering',
@@ -107,6 +142,10 @@ export const SEED_COLLEGES: Omit<College, 'id' | 'createdAt' | 'memberCount'>[] 
     domains: ['rvce.edu.in', 'student.rvce.edu.in'],
     location: 'Bengaluru, Karnataka',
     verified: true,
+    verificationEnabled: true,
+    verificationProviderId: null,
+    verificationProgramId: null,
+    verificationMethod: 'manual_review',
   },
   {
     name: 'Indian Institute of Technology Bombay',
@@ -115,6 +154,10 @@ export const SEED_COLLEGES: Omit<College, 'id' | 'createdAt' | 'memberCount'>[] 
     domains: ['iitb.ac.in', 'student.iitb.ac.in'],
     location: 'Mumbai, Maharashtra',
     verified: true,
+    verificationEnabled: true,
+    verificationProviderId: null,
+    verificationProgramId: null,
+    verificationMethod: 'manual_review',
   },
   {
     name: 'Indian Institute of Technology Delhi',
@@ -123,6 +166,7 @@ export const SEED_COLLEGES: Omit<College, 'id' | 'createdAt' | 'memberCount'>[] 
     domains: ['iitd.ac.in', 'student.iitd.ac.in'],
     location: 'New Delhi',
     verified: true,
+    ...NO_VERIFICATION,
   },
   {
     name: 'National Institute of Technology Karnataka',
@@ -131,6 +175,7 @@ export const SEED_COLLEGES: Omit<College, 'id' | 'createdAt' | 'memberCount'>[] 
     domains: ['nitk.edu.in', 'student.nitk.edu.in'],
     location: 'Surathkal, Karnataka',
     verified: true,
+    ...NO_VERIFICATION,
   },
   {
     name: 'PES University',
@@ -139,6 +184,7 @@ export const SEED_COLLEGES: Omit<College, 'id' | 'createdAt' | 'memberCount'>[] 
     domains: ['pes.edu', 'student.pes.edu', 'pesu.edu'],
     location: 'Bengaluru, Karnataka',
     verified: true,
+    ...NO_VERIFICATION,
   },
   {
     name: 'Manipal Institute of Technology',
@@ -147,6 +193,7 @@ export const SEED_COLLEGES: Omit<College, 'id' | 'createdAt' | 'memberCount'>[] 
     domains: ['manipal.edu', 'student.manipal.edu'],
     location: 'Manipal, Karnataka',
     verified: true,
+    ...NO_VERIFICATION,
   },
   {
     name: 'Vellore Institute of Technology',
@@ -155,6 +202,7 @@ export const SEED_COLLEGES: Omit<College, 'id' | 'createdAt' | 'memberCount'>[] 
     domains: ['vit.ac.in', 'student.vit.ac.in'],
     location: 'Vellore, Tamil Nadu',
     verified: true,
+    ...NO_VERIFICATION,
   },
   {
     name: 'Christ University',
@@ -163,6 +211,7 @@ export const SEED_COLLEGES: Omit<College, 'id' | 'createdAt' | 'memberCount'>[] 
     domains: ['christuniversity.in', 'student.christuniversity.in'],
     location: 'Bengaluru, Karnataka',
     verified: true,
+    ...NO_VERIFICATION,
   },
   {
     name: 'MS Ramaiah University of Applied Sciences',
@@ -171,6 +220,7 @@ export const SEED_COLLEGES: Omit<College, 'id' | 'createdAt' | 'memberCount'>[] 
     domains: ['msruas.ac.in', 'student.msruas.ac.in'],
     location: 'Bengaluru, Karnataka',
     verified: true,
+    ...NO_VERIFICATION,
   },
   {
     name: 'BMS College of Engineering',
@@ -179,5 +229,6 @@ export const SEED_COLLEGES: Omit<College, 'id' | 'createdAt' | 'memberCount'>[] 
     domains: ['bmsce.ac.in', 'student.bmsce.ac.in'],
     location: 'Bengaluru, Karnataka',
     verified: true,
+    ...NO_VERIFICATION,
   },
 ];

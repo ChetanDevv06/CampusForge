@@ -21,6 +21,9 @@ type IoniconsName =
   | "radio"
   | "location"
   | "shield-checkmark"
+  | "refresh"
+  | "hourglass"
+  | "cloud-offline"
   | "chevron-forward"
   | "open";
 

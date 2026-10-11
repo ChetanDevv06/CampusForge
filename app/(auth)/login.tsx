@@ -178,12 +178,11 @@ export default function LoginScreen() {
             <View style={styles.form}>
               <InputField
                 icon="mail-outline"
-                placeholder="College Email"
+                placeholder="Email Address"
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
                 keyboardType="email-address"
-                suffix=".edu"
               />
 
               <InputField

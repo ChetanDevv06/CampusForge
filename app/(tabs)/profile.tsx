@@ -8,6 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebaseConfig';
 import { collection, query, where, getDocs, orderBy, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
+import { useVerification } from '../../contexts/VerificationContext';
+import { statusLabel } from '../../utils/verification';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Roundness, Gradients, Shadows } from '../../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,6 +32,7 @@ type TabKey = 'posts' | 'saved' | 'archives';
 
 export default function ProfileScreen() {
   const { profile, signOutUser, isLoading, user } = useAuth();
+  const { hasCampusAccess, status: verificationStatus } = useVerification();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -207,10 +210,13 @@ export default function ProfileScreen() {
                 )}
               </View>
             </LinearGradient>
-            {/* Verified badge */}
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark-circle" size={22} color={Colors.primary} />
-            </View>
+            {/* Verified badge — only shown when the trusted backend confirms
+                an active college membership. */}
+            {hasCampusAccess && (
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="checkmark-circle" size={22} color={Colors.primary} />
+              </View>
+            )}
           </TouchableOpacity>
 
           <Text style={styles.heroName}>{profile?.name || 'Campus Member'}</Text>
@@ -222,6 +228,30 @@ export default function ProfileScreen() {
               {profile?.collegeName || profile?.college || 'College'} • {profile?.gradYear ? profile.gradYear.toString().slice(-2) : new Date().getFullYear().toString().slice(-2)}
             </Text>
           </View>
+
+          {/* Verification status */}
+          <TouchableOpacity
+            style={styles.verificationChip}
+            onPress={() => {
+              if (!hasCampusAccess) router.push('/(auth)/verify' as any);
+            }}
+            activeOpacity={hasCampusAccess ? 1 : 0.8}
+          >
+            <Ionicons
+              name={hasCampusAccess ? 'shield-checkmark' : 'shield-outline'}
+              size={13}
+              color={hasCampusAccess ? Colors.success : Colors.tertiary}
+              style={{ marginRight: 4 }}
+            />
+            <Text
+              style={[
+                styles.verificationText,
+                { color: hasCampusAccess ? Colors.success : Colors.tertiary },
+              ]}
+            >
+              {statusLabel(verificationStatus)}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* ── Stats ── */}
@@ -425,6 +455,17 @@ const styles = StyleSheet.create({
   },
   collegeText: {
     color: Colors.secondary, fontSize: 13,
+    fontFamily: 'Manrope_600SemiBold',
+  },
+  verificationChip: {
+    flexDirection: 'row', alignItems: 'center',
+    marginTop: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: 12, paddingVertical: 5,
+    borderRadius: 20,
+  },
+  verificationText: {
+    fontSize: 13,
     fontFamily: 'Manrope_600SemiBold',
   },
 
