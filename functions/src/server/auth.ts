@@ -10,6 +10,7 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { getAppCheck } from "firebase-admin/app-check";
 import { getAuth } from "firebase-admin/auth";
 import { getDb } from "../db";
+import { parseBearerToken } from "../bearer-token";
 
 export interface AuthedUser {
   uid: string;
@@ -72,13 +73,6 @@ export function httpStatusFor(status: HttpStatus): number {
   return HTTP_STATUS_CODES[status];
 }
 
-function bearerToken(header: string | string[] | undefined): string | null {
-  const value = Array.isArray(header) ? header[0] : header;
-  if (!value) return null;
-  const match = value.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1] : null;
-}
-
 async function hasAdminRole(uid: string): Promise<boolean> {
   try {
     const snapshot = await getDb().doc(`users/${uid}`).get();
@@ -97,7 +91,7 @@ export const authenticate: RequestHandler = async (
   res: Response,
   next: NextFunction,
 ) => {
-  const token = bearerToken(req.headers.authorization);
+  const token = parseBearerToken(req.headers.authorization);
   if (!token) {
     res
       .status(401)

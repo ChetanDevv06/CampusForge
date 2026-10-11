@@ -12,6 +12,7 @@
  */
 
 import { createHmac, timingSafeEqual } from "crypto";
+import { parseBearerToken } from "./bearer-token";
 
 export type CallbackAuthMode = "hmac" | "bearer" | "none";
 
@@ -91,8 +92,8 @@ export function verifyCallbackAuth(input: CallbackAuthInput): CallbackAuthResult
     if (!authorization || !config.bearerToken) {
       return { ok: false, reason: "missing_bearer_token" };
     }
-    const token = authorization.replace(/^Bearer\s+/i, "");
-    if (!safeEqualHex(token, config.bearerToken)) {
+    const token = parseBearerToken(authorization);
+    if (!token || !safeEqualHex(token, config.bearerToken)) {
       return { ok: false, reason: "invalid_bearer_token" };
     }
     return { ok: true };
