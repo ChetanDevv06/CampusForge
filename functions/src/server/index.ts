@@ -198,8 +198,8 @@ function registerRoutes(app: Express) {
     }
 
     try {
-      const college = await loadCollege(service, collegeId);
       await consumeRateLimit("retryVerification", uid, getDb());
+      const college = await loadCollege(service, collegeId);
 
       const result = await service.retryAttempt({
         userId: uid,
