@@ -17,7 +17,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return getUserData().role == 'admin';
+      return isSignedIn() && getUserData().role == 'admin';
     }
 
     function getCollegeId() {
@@ -32,16 +32,47 @@ service cloud.firestore {
       return field == getUserId();
     }
 
-    function isInSameCollege(doc) {
-      return doc.data().collegeId == getCollegeId();
-    }
-
     function isValidCollegeId(collegeId) {
       return collegeId != null && collegeId != '';
     }
 
     function isValidContentType(type) {
       return type in ['lost', 'found', 'market', 'skill'];
+    }
+
+    // ─── Verification / membership helpers ─────────────────────────────────
+    // Campus access is granted ONLY by an active membership document, which
+    // can be created or activated exclusively by the trusted backend
+    // (Firebase Admin SDK bypasses these rules, so backend code enforces the
+    // checks itself). Clients can never write these documents.
+
+    function membershipDoc() {
+      return get(/databases/$(database)/documents/memberships/$(getUserId()));
+    }
+
+    /** A verified, currently active membership exists for this account. */
+    function hasActiveMembership() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/memberships/$(getUserId()))
+        && membershipDoc().data.status == 'active';
+    }
+
+    /** College the active membership belongs to (used for scoping content). */
+    function membershipCollegeId() {
+      return membershipDoc().data.collegeId;
+    }
+
+    /**
+     * True when the user holds an active membership in the college that owns
+     * this content. Every college-restricted collection uses this.
+     */
+    function isActiveMemberOf(collegeId) {
+      return hasActiveMembership() && membershipCollegeId() == collegeId;
+    }
+
+    /** Self-scoped access for the current user's own attempts. */
+    function isOwn(doc) {
+      return isSignedIn() && doc.data.userId == getUserId();
     }
 
     // ============================================================
@@ -51,24 +82,63 @@ service cloud.firestore {
       // Users can read their own profile
       allow read: if isSignedIn() && (getUserId() == userId || isAdmin());
 
-      // Users can create their profile on signup
+      // Users can create their profile on signup.
+      // Backend-owned fields (accountStatus, verificationStatus, role, …) and
+      // protected membership fields may never be supplied by the client.
       allow create: if isSignedIn() && getUserId() == userId
-        && request.resource.data.keys().hasOnly(['uid', 'name', 'email', 'collegeId', 'createdAt'])
+        && request.resource.data.keys().hasOnly([
+             'uid', 'name', 'email', 'collegeId', 'collegeName', 'collegeShortName',
+             'colDomain', 'collegeEmail', 'collegeEmailVerified', 'avatarUrl', 'rating',
+             'reviewCount', 'hasSeenOnboarding', 'createdAt', 'skillsOffered',
+             'skillsRequested'
+           ])
         && request.resource.data.uid == getUserId()
-        && request.resource.data.collegeId == getCollegeId();
+        && (!('role' in request.resource.data));
 
-      // Users can update their own profile (limited fields)
-      allow update: if isSignedIn() && getUserId() == userId
-        && request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly(['name', 'avatarUrl', 'bio', 'major', 'gradYear', 'socials', 'quietMode', 'dataSaver', 'blockedUsers', 'hasSeenOnboarding', 'collegeEmailVerified', 'collegeEmail'])
-        && request.resource.data.collegeId == resource.data.collegeId // Cannot change college
-        && (
-          request.resource.data.collegeEmailVerified != true
+      // Users can update their own profile (limited fields).
+      allow update: if isSignedIn() && getUserId() == userId && (
+          // Ordinary self-service profile fields.
+          request.resource.data.diff(resource.data).changedKeys().hasOnly([
+            'name', 'avatarUrl', 'bio', 'major', 'gradYear', 'socials', 'quietMode',
+            'dataSaver', 'blockedUsers', 'hasSeenOnboarding', 'collegeEmail',
+            'collegeEmailVerified', 'online', 'lastSeen', 'updatedAt'
+          ])
           || (
-            request.auth.token.email_verified == true
-            && request.resource.data.collegeEmail == request.auth.token.email
+            // College selection is only permitted before any verification
+            // attempt exists and while no membership is active. After that,
+            // the college (and therefore the verification) can only change
+            // through the trusted backend.
+            request.resource.data.diff(resource.data).changedKeys()
+              .hasOnly([
+                'collegeId', 'collegeName', 'collegeShortName', 'colDomain',
+                'collegeEmail', 'collegeEmailVerified'
+              ])
+            && !exists(/databases/$(database)/documents/memberships/$(getUserId()))
+            && (
+                 !('verificationStatus' in resource.data)
+                 || resource.data.verificationStatus in ['not_started', 'cancelled']
+               )
           )
-        );
+        )
+        // Immutable identity + backend-owned fields.
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && !('role' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('accountStatus' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('verificationStatus' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('verifiedCollegeId' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('membershipStatus' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('createdAt' in request.resource.data.diff(resource.data).affectedKeys())
+        // Note: a personal-email verification flag is NOT college affiliation
+        // and grants nothing. It is kept for informational purposes only.
+        && (
+             !('collegeEmailVerified' in request.resource.data)
+             || request.resource.data.collegeEmailVerified != true
+             || (
+               request.auth.token.email_verified == true
+               && request.resource.data.collegeEmail == request.auth.token.email
+             )
+           );
 
       // Admins can do anything
       allow read, write: if isAdmin();
@@ -82,30 +152,93 @@ service cloud.firestore {
     // ============================================================
     match /colleges/{collegeId} {
       allow read: if isSignedIn() && isValidCollegeId(collegeId);
-      allow write: if isAdmin();
+
+      // The verification configuration (verificationEnabled,
+      // verificationProviderId, verificationProgramId) is admin-controlled.
+      // The client may never write a provider program id.
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+             'name', 'shortName', 'domain', 'domains', 'location', 'verified',
+             'memberCount', 'verificationEnabled', 'verificationMethod'
+           ]);
+      allow update: if isAdmin()
+        && request.resource.data.verificationEnabled is bool
+        && request.resource.data.verificationMethod in ['provider_redirect', 'manual_review'];
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // VERIFICATION ATTEMPTS (backend-only writes)
+    // ============================================================
+    match /verifications/{attemptId} {
+      // A student may read the safe status projection of their OWN attempt.
+      allow read: if isOwn(resource) || isAdmin();
+
+      // Clients cannot create, mutate or forge verification state. All writes
+      // happen through the trusted backend (Admin SDK), which ignores rules.
+      allow create, update, delete: if false;
+
+      // Provider references and raw provider responses never leave the server.
+      match /private/{privateId} {
+        allow read, write: if false;
+      }
+
+      // Per-attempt transition history.
+      match /audit/{auditId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+
+    // ============================================================
+    // MEMBERSHIPS (backend-only writes)
+    // ============================================================
+    match /memberships/{userId} {
+      // A student may read their own membership state (used for gating UI).
+      // Admins may read all memberships for support/review.
+      allow read: if isSignedIn() && (getUserId() == userId || isAdmin());
+
+      // Only the trusted backend can create, activate, suspend or revoke a
+      // membership. No client-side grant path exists.
+      allow create, update, delete: if false;
+    }
+
+    // ============================================================
+    // VERIFICATION AUDIT TRAIL (backend-only writes, admin reads)
+    // ============================================================
+    match /verification_audit/{auditId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ============================================================
+    // RATE LIMITS (backend-only)
+    // ============================================================
+    match /rate_limits/{key} {
+      allow read, write: if false;
     }
 
     // ============================================================
     // LOST & FOUND COLLECTION
     // ============================================================
     match /lost_found/{itemId} {
-      // Anyone in the same college can read active items
-      allow read: if isSignedIn() && isInSameCollege(resource)
+      // College-restricted: only an active member of that college.
+      allow read: if isSignedIn() && isActiveMemberOf(resource.data.collegeId)
         && resource.data.status != 'resolved';
 
       // Admins can read all
       allow read: if isAdmin();
 
       // Users can create items in their college
-      allow create: if isSignedIn()
+      allow create: if isSignedIn() && hasActiveMembership()
         && request.resource.data.userId == getUserId()
-        && request.resource.data.collegeId == getCollegeId()
+        && request.resource.data.collegeId == membershipCollegeId()
         && isValidContentType(request.resource.data.type)
         && request.resource.data.status == 'active'
         && request.resource.data.createdAt == request.time;
 
       // Owner or admin can update (status, resolution)
-      allow update: if isSignedIn() && (ownsDocument(resource) || isAdmin())
+      allow update: if isSignedIn() && hasActiveMembership() && (ownsDocument(resource) || isAdmin())
         && request.resource.data.userId == resource.data.userId
         && request.resource.data.collegeId == resource.data.collegeId
         && request.resource.data.diff(resource.data).changedKeys()
@@ -119,23 +252,23 @@ service cloud.firestore {
     // MARKETPLACE COLLECTION
     // ============================================================
     match /marketplace/{itemId} {
-      // Anyone in the same college can read active items
-      allow read: if isSignedIn() && isInSameCollege(resource)
+      // College-restricted: only an active member of that college.
+      allow read: if isSignedIn() && isActiveMemberOf(resource.data.collegeId)
         && resource.data.status != 'sold';
 
       // Admins can read all
       allow read: if isAdmin();
 
       // Users can create listings in their college
-      allow create: if isSignedIn()
+      allow create: if isSignedIn() && hasActiveMembership()
         && request.resource.data.userId == getUserId()
-        && request.resource.data.collegeId == getCollegeId()
+        && request.resource.data.collegeId == membershipCollegeId()
         && request.resource.data.status == 'active'
         && request.resource.data.price >= 0
         && request.resource.data.createdAt == request.time;
 
       // Owner or admin can update (status, price, description)
-      allow update: if isSignedIn() && (ownsDocument(resource) || isAdmin())
+      allow update: if isSignedIn() && hasActiveMembership() && (ownsDocument(resource) || isAdmin())
         && request.resource.data.userId == resource.data.userId
         && request.resource.data.collegeId == resource.data.collegeId
         && request.resource.data.diff(resource.data).changedKeys()
@@ -149,21 +282,21 @@ service cloud.firestore {
     // SKILLS COLLECTION
     // ============================================================
     match /skills/{skillId} {
-      // Anyone in the same college can read
-      allow read: if isSignedIn() && isInSameCollege(resource);
+      // College-restricted: only an active member of that college.
+      allow read: if isSignedIn() && isActiveMemberOf(resource.data.collegeId);
 
       // Admins can read all
       allow read: if isAdmin();
 
       // Users can create skill listings in their college
-      allow create: if isSignedIn()
+      allow create: if isSignedIn() && hasActiveMembership()
         && request.resource.data.userId == getUserId()
-        && request.resource.data.collegeId == getCollegeId()
+        && request.resource.data.collegeId == membershipCollegeId()
         && request.resource.data.maxParticipants >= 1
         && request.resource.data.createdAt == request.time;
 
       // Owner or admin can update
-      allow update: if isSignedIn() && (ownsDocument(resource) || isAdmin())
+      allow update: if isSignedIn() && hasActiveMembership() && (ownsDocument(resource) || isAdmin())
         && request.resource.data.userId == resource.data.userId
         && request.resource.data.collegeId == resource.data.collegeId
         && request.resource.data.diff(resource.data).changedKeys()
@@ -185,7 +318,7 @@ service cloud.firestore {
       );
 
       // Users can reserve a spot
-      allow create: if isSignedIn()
+      allow create: if isSignedIn() && hasActiveMembership()
         && request.resource.data.userId == getUserId()
         && request.resource.data.skillId == skillId
         && request.resource.data.status == 'confirmed'
@@ -217,7 +350,7 @@ service cloud.firestore {
       allow read: if isAdmin();
 
       // Participants can create chats (validated by Cloud Function in practice)
-      allow create: if isSignedIn()
+      allow create: if isSignedIn() && hasActiveMembership()
         && getUserId() in request.resource.data.participants
         && request.resource.data.participants.size() == 2
         && request.resource.data.createdAt == request.time;
@@ -243,7 +376,7 @@ service cloud.firestore {
       allow read: if isAdmin();
 
       // Participants can send messages
-      allow create: if isSignedIn()
+      allow create: if isSignedIn() && hasActiveMembership()
         && getUserId() in get(/databases/$(database)/documents/chats/$(chatId)).data.participants
         && request.resource.data.senderId == getUserId()
         && request.resource.data.chatId == chatId
@@ -262,7 +395,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
 
       // Only the reviewer can create their review
-      allow create: if isSignedIn()
+      allow create: if isSignedIn() && hasActiveMembership()
         && request.resource.data.reviewerId == getUserId()
         && request.resource.data.revieweeId != getUserId() // Can't review yourself
         && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
