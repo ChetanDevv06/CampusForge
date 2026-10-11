@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint --ext .ts src/",
     "serve": "firebase emulators:start --only functions,firestore --project campusloop-54d64",
     "start": "node lib/server/index.js",
