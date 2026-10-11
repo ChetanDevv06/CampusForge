@@ -227,6 +227,7 @@ function registerRoutes(app: Express) {
       return;
     }
     try {
+      await consumeRateLimit("cancelVerification", uid, getDb());
       await service.cancelAttempt({ userId: uid, collegeId });
       ok(res, { ok: true });
     } catch (error) {
