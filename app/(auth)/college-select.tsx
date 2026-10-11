@@ -38,6 +38,7 @@ import SearchInput from "../../components/ui/SearchInput";
 import PrimaryButton from "../../components/ui/PrimaryButton";
 import SecondaryButton from "../../components/ui/SecondaryButton";
 import InputField from "../../components/ui/InputField";
+import { setCollegeSelection } from "../../utils/collegeSelectionStore";
 
 export default function CollegeSelectScreen() {
   const router = useRouter();
@@ -119,16 +120,22 @@ export default function CollegeSelectScreen() {
 
   const handleSelect = (college: College) => {
     if (returnTo) {
-      router.push({
-        pathname: returnTo as any,
-        params: {
-          collegeId: college.id,
-          collegeName: college.name,
-          collegeShortName: college.shortName,
-          domains: JSON.stringify(college.domains),
-          email: search.includes("@") ? search : undefined,
-        },
+      // The caller (signup) pushed this screen and expects to come back to
+      // itself. Going back — rather than pushing a new copy — keeps every
+      // field the student already filled in, with the chosen college handed
+      // over through the selection store.
+      setCollegeSelection({
+        collegeId: college.id,
+        collegeName: college.name,
+        collegeShortName: college.shortName,
+        domains: college.domains,
+        email: search.includes("@") ? search : undefined,
       });
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace(returnTo as any);
+      }
     } else {
       router.push({
         pathname: "/(auth)/college-email",
