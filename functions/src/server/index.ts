@@ -18,6 +18,10 @@
 import express, { type Express, type Request, type Response } from "express";
 import * as admin from "firebase-admin";
 import { getDb } from "../db";
+import {
+  authenticateBurstLimiter,
+  callbackBurstLimiter,
+} from "./burst-rate-limit";
 import { VerificationService, VerificationError } from "../verification-service";
 import { consumeRateLimit, RateLimitError } from "../rate-limit";
 import {
@@ -153,7 +157,7 @@ function registerRoutes(app: Express) {
   });
 
   // ── startVerification ────────────────────────────────────────────────────────
-  app.post("/verify/start", authenticate, async (req: Request, res: Response) => {
+  app.post("/verify/start", authenticate, authenticateBurstLimiter, async (req: Request, res: Response) => {
     const uid = req.auth!.uid;
     const collegeId = bodyString(req.body?.collegeId, 120);
     if (!collegeId) {
@@ -187,7 +191,7 @@ function registerRoutes(app: Express) {
   });
 
   // ── getVerificationStatus ────────────────────────────────────────────────────
-  app.post("/verify/status", authenticate, async (req: Request, res: Response) => {
+  app.post("/verify/status", authenticate, authenticateBurstLimiter, async (req: Request, res: Response) => {
     const uid = req.auth!.uid;
     try {
       await consumeRateLimit("getVerificationStatus", uid, getDb());
@@ -201,7 +205,7 @@ function registerRoutes(app: Express) {
   });
 
   // ── retryVerification ────────────────────────────────────────────────────────
-  app.post("/verify/retry", authenticate, async (req: Request, res: Response) => {
+  app.post("/verify/retry", authenticate, authenticateBurstLimiter, async (req: Request, res: Response) => {
     const uid = req.auth!.uid;
     const collegeId = bodyString(req.body?.collegeId, 120);
     if (!collegeId) {
@@ -231,7 +235,7 @@ function registerRoutes(app: Express) {
   });
 
   // ── cancelVerification ───────────────────────────────────────────────────────
-  app.post("/verify/cancel", authenticate, async (req: Request, res: Response) => {
+  app.post("/verify/cancel", authenticate, authenticateBurstLimiter, async (req: Request, res: Response) => {
     const uid = req.auth!.uid;
     const collegeId = bodyString(req.body?.collegeId, 120);
     if (!collegeId) {
@@ -249,7 +253,7 @@ function registerRoutes(app: Express) {
   });
 
   // ── submitAppeal ─────────────────────────────────────────────────────────────
-  app.post("/verify/appeal", authenticate, async (req: Request, res: Response) => {
+  app.post("/verify/appeal", authenticate, authenticateBurstLimiter, async (req: Request, res: Response) => {
     const uid = req.auth!.uid;
     const collegeId = bodyString(req.body?.collegeId, 120);
     const reason = bodyString(req.body?.reason, 2000);
@@ -331,6 +335,7 @@ function registerRoutes(app: Express) {
     "/verify/revoke",
     authenticate,
     requireAdmin,
+    authenticateBurstLimiter,
     async (req: Request, res: Response) => {
       const adminUid = req.auth!.uid;
       const userId = bodyString(req.body?.userId, 120);
@@ -391,6 +396,7 @@ function registerRoutes(app: Express) {
     "/verify/expire",
     authenticate,
     requireAdmin,
+    authenticateBurstLimiter,
     async (req: Request, res: Response) => {
       // This route runs a collection-wide query, so it gets its own ceiling.
       try {
@@ -415,6 +421,7 @@ function registerRoutes(app: Express) {
   // ── provider webhook ────────────────────────────────────────────────────────
   app.post(
     "/verify/callback",
+    callbackBurstLimiter,
     express.raw({ type: "*/*", limit: "1mb" }),
     async (req: Request, res: Response) => {
       const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : "";
