@@ -66,7 +66,8 @@ const PROJECT_ID = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
 const REGION = process.env.EXPO_PUBLIC_FUNCTIONS_REGION || "us-central1";
 
 function fail(message) {
-  console.error(`\n  ${message}\n`);
+  void message;
+  console.error("\n  Operation failed. See usage/help above and verify configuration.\n");
   process.exit(1);
 }
 
@@ -173,8 +174,8 @@ async function adjudicate(adminUid, studentUid, collegeId, outcome, reason) {
   }
   if (!(await isAdmin(adminUid))) {
     fail(
-      `${adminUid} is not an admin. Run:\n` +
-      `  node scripts/admin-verify.mjs --grant-admin ${adminUid}`,
+      "ADMIN_UID is not an admin. Run:\n" +
+      "  node scripts/admin-verify.mjs --grant-admin <uid>",
     );
   }
   const idToken = await mintIdToken(adminUid);
