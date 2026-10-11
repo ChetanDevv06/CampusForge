@@ -191,7 +191,7 @@ function registerRoutes(app: Express) {
     }
   });
 
-  // ── getVerificationStatus ────────────────────────────────────────────────────
+  app.post("/verify/status", authenticateBurstLimiter, authenticate, async (req: Request, res: Response) => {
   app.post("/verify/status", authenticate, authenticateBurstLimiter, async (req: Request, res: Response) => {
     const uid = req.auth!.uid;
     try {
