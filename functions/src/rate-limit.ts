@@ -16,12 +16,27 @@ export interface RateLimitRule {
   windowMs: number;
 }
 
-export const RATE_LIMITS: Record<string, RateLimitRule> = {
+/**
+ * `as const` matters here: it makes the scope a union of literal keys, so
+ * calling `consumeRateLimit` with a misspelled scope is a compile error rather
+ * than a silent no-op that quietly disables a limit.
+ */
+export const RATE_LIMITS = {
   startVerification: { max: 5, windowMs: 60 * 60 * 1000 }, // 5 / hour
   retryVerification: { max: 5, windowMs: 24 * 60 * 60 * 1000 }, // 5 / day
   submitAppeal: { max: 3, windowMs: 24 * 60 * 60 * 1000 }, // 3 / day
   providerCallback: { max: 600, windowMs: 60 * 1000 }, // 600 / min per provider ref
-};
+  // Read-mostly and low-impact routes: generous ceilings that stop floods
+  // without affecting normal use.
+  getVerificationStatus: { max: 120, windowMs: 60 * 1000 }, // 120 / min
+  cancelVerification: { max: 20, windowMs: 60 * 1000 }, // 20 / min
+  // Administrative routes.
+  adjudicateVerification: { max: 60, windowMs: 60 * 1000 }, // 60 / min
+  revokeMembership: { max: 60, windowMs: 60 * 1000 }, // 60 / min
+  verifyExpire: { max: 5, windowMs: 60 * 1000 }, // 5 / min
+} as const;
+
+export type RateLimitScope = keyof typeof RATE_LIMITS;
 
 export class RateLimitError extends Error {
   constructor(readonly retryAfterMs: number) {
@@ -33,14 +48,19 @@ export class RateLimitError extends Error {
 /**
  * Consume one token from the windowed counter `scope:subject`.
  * Throws RateLimitError when the window budget is exhausted.
+ *
+ * An unknown scope throws rather than passing: a limiter that silently stops
+ * limiting is worse than no limiter at all.
  */
 export async function consumeRateLimit(
-  scope: keyof typeof RATE_LIMITS,
+  scope: RateLimitScope,
   subject: string,
   db = getDb(),
 ): Promise<void> {
   const rule = RATE_LIMITS[scope];
-  if (!rule) return;
+  if (!rule) {
+    throw new Error(`Unknown rate-limit scope: ${String(scope)}`);
+  }
 
   const ref = db.doc(PATHS.rateLimit(`${scope}:${subject}`));
 

@@ -19,7 +19,7 @@ import express, { type Express, type Request, type Response } from "express";
 import * as admin from "firebase-admin";
 import { getDb } from "../db";
 import { VerificationService, VerificationError } from "../verification-service";
-import { consumeRateLimit } from "../rate-limit";
+import { consumeRateLimit, RateLimitError } from "../rate-limit";
 import {
   getProviderAdapter,
   isProviderOutcome,
@@ -67,6 +67,16 @@ function verificationError(error: unknown): {
   status: number;
   body: ReturnType<typeof errorBody>;
 } {
+  if (error instanceof RateLimitError) {
+    return {
+      status: 429,
+      body: errorBody(
+        "resource-exhausted",
+        error.message,
+        "VERIFICATION_RATE_LIMITED",
+      ),
+    };
+  }
   if (error instanceof VerificationError) {
     const httpStatus: HttpStatus =
       error.httpStatus === 401
@@ -152,8 +162,10 @@ function registerRoutes(app: Express) {
     }
 
     try {
-      const college = await loadCollege(service, collegeId);
+      // Limit before any Firestore read, so an abusive caller cannot force a
+      // read per request by never passing the rate-limit check.
       await consumeRateLimit("startVerification", uid, getDb());
+      const college = await loadCollege(service, collegeId);
 
       const result = await service.startAttempt({
         userId: uid,
@@ -380,18 +392,21 @@ function registerRoutes(app: Express) {
     authenticate,
     requireAdmin,
     async (req: Request, res: Response) => {
-      const rateLimitKey = `verify-expire:${req.auth?.uid ?? req.ip}`;
-      const allowed = await consumeRateLimit(rateLimitKey, 5, 60_000);
-      if (!allowed) {
-        res
-          .status(429)
-          .json(
+      // This route runs a collection-wide query, so it gets its own ceiling.
+      try {
+        await consumeRateLimit("verifyExpire", req.auth!.uid, getDb());
+      } catch (error) {
+        if (error instanceof RateLimitError) {
+          res.status(429).json(
             errorBody(
               "resource-exhausted",
               "Too many expire requests. Please try again later.",
+              "VERIFICATION_RATE_LIMITED",
             ),
           );
-        return;
+          return;
+        }
+        throw error;
       }
       await runExpiry(res);
     },
