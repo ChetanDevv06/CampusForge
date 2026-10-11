@@ -16,6 +16,7 @@
  */
 
 import express, { type Express, type Request, type Response } from "express";
+import rateLimit from "express-rate-limit";
 import * as admin from "firebase-admin";
 import { getDb } from "../db";
 import {
@@ -252,8 +253,15 @@ function registerRoutes(app: Express) {
     }
   });
 
+  const submitAppealRouteLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
   // ── submitAppeal ─────────────────────────────────────────────────────────────
-  app.post("/verify/appeal", authenticate, authenticateBurstLimiter, async (req: Request, res: Response) => {
+  app.post("/verify/appeal", submitAppealRouteLimiter, authenticate, authenticateBurstLimiter, async (req: Request, res: Response) => {
     const uid = req.auth!.uid;
     const collegeId = bodyString(req.body?.collegeId, 120);
     const reason = bodyString(req.body?.reason, 2000);
