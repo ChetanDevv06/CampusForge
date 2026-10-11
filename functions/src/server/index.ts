@@ -178,6 +178,7 @@ function registerRoutes(app: Express) {
   app.post("/verify/status", authenticate, async (req: Request, res: Response) => {
     const uid = req.auth!.uid;
     try {
+      await consumeRateLimit("getVerificationStatus", uid, getDb());
       const requested = bodyString(req.body?.collegeId, 120);
       const collegeId = requested ?? (await selectedCollegeId(uid));
       ok(res, { status: serialise(await service.getSafeStatus(uid, collegeId)) });
