@@ -235,7 +235,7 @@ function registerRoutes(app: Express) {
   });
 
   // ── cancelVerification ───────────────────────────────────────────────────────
-  app.post("/verify/cancel", authenticate, authenticateBurstLimiter, async (req: Request, res: Response) => {
+  app.post("/verify/cancel", authenticate, authenticateBurstLimiter, callbackBurstLimiter, async (req: Request, res: Response) => {
     const uid = req.auth!.uid;
     const collegeId = bodyString(req.body?.collegeId, 120);
     if (!collegeId) {
