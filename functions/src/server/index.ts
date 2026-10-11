@@ -289,6 +289,7 @@ function registerRoutes(app: Express) {
   // ── adjudicateVerification (admin) ───────────────────────────────────────────
   app.post(
     "/verify/adjudicate",
+    authenticateBurstLimiter,
     authenticate,
     requireAdmin,
     async (req: Request, res: Response) => {
@@ -341,9 +342,9 @@ function registerRoutes(app: Express) {
   // ── revokeMembership (admin) ─────────────────────────────────────────────────
   app.post(
     "/verify/revoke",
+    authenticateBurstLimiter,
     authenticate,
     requireAdmin,
-    authenticateBurstLimiter,
     async (req: Request, res: Response) => {
       const adminUid = req.auth!.uid;
       const userId = bodyString(req.body?.userId, 120);
