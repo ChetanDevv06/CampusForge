@@ -21,7 +21,10 @@ type IoniconsName =
   | "log-out"
   | "radio"
   | "location"
-  | "shield-checkmark";
+  | "shield-checkmark"
+  | "refresh"
+  | "hourglass"
+  | "cloud-offline";
 
 interface PrimaryButtonProps {
   title: string;
