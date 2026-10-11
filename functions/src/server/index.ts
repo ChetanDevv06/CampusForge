@@ -298,6 +298,7 @@ function registerRoutes(app: Express) {
       }
 
       try {
+        await consumeRateLimit("adjudicateVerification", adminUid, getDb());
         const result = await service.adjudicate({
           userId,
           collegeId,
