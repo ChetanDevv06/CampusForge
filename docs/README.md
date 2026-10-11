@@ -8,6 +8,7 @@ Welcome to the CampusForge documentation. This folder contains technical documen
 |----------|-------------|
 | [Architecture](./architecture.md) | System architecture, data flow, and design decisions |
 | [Firebase Setup](./firebase-setup.md) | Firebase project configuration and security rules |
+| [Student Verification](./student-verification.md) | Student verification lifecycle, data model, backend and provider integration |
 | [Design System](./design-system.md) | Theme, components, and styling guidelines |
 | [API Reference](./api-reference.md) | Internal APIs, hooks, and utilities |
 | [Deployment](./deployment.md) | Build, release, and deployment procedures |

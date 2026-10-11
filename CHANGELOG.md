@@ -10,6 +10,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Student Verification System** — backend-verified college affiliation gating for campus-restricted features
+  - Trusted backend (`functions/`): `startVerification`, `getVerificationStatus`, `retryVerification`, `cancelVerification`, `submitAppeal`, admin-only `adjudicateVerification` / `revokeMembership`, signature-verified `handleProviderCallback` webhook and a nightly `expireVerifications` sweep
+  - Verification state machine (`functions/src/policy.ts`): `not_started → pending → verified | rejected | needs_action | expired | cancelled`, with `suspended` on `verified`, defined transitions, attempt/cooldown/appeal limits and 12-month membership validity
+  - New Firestore documents: `verifications/{uid:collegeId}` (with a private provider subcollection and an append-only audit subcollection), `memberships/{uid}`, `verification_audit/{id}`, `rate_limits/{scope:subject}`
+  - Firestore Security Rules: an active membership is now required for `lost_found`, `marketplace`, `skills` (+ reservations), `chats`/`messages` and review creation; clients can no longer write verification status, membership, role or other backend-owned profile fields, or switch colleges once verification has started
+  - Mobile: `contexts/VerificationContext.tsx` (authoritative status + actions), `utils/verification.ts` (callable client), `app/(auth)/verify.tsx` (state-driven verification screen)
+  - Partner-college verification configuration on `colleges/{collegeId}` (`verificationEnabled`, `verificationProviderId`, `verificationProgramId`, `verificationMethod`); RVCE and IIT Bombay enabled, all others closed
+  - `firebase.json` / `firestore.indexes.json` emulator configuration and 90 backend tests (state machine, provider fail-closed behaviour, HMAC callback validation, Firestore service behaviour and Security Rules)
+  - `docs/student-verification.md` — lifecycle reference, retention policy, provider integration checklist and manual deployment steps
+
+### Changed
+- Registration and college-email flows now route into verification instead of the campus experience; the profile "verified" badge only renders when the backend confirms an active membership
+
+### Fixed
+- **Signup form keeps its input when choosing a college** — `college-select` returned via `router.push`, which mounted a fresh copy of the signup screen and discarded the name, email and passwords already entered. It now returns with `router.back()` and hands the selection over through `utils/collegeSelectionStore.ts`
+- **Password visibility toggle** — `InputField` rendered `"•"` characters into a plain `TextInput` (`secureTextEntry={false}`), so the mask characters were written into the real value as the student typed and toggling visibility showed bullets followed by the last typed character. Masking now uses the native `secureTextEntry`
+- **"Use a different account" on the verification screen** — the button only navigated to `/(auth)/login` without signing out, so the still-authenticated user was sent straight back to the verification screen by the route gate. It now signs out first, which also clears all user-specific verification state
+
+### Security
+- Campus access is granted only by the trusted backend after a validated provider result or an explicit admin decision; provider credentials are server-side only (no `EXPO_PUBLIC_*` variables)
+- No verification provider is configured yet, so automated verification fails closed — no client path can mark a user as verified
+
 - **Docker Development Environment** — Complete containerized setup for reproducible Windows development
   - `Dockerfile` with Node.js 20 Bookworm slim (Expo SDK 54 compatible)
   - `compose.yaml` with bind-mounted source, anonymous volumes for deps/cache
@@ -222,3 +244,18 @@ firebase deploy --only firestore:rules
 - [GitHub Releases](https://github.com/ChetanDev06/CampusForge/releases)
 - [Expo Updates Dashboard](https://expo.dev/accounts/chetanDev06/projects/CampusForge/updates)
 - [EAS Build Dashboard](https://expo.dev/accounts/chetanDev06/projects/CampusForge/builds)
+### Fixed
+- **Backend no longer wipes the user profile** � writing the mirrored verification status used \`tx.set\` without \merge\, so every approval, appeal, rejection or suspension replaced \users/{uid}\ and destroyed the student's name, email and college selection. All profile writes now merge, with a regression test
+- **Illegal-state errors now report correctly** � attempting an appeal while a verification is still pending returned HTTP 429 (rate limit) instead of 412 (precondition failed)
+
+### Added
+- **Self-hosted verification backend** (\unctions/src/server\) � Express transport over the existing \VerificationService\, so the project no longer needs the Firebase Blaze plan that 2nd-gen Cloud Functions require
+  - Routes: \/verify/start\, \/verify/status\, \/verify/retry\, \/verify/cancel\, \/verify/appeal\, \/verify/expire\, \/verify/callback\, plus admin-only \/verify/adjudicate\ and \/verify/revoke\
+  - Firebase ID-token authentication and optional App Check enforcement (\REQUIRE_APP_CHECK=1\)
+  - In-process nightly expiry sweep plus an admin-callable \/verify/expire\ for hosts that scale to zero
+  - \unctions/Dockerfile\ (Render / Railway / Fly / Cloud Run / VPS) and \
+pm --prefix functions start\
+  - Shared \provider-webhook.ts\ used by both the server and the Cloud Functions entrypoint, so signature checks and idempotency are identical on either transport
+- **Mobile client talks HTTP instead of callables** � \utils/verification.ts\ now uses \etch\ with the app's Firebase ID token against \EXPO_PUBLIC_VERIFICATION_API_URL\; transport errors are mapped to student-safe messages, and a missing URL is reported as "not connected" rather than a transient outage
+- **Admin CLI** (\unctions/scripts/admin-verify.mjs\, \
+pm --prefix functions run admin\) � grant an admin claim, list pending students, and approve/reject through the deployed backend
