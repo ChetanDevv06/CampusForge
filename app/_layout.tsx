@@ -10,6 +10,7 @@ import { useNotifications } from '../utils/useNotifications';
 
 import { Colors } from '../constants/theme';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { VerificationProvider, useVerification } from '../contexts/VerificationContext';
 
 
 import {
@@ -35,11 +36,28 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+/**
+ * Routes an unverified student may still use: onboarding, profile and settings
+ * (needed to reach sign-out). Everything else — campus communities, feeds,
+ * marketplace, messaging — requires an active, backend-verified membership.
+ */
+const UNVERIFIED_ALLOWED_ROUTES = new Set([
+  'onboarding',
+  'settings',
+  'edit-profile',
+  'modal',
+]);
+
 function RootLayoutNav() {
   const { user, profile, isLoading } = useAuth();
+  const { hasCampusAccess, isLoading: verificationLoading } = useVerification();
   const segments: readonly string[] = useSegments();
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
+
+  // Never gate navigation before the authoritative status has been read, so a
+  // stale local cache cannot grant (or wrongly deny) access.
+  const verificationResolved = !verificationLoading;
 
 
   const [fontsLoaded, fontError] = useFonts({
@@ -69,24 +87,72 @@ function RootLayoutNav() {
 
     const inAuthGroup = segments[0] === '(auth)';
     const onOnboarding = segments[0] === 'onboarding';
+    const isAdminUser = profile?.role === 'admin';
 
     if (!user && !inAuthGroup) {
       router.replace('/(auth)/login');
-    } else if (user) {
-      if (inAuthGroup) {
+      return;
+    }
 
-        const onCollegeFlow = segments[1] === 'college-select' || segments[1] === 'college-email';
-        if (!onCollegeFlow) {
-          router.replace('/(tabs)');
+    if (user) {
+      const onVerify = segments[1] === 'verify';
+      const onCollegeFlow =
+        segments[1] === 'college-select' || segments[1] === 'college-email';
+
+      if (inAuthGroup) {
+        if (onVerify || onCollegeFlow) {
+          // College selection and the verification flow own their own
+          // navigation until the backend confirms access.
+          return;
         }
-      } else if (profile && profile.hasSeenOnboarding === false && !onOnboarding && profile.role !== 'admin') {
+        if (!isAdminUser && profile && !profile.collegeId && !onOnboarding) {
+          router.replace('/(auth)/college-select');
+          return;
+        }
+        if (!isAdminUser && profile?.collegeId && verificationResolved) {
+          if (hasCampusAccess) {
+            router.replace('/(tabs)');
+          } else {
+            router.replace('/(auth)/verify' as any);
+          }
+          return;
+        }
+        return;
+      }
+
+      if (profile && profile.hasSeenOnboarding === false && !onOnboarding && !isAdminUser) {
         router.replace('/onboarding');
-      } else if (profile && !profile.collegeId && !onOnboarding && profile.role !== 'admin') {
+        return;
+      }
+
+      if (profile && !profile.collegeId && !onOnboarding && !isAdminUser) {
         // Must join a college community before accessing the app
         router.replace('/(auth)/college-select');
+        return;
+      }
+
+      // College-restricted data requires a backend-verified membership.
+      if (
+        !isAdminUser &&
+        verificationResolved &&
+        !hasCampusAccess &&
+        !onOnboarding &&
+        !UNVERIFIED_ALLOWED_ROUTES.has(segments[0])
+      ) {
+        router.replace('/(auth)/verify' as any);
       }
     }
-  }, [user, profile, isLoading, segments, fontsLoaded, rootNavigationState?.key]);
+  }, [
+    user,
+    profile,
+    isLoading,
+    segments,
+    fontsLoaded,
+    rootNavigationState?.key,
+    hasCampusAccess,
+    verificationResolved,
+    router,
+  ]);
 
   // Online Status Heartbeat
   const appState = useRef(AppState.currentState);
@@ -176,7 +242,9 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootLayoutNav />
+      <VerificationProvider>
+        <RootLayoutNav />
+      </VerificationProvider>
     </AuthProvider>
   );
 }

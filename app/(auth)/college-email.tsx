@@ -95,7 +95,9 @@ export default function CollegeEmailScreen() {
         await updateDoc(doc(db, 'users', currentUser.uid), {
           collegeEmailVerified: true,
         });
-        router.replace('/(tabs)');
+        // A verified personal email is NOT college affiliation. Campus access
+        // is only granted by the trusted backend after student verification.
+        router.replace('/(auth)/verify' as any);
       } else {
         showAlert(
           'Not Verified Yet',
