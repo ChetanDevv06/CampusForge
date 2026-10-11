@@ -378,7 +378,20 @@ function registerRoutes(app: Express) {
     "/verify/expire",
     authenticate,
     requireAdmin,
-    async (_req: Request, res: Response) => {
+    async (req: Request, res: Response) => {
+      const rateLimitKey = `verify-expire:${req.auth?.uid ?? req.ip}`;
+      const allowed = await consumeRateLimit(rateLimitKey, 5, 60_000);
+      if (!allowed) {
+        res
+          .status(429)
+          .json(
+            errorBody(
+              "resource-exhausted",
+              "Too many expire requests. Please try again later.",
+            ),
+          );
+        return;
+      }
       await runExpiry(res);
     },
   );
